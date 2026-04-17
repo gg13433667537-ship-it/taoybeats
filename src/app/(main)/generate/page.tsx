@@ -1,29 +1,32 @@
 "use client"
 
-import { useState, useEffect, startTransition } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Music, Loader2, Play, Pause, Download, Share2, Check, AlertCircle, RefreshCw, Shield } from "lucide-react"
+import { Music, Loader2, Download, Share2, Check, AlertCircle, RefreshCw, Shield, Info, Sparkles } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
-
-// Waveform heights - pre-computed for consistency
-const waveformHeights = Array.from({ length: 50 }, (_, i) =>
-  `${Math.sin(i * 0.3) * 30 + 45}%`
-)
+import AudioPlayer from "@/components/AudioPlayer"
+import LyricsAssistantModal from "@/components/LyricsAssistantModal"
+import VoiceSelector from "@/components/VoiceSelector"
+import AdvancedOptions from "@/components/AdvancedOptions"
 
 // Genre options
 const GENRES = [
   "Pop", "Hip-Hop", "Rock", "Electronic", "R&B", "Jazz",
-  "Classical", "Country", "Reggae", "Folk", "Metal", "Indie"
+  "Classical", "Country", "Reggae", "Folk", "Metal", "Indie", "Mandopop", "K-Pop", "Latin"
 ]
 
 // Mood options
 const MOODS = [
-  "Happy", "Sad", "Energetic", "Calm", "Romantic", "Epic", "Dark", "Dreamy"
+  "Happy", "Sad", "Energetic", "Calm", "Romantic", "Epic", "Dark", "Dreamy",
+  "Festive", "Celebration", "Chill", "Uplifting", "Melancholic", "Intense"
 ]
 
-// Instrument options
+// Instrument options - expanded for competitive features
 const INSTRUMENTS = [
-  "Guitar", "Piano", "Drum", "Bass", "Synth", "Strings", "Brass", "Vocals"
+  "Guitar", "Piano", "Drum", "Bass", "Synth", "Strings", "Brass", "Vocals",
+  "Violin", "Cello", "Flute", "Saxophone", "Trumpet", "Clarinet", "Harp",
+  "Choir", "Organ", "Harmonica", "Banjo", "Ukulele", "Mandolin", "Tabla",
+  "Steel Drum", "Bagpipes", "Didgeridoo"
 ]
 
 type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | 'completed' | 'failed'
@@ -31,30 +34,27 @@ type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | '
 export default function GeneratePage() {
   const router = useRouter()
   const { t } = useI18n()
-  const [userRole, setUserRole] = useState<string>('USER')
 
-  useEffect(() => {
+  // Compute user role from cookie without setState in effect
+  const userRole = (() => {
+    if (typeof document === 'undefined') return 'USER'
     const cookies = document.cookie.split(';')
     for (const cookie of cookies) {
       const [name, value] = cookie.trim().split('=')
       if (name === 'session-token') {
         try {
           const payload = JSON.parse(atob(value))
-          startTransition(() => {
-            setUserRole(payload.role || 'USER')
-          })
+          return payload.role || 'USER'
         } catch {
-          // ignore
+          return 'USER'
         }
-        break
       }
     }
-  }, [])
+    return 'USER'
+  })()
 
-  // Form state
-  const [apiUrl, setApiUrl] = useState("https://api.minimax.chat")
+  // Form state - API Key is now required
   const [apiKey, setApiKey] = useState("")
-  const [provider, setProvider] = useState("minimax")
   const [title, setTitle] = useState("")
   const [lyrics, setLyrics] = useState("")
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
@@ -63,14 +63,24 @@ export default function GeneratePage() {
   const [referenceSinger, setReferenceSinger] = useState("")
   const [referenceSong, setReferenceSong] = useState("")
   const [userNotes, setUserNotes] = useState("")
+  const [isInstrumental, setIsInstrumental] = useState(false)
+  const [songId, setSongId] = useState<string | null>(null)
+
+  // Voice state
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('')
+
+  // Reference audio for cover generation
+  const [referenceAudio, setReferenceAudio] = useState<string | null>(null)
+
+  // Modal states
+  const [isLyricsModalOpen, setIsLyricsModalOpen] = useState(false)
 
   // Generation state
   const [generationStage, setGenerationStage] = useState<GenerationStage>('idle')
   const [progress, setProgress] = useState(0)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [stageMessage, setStageMessage] = useState<string>('')
 
   // Handle genre toggle
   const toggleGenre = (genre: string) => {
@@ -88,8 +98,24 @@ export default function GeneratePage() {
 
   // Handle generation
   const handleGenerate = async () => {
-    if (!apiKey || !title || !lyrics || selectedGenres.length === 0 || !mood) {
-      setError("Please fill in all required fields (API Key, Title, Lyrics, Genre, Mood)")
+    if (!apiKey) {
+      setError("MiniMax API Key is required. Please enter your API key.")
+      return
+    }
+    if (!title) {
+      setError("Please enter a song title.")
+      return
+    }
+    if (!isInstrumental && !lyrics.trim()) {
+      setError("Lyrics are required for song generation.")
+      return
+    }
+    if (selectedGenres.length === 0) {
+      setError("Please select at least one genre.")
+      return
+    }
+    if (!mood) {
+      setError("Please select a mood.")
       return
     }
 
@@ -97,23 +123,25 @@ export default function GeneratePage() {
     setGenerationStage('initializing')
     setProgress(0)
     setAudioUrl(null)
+    setStageMessage('Initializing...')
 
     try {
-      // Step 1: Create song record via API
+      // Create song record via API
       const createResponse = await fetch('/api/songs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
-          lyrics,
+          lyrics: isInstrumental ? '' : lyrics,
           genre: selectedGenres,
           mood,
           instruments: selectedInstruments,
           referenceSinger,
           referenceSong,
           userNotes,
+          isInstrumental,
           apiKey,
-          apiUrl: apiUrl || 'https://api.minimax.chat',
+          apiUrl: 'https://api.minimaxi.com',
         }),
       })
 
@@ -125,32 +153,37 @@ export default function GeneratePage() {
         throw new Error(errorData.error || 'Failed to create song')
       }
 
-      const { id: songId } = await createResponse.json()
+      const { id: newSongId } = await createResponse.json()
+      setSongId(newSongId)
 
-      // Step 2: Connect to SSE stream for progress updates
-      const eventSource = new EventSource(`/api/songs/${songId}/stream`)
+      // Connect to SSE stream for progress updates
+      const eventSource = new EventSource(`/api/songs/${newSongId}/stream`)
 
       eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data)
-        setProgress(data.progress)
+        setProgress(data.progress || 0)
 
-        switch (data.stage) {
-          case 'initializing':
+        if (data.stage) {
+          setStageMessage(data.stage)
+        }
+
+        switch (data.status) {
+          case 'PENDING':
             setGenerationStage('initializing')
             break
-          case 'generating_melody':
-          case 'generating_lyrics':
-          case 'rendering_audio':
+          case 'GENERATING':
             setGenerationStage('generating')
             break
-          case 'finalizing':
-            setGenerationStage('finalizing')
-            break
-          case 'completed':
+          case 'COMPLETED':
             setGenerationStage('completed')
             if (data.audioUrl) {
               setAudioUrl(data.audioUrl)
             }
+            eventSource.close()
+            break
+          case 'FAILED':
+            setGenerationStage('failed')
+            setError(data.error || 'Generation failed')
             eventSource.close()
             break
         }
@@ -176,7 +209,8 @@ export default function GeneratePage() {
 
   // Handle share
   const handleShare = async () => {
-    const shareUrl = `${window.location.origin}/song/${Date.now()}`
+    if (!songId) return
+    const shareUrl = `${window.location.origin}/song/${songId}`
     if (navigator.share) {
       await navigator.share({
         title: title,
@@ -185,8 +219,6 @@ export default function GeneratePage() {
       })
     } else {
       await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
     }
   }
 
@@ -200,11 +232,22 @@ export default function GeneratePage() {
     setReferenceSinger("")
     setReferenceSong("")
     setUserNotes("")
+    setIsInstrumental(false)
+    setSelectedVoiceId('')
+    setReferenceAudio(null)
     setGenerationStage('idle')
     setProgress(0)
     setAudioUrl(null)
     setError(null)
-    router.replace('/generate')
+    setSongId(null)
+  }
+
+  // Handle lyrics confirmed from modal
+  const handleLyricsConfirmed = (confirmedLyrics: string, confirmedTitle?: string) => {
+    setLyrics(confirmedLyrics)
+    if (confirmedTitle) {
+      setTitle(confirmedTitle)
+    }
   }
 
   return (
@@ -224,12 +267,6 @@ export default function GeneratePage() {
               className="text-sm text-text-secondary hover:text-foreground transition-colors"
             >
               {t('dashboard')}
-            </button>
-            <button
-              onClick={() => router.push('/settings')}
-              className="text-sm text-text-secondary hover:text-foreground transition-colors"
-            >
-              {t('settings')}
             </button>
             {userRole === 'ADMIN' && (
               <button
@@ -262,7 +299,7 @@ export default function GeneratePage() {
                 className="px-4 py-2 rounded-lg border border-border hover:border-accent text-foreground text-sm font-medium transition-colors flex items-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                {t('createSong')}
+                Create Another
               </button>
             )}
           </div>
@@ -279,46 +316,23 @@ export default function GeneratePage() {
             <div className="space-y-6">
               {/* API Configuration */}
               <section className="p-6 rounded-2xl bg-surface border border-border">
-                <h2 className="text-lg font-semibold text-foreground mb-4">{t('apiConfig')}</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">MiniMax API</h2>
+                <div className="flex items-start gap-3 mb-4 p-3 rounded-lg bg-accent/10 border border-accent/20">
+                  <Info className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-text-secondary">
+                    Using <span className="font-medium text-accent">Music 2.6</span> model for high-quality music generation
+                  </p>
+                </div>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      {t('provider')}
-                    </label>
-                    <select
-                      value={provider}
-                      onChange={(e) => setProvider(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground focus:outline-none focus:border-accent"
-                    >
-                      <option value="minimax">MiniMax</option>
-                      <option value="suno">Suno</option>
-                      <option value="udio">Udio</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">
-                      {t('apiUrl')} <span className="text-error">*</span>
-                    </label>
-                    <input
-                      type="url"
-                      value={apiUrl}
-                      onChange={(e) => setApiUrl(e.target.value)}
-                      placeholder="https://api.minimax.chat"
-                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">
-                      {t('apiKey')} <span className="text-error">*</span>
+                      API Key <span className="text-error">*</span>
                     </label>
                     <input
                       type="password"
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="sk-..."
+                      placeholder="Enter your MiniMax API key"
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                     />
                   </div>
@@ -343,17 +357,51 @@ export default function GeneratePage() {
                     />
                   </div>
 
+                  {/* Instrumental Toggle */}
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-surface-elevated border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setIsInstrumental(!isInstrumental)}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        isInstrumental ? 'bg-accent' : 'bg-border'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                          isInstrumental ? 'translate-x-7' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Instrumental</p>
+                      <p className="text-xs text-text-muted">Generate music without vocals</p>
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">
-                      {t('lyrics')} <span className="text-error">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-medium text-text-secondary">
+                        {t('lyrics')} {!isInstrumental && <span className="text-error">*</span>}
+                      </label>
+                      {!isInstrumental && (
+                        <button
+                          type="button"
+                          onClick={() => setIsLyricsModalOpen(true)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-xs font-medium transition-all"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          AI写词
+                        </button>
+                      )}
+                    </div>
                     <textarea
                       value={lyrics}
                       onChange={(e) => setLyrics(e.target.value)}
-                      placeholder="Paste your lyrics here..."
-                      rows={6}
+                      placeholder="Paste your lyrics here... Use [Verse], [Chorus], [Bridge] tags for structure"
+                      rows={8}
                       maxLength={5000}
-                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent resize-none"
+                      disabled={isInstrumental}
+                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent resize-none font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <p className="mt-1 text-xs text-text-muted">{lyrics.length}/5000 characters</p>
                   </div>
@@ -385,16 +433,21 @@ export default function GeneratePage() {
                     <label className="block text-sm font-medium text-text-secondary mb-2">
                       {t('mood')} <span className="text-error">*</span>
                     </label>
-                    <select
-                      value={mood}
-                      onChange={(e) => setMood(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground focus:outline-none focus:border-accent"
-                    >
-                      <option value="">Select mood...</option>
+                    <div className="flex flex-wrap gap-2">
                       {MOODS.map(m => (
-                        <option key={m} value={m}>{m}</option>
+                        <button
+                          key={m}
+                          onClick={() => setMood(m)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            mood === m
+                              ? 'bg-accent text-white'
+                              : 'bg-background border border-border text-text-secondary hover:border-accent'
+                          }`}
+                        >
+                          {m}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
 
                   {/* Instruments */}
@@ -460,8 +513,28 @@ export default function GeneratePage() {
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent resize-none"
                     />
                   </div>
+
+                  {/* Voice Selector */}
+                  {apiKey && (
+                    <div>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">
+                        人声音色
+                      </label>
+                      <VoiceSelector
+                        selectedVoiceId={selectedVoiceId}
+                        onSelectVoice={setSelectedVoiceId}
+                        apiKey={apiKey}
+                      />
+                    </div>
+                  )}
                 </div>
               </section>
+
+              {/* Advanced Options */}
+              <AdvancedOptions
+                referenceAudio={referenceAudio}
+                onReferenceAudioChange={setReferenceAudio}
+              />
 
               {/* Generate Button */}
               <button
@@ -508,10 +581,13 @@ export default function GeneratePage() {
                         style={{ width: `${progress}%` }}
                       />
                     </div>
-                    <p className="mt-2 text-sm text-text-secondary text-right">{progress}%</p>
+                    <div className="flex justify-between mt-2">
+                      <p className="text-sm text-text-secondary">{stageMessage || 'Processing...'}</p>
+                      <p className="text-sm text-text-muted">{progress}%</p>
+                    </div>
                   </div>
 
-                  {/* Stage */}
+                  {/* Stage indicator */}
                   <div className="flex items-center gap-3">
                     {generationStage === 'completed' ? (
                       <div className="w-10 h-10 rounded-full bg-success flex items-center justify-center">
@@ -537,7 +613,6 @@ export default function GeneratePage() {
                       <p className="text-sm text-text-secondary">
                         {generationStage === 'completed' ? t('yourSongReady') :
                          generationStage === 'failed' ? t('pleaseTryAgain') :
-                         generationStage === 'initializing' ? t('initializing') :
                          generationStage === 'generating' ? `${progress}% complete` :
                          t('almostDone')}
                       </p>
@@ -551,40 +626,14 @@ export default function GeneratePage() {
                 <section className="p-6 rounded-2xl bg-surface border border-border">
                   <h2 className="text-lg font-semibold text-foreground mb-4">{title}</h2>
 
-                  {/* Waveform placeholder */}
-                  <div className="h-24 rounded-xl bg-background mb-4 flex items-center justify-center overflow-hidden">
-                    <div className="flex items-end gap-1 h-16 px-4">
-                      {Array.from({ length: 50 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="w-1 bg-accent rounded-full transition-all duration-300"
-                          style={{
-                            height: waveformHeights[i],
-                            opacity: isPlaying ? (i < 25 ? 1 : 0.4) : 0.6
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Controls */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <button
-                      onClick={() => setIsPlaying(!isPlaying)}
-                      className="w-12 h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors"
-                    >
-                      {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-                    </button>
-                    <div className="flex-1">
-                      <div className="h-1 rounded-full bg-border">
-                        <div className="h-full w-1/3 bg-accent rounded-full" />
-                      </div>
-                      <p className="mt-1 text-xs text-text-muted">0:00 / 3:24</p>
-                    </div>
-                  </div>
+                  <AudioPlayer
+                    src={audioUrl}
+                    title={title}
+                    artist="TaoyBeats"
+                  />
 
                   {/* Actions */}
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 mt-4">
                     <button
                       onClick={handleDownload}
                       className="flex-1 py-3 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
@@ -596,8 +645,8 @@ export default function GeneratePage() {
                       onClick={handleShare}
                       className="flex-1 py-3 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
                     >
-                      {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                      {copied ? 'Copied!' : 'Share'}
+                      <Share2 className="w-4 h-4" />
+                      Share
                     </button>
                   </div>
                 </section>
@@ -629,6 +678,15 @@ export default function GeneratePage() {
           </div>
         </div>
       </main>
+
+      {/* Lyrics Assistant Modal */}
+      <LyricsAssistantModal
+        isOpen={isLyricsModalOpen}
+        onClose={() => setIsLyricsModalOpen(false)}
+        onConfirm={handleLyricsConfirmed}
+        initialTitle={title}
+        initialMood={mood}
+      />
     </div>
   )
 }

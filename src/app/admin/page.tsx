@@ -1,13 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useI18n } from "@/lib/i18n"
+import {
+  createUserEditFormState,
+} from "./user-edit-modal-state"
 import {
   Music,
   Users,
   BarChart3,
-  FileText,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -69,7 +71,7 @@ interface AdminLog {
   action: string
   targetId?: string
   targetType?: string
-  details?: any
+  details?: unknown
   createdAt: string
 }
 
@@ -95,9 +97,15 @@ export default function AdminPage() {
   const [showUserModal, setShowUserModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ show: boolean; userId?: string; songId?: string; type?: "user" | "song" }>({ show: false })
   const [actionLoading, setActionLoading] = useState(false)
+  // Edit form state
+  const [editFormState, setEditFormState] = useState({
+    role: "USER",
+    tier: "FREE",
+    isActive: true,
+  })
 
   // Fetch users
-  const fetchUsers = async (page = 1, search = "") => {
+  const fetchUsers = useCallback(async (page = 1, search = "") => {
     try {
       const params = new URLSearchParams({ page: page.toString(), limit: "20" })
       if (search) params.set("search", search)
@@ -113,10 +121,10 @@ export default function AdminPage() {
     } catch (error) {
       console.error("Error fetching users:", error)
     }
-  }
+  }, [router])
 
   // Fetch songs
-  const fetchSongs = async (page = 1) => {
+  const fetchSongs = useCallback(async (page = 1) => {
     try {
       const params = new URLSearchParams({ page: page.toString(), limit: "20" })
       const res = await fetch(`/api/admin/songs?${params}`)
@@ -128,10 +136,10 @@ export default function AdminPage() {
     } catch (error) {
       console.error("Error fetching songs:", error)
     }
-  }
+  }, [])
 
   // Fetch stats
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/stats")
       if (res.ok) {
@@ -141,7 +149,7 @@ export default function AdminPage() {
     } catch (error) {
       console.error("Error fetching stats:", error)
     }
-  }
+  }, [])
 
   useEffect(() => {
     const loadData = async () => {
@@ -150,7 +158,7 @@ export default function AdminPage() {
       setLoading(false)
     }
     loadData()
-  }, [])
+  }, [fetchUsers, fetchSongs, fetchStats])
 
   // Handle user search
   const handleUserSearch = (e: React.FormEvent) => {
@@ -410,6 +418,11 @@ export default function AdminPage() {
                           <button
                             onClick={() => {
                               setSelectedUser(user)
+                              setEditFormState(createUserEditFormState({
+                                role: user.role,
+                                tier: user.tier,
+                                isActive: user.isActive,
+                              }))
                               setShowUserModal(true)
                             }}
                             className="p-2 rounded-lg hover:bg-surface-elevated text-text-secondary hover:text-foreground transition-colors"
@@ -688,8 +701,8 @@ export default function AdminPage() {
               <div>
                 <label className="block text-sm text-text-secondary mb-2">{t('role')}</label>
                 <select
-                  defaultValue={selectedUser.role}
-                  id="role-select"
+                  value={editFormState.role}
+                  onChange={(e) => setEditFormState({ ...editFormState, role: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground focus:outline-none focus:border-accent"
                 >
                   <option value="USER">USER</option>
@@ -701,8 +714,8 @@ export default function AdminPage() {
               <div>
                 <label className="block text-sm text-text-secondary mb-2">{t('tier')}</label>
                 <select
-                  defaultValue={selectedUser.tier}
-                  id="tier-select"
+                  value={editFormState.tier}
+                  onChange={(e) => setEditFormState({ ...editFormState, tier: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground focus:outline-none focus:border-accent"
                 >
                   <option value="FREE">FREE</option>
@@ -715,8 +728,8 @@ export default function AdminPage() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    id="isActive-checkbox"
-                    defaultChecked={selectedUser.isActive}
+                    checked={editFormState.isActive}
+                    onChange={(e) => setEditFormState({ ...editFormState, isActive: e.target.checked })}
                     className="w-4 h-4 rounded border-border bg-background text-accent focus:ring-accent"
                   />
                   <span className="text-sm text-foreground">{t('active')}</span>
@@ -735,14 +748,7 @@ export default function AdminPage() {
                 </button>
                 <button
                   onClick={() => {
-                    const roleSelect = document.getElementById("role-select") as HTMLSelectElement
-                    const tierSelect = document.getElementById("tier-select") as HTMLSelectElement
-                    const isActiveCheckbox = document.getElementById("isActive-checkbox") as HTMLInputElement
-                    handleUpdateUser(selectedUser.id, {
-                      role: roleSelect.value,
-                      tier: tierSelect.value,
-                      isActive: isActiveCheckbox.checked,
-                    })
+                    handleUpdateUser(selectedUser.id, editFormState)
                   }}
                   disabled={actionLoading}
                   className="flex-1 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"

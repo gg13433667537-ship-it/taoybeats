@@ -29,11 +29,13 @@ export interface Song {
   referenceSinger?: string
   referenceSong?: string
   userNotes?: string
+  isInstrumental?: boolean
   status: SongStatus
   audioUrl?: string
   coverUrl?: string
   shareToken?: string
   userId: string
+  forkedFrom?: string
   createdAt: string
   updatedAt: string
 }

@@ -1,5 +1,5 @@
 // AI Provider Abstraction Layer
-// Supports multiple AI music backends: MiniMax, Suno, Udio, and custom
+// MiniMax Music 2.6 - Official API Integration
 
 export type GenerationStatus =
   | 'PENDING'
@@ -24,31 +24,33 @@ export type SongParams = {
   referenceSinger?: string
   referenceSong?: string
   userNotes?: string
+  isInstrumental?: boolean
 }
 
 export type AIProvider = {
   name: string
-  generate: (params: SongParams, apiKey: string, apiUrl: string, modelId?: string) => Promise<string> // returns taskId
+  generate: (params: SongParams, apiKey: string, apiUrl: string) => Promise<string> // returns taskId
   getProgress: (taskId: string, apiKey: string, apiUrl: string) => Promise<GenerationProgress>
   download: (taskId: string, apiKey: string, apiUrl: string) => Promise<string> // returns audio URL
 }
 
-// MiniMax Provider - Real API Implementation
-// API Docs: https://api.minimax.chat/document
+// MiniMax Provider - Official API Implementation
+// API Docs: https://api.minimaxi.com/v1/music_generation
+// Model: music-2.6 (hardcoded)
 export const miniMaxProvider: AIProvider = {
   name: 'MiniMax',
 
-  async generate(params, apiKey, apiUrl, modelId) {
-    const baseUrl = apiUrl || 'https://api.minimax.chat'
-    const model = modelId || 'music-2.6'
+  async generate(params, apiKey, apiUrl) {
+    const baseUrl = apiUrl || 'https://api.minimaxi.com'
+    const model = 'music-2.6' // Hardcoded as per user requirement
 
-    // Build prompt from song params (for music description)
+    // Build prompt from song params
     const prompt = buildPrompt(params)
 
-    // Check if instrumental (no lyrics)
-    const isInstrumental = !params.lyrics || params.lyrics.trim() === ''
+    // Check if instrumental - explicit flag or no lyrics
+    const isInstrumental = params.isInstrumental || !params.lyrics || params.lyrics.trim() === ''
 
-    const response = await fetch(`${baseUrl}/api/v1/music_generation`, {
+    const response = await fetch(`${baseUrl}/v1/music_generation`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -57,31 +59,34 @@ export const miniMaxProvider: AIProvider = {
       body: JSON.stringify({
         model,
         prompt,
-        lyrics: params.lyrics || undefined,
+        lyrics: isInstrumental ? undefined : params.lyrics,
         is_instrumental: isInstrumental,
         stream: false,
         output_format: 'url',
         audio_setting: {
-          duration: 180, // 3 minutes default
+          sample_rate: 44100,
+          bitrate: 256000,
+          format: 'mp3'
         },
         aigc_watermark: false,
       }),
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`MiniMax API error: ${response.status} - ${error}`)
+      const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
+      const errorMessage = errorData.error?.message || errorData.error || `HTTP ${response.status}`
+      throw new Error(`MiniMax API error: ${errorMessage}`)
     }
 
     const data = await response.json()
-    // MiniMax returns task_id in data
-    return data.task_id || data.data?.task_id
+    // MiniMax returns task_id in data.data.task_id
+    return data.data?.task_id || data.task_id
   },
 
   async getProgress(taskId, apiKey, apiUrl) {
-    const baseUrl = apiUrl || 'https://api.minimax.chat'
+    const baseUrl = apiUrl || 'https://api.minimaxi.com'
 
-    const response = await fetch(`${baseUrl}/api/v1/music_generation_info?task_id=${taskId}`, {
+    const response = await fetch(`${baseUrl}/v1/music_generation_info?task_id=${taskId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -89,7 +94,9 @@ export const miniMaxProvider: AIProvider = {
     })
 
     if (!response.ok) {
-      throw new Error(`MiniMax API error: ${response.status}`)
+      const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
+      const errorMessage = errorData.error?.message || errorData.error || `HTTP ${response.status}`
+      throw new Error(`MiniMax API error: ${errorMessage}`)
     }
 
     const data = await response.json()
@@ -97,9 +104,9 @@ export const miniMaxProvider: AIProvider = {
   },
 
   async download(taskId, apiKey, apiUrl) {
-    const baseUrl = apiUrl || 'https://api.minimax.chat'
+    const baseUrl = apiUrl || 'https://api.minimaxi.com'
 
-    const response = await fetch(`${baseUrl}/api/v1/music_generation_info?task_id=${taskId}`, {
+    const response = await fetch(`${baseUrl}/v1/music_generation_info?task_id=${taskId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -107,7 +114,9 @@ export const miniMaxProvider: AIProvider = {
     })
 
     if (!response.ok) {
-      throw new Error(`MiniMax API error: ${response.status}`)
+      const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
+      const errorMessage = errorData.error?.message || errorData.error || `HTTP ${response.status}`
+      throw new Error(`MiniMax API error: ${errorMessage}`)
     }
 
     const data = await response.json()
@@ -120,120 +129,9 @@ export const miniMaxProvider: AIProvider = {
   },
 }
 
-// Suno Provider
-export const sunoProvider: AIProvider = {
-  name: 'Suno',
-
-  async generate(params, apiKey, apiUrl, _modelId) { // eslint-disable-line @typescript-eslint/no-unused-vars
-    const baseUrl = apiUrl || 'https://api.suno.ai'
-
-    const response = await fetch(`${baseUrl}/api/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        prompt: buildPrompt(params),
-        tags: params.genre.join(','),
-        title: params.title,
-        make_instrumental: false,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Suno API error: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data.task_id || data.id
-  },
-
-  async getProgress(taskId, apiKey, apiUrl) {
-    const baseUrl = apiUrl || 'https://api.suno.ai'
-
-    const response = await fetch(`${baseUrl}/api/get/${taskId}`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`Suno API error: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return mapSunoStatus(data)
-  },
-
-  async download(taskId, apiKey, apiUrl) {
-    const data = await this.getProgress(taskId, apiKey, apiUrl)
-    if (data.audioUrl) {
-      return data.audioUrl
-    }
-    throw new Error('Audio not ready yet')
-  },
-}
-
-// Udio Provider
-export const udioProvider: AIProvider = {
-  name: 'Udio',
-
-  async generate(params, apiKey, apiUrl, _modelId) { // eslint-disable-line @typescript-eslint/no-unused-vars
-    const baseUrl = apiUrl || 'https://api.udio.com'
-
-    const response = await fetch(`${baseUrl}/v1/music/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        prompt: buildPrompt(params),
-        genres: params.genre,
-        mood: params.mood,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Udio API error: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data.task_id || data.id
-  },
-
-  async getProgress(taskId, apiKey, apiUrl) {
-    const baseUrl = apiUrl || 'https://api.udio.com'
-
-    const response = await fetch(`${baseUrl}/v1/music/status/${taskId}`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`Udio API error: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return mapUdioStatus(data)
-  },
-
-  async download(taskId, apiKey, apiUrl) {
-    const data = await this.getProgress(taskId, apiKey, apiUrl)
-    if (data.audioUrl) {
-      return data.audioUrl
-    }
-    throw new Error('Audio not ready yet')
-  },
-}
-
 // Provider Registry
 export const providers: Record<string, AIProvider> = {
   minimax: miniMaxProvider,
-  suno: sunoProvider,
-  udio: udioProvider,
 }
 
 // Get provider by name
@@ -245,63 +143,47 @@ export function getProvider(name: string): AIProvider {
   return provider
 }
 
-// Build prompt from song params
+// Build prompt from song params for MiniMax
 function buildPrompt(params: SongParams): string {
   const parts: string[] = []
 
+  // Genre as comma-separated style tags
   if (params.genre.length > 0) {
-    parts.push(`Genre: ${params.genre.join(', ')}`)
+    parts.push(params.genre.join(', '))
   }
 
+  // Mood
   if (params.mood) {
-    parts.push(`Mood: ${params.mood}`)
+    parts.push(params.mood)
   }
 
+  // Additional context from instruments
   if (params.instruments.length > 0) {
     parts.push(`Instruments: ${params.instruments.join(', ')}`)
   }
 
+  // Reference artist
   if (params.referenceSinger) {
     parts.push(`Reference Artist: ${params.referenceSinger}`)
   }
 
-  if (params.referenceSong) {
-    parts.push(`Reference Song: ${params.referenceSong}`)
-  }
-
-  if (params.lyrics) {
-    parts.push(`Lyrics:\n${params.lyrics}`)
-  }
-
-  return parts.join('\n\n')
+  return parts.join(', ')
 }
 
-// Map provider-specific status to unified format
+// MiniMax API Response Types
 interface MiniMaxStatusResponse {
   status?: string
   progress?: number
   stage?: string
   audio_url?: string
-  url?: string
+  audio_download_url?: string
+  video_url?: string
   error?: string
-}
-
-interface SunoStatusResponse {
-  status: string
-  progress?: number
-  audio_url?: string
-  error?: string
-}
-
-interface UdioStatusResponse {
-  status: string
-  progress?: number
-  stage?: string
-  audio_url?: string
-  error?: string
+  error_code?: number
 }
 
 function mapMiniMaxStatus(data: MiniMaxStatusResponse): GenerationProgress {
+  // MiniMax status: pending, processing, completed, failed
   const statusMap: Record<string, GenerationStatus> = {
     pending: 'PENDING',
     processing: 'GENERATING',
@@ -309,34 +191,20 @@ function mapMiniMaxStatus(data: MiniMaxStatusResponse): GenerationProgress {
     failed: 'FAILED',
   }
 
-  return {
-    status: statusMap[data.status || ''] || 'PENDING',
-    progress: data.progress || 0,
-    stage: data.stage,
-    audioUrl: data.audio_url || data.url,
-    error: data.error,
-  }
-}
+  const status = statusMap[data.status || ''] || 'PENDING'
 
-function mapSunoStatus(data: SunoStatusResponse): GenerationProgress {
-  const isComplete = data.status === 'complete'
-  const isFailed = data.status === 'failed'
+  // Calculate progress based on status
+  let progress = data.progress || 0
+  if (status === 'PENDING') progress = 10
+  else if (status === 'GENERATING') progress = progress || 50
+  else if (status === 'COMPLETED') progress = 100
+  else if (status === 'FAILED') progress = 0
 
   return {
-    status: isComplete ? 'COMPLETED' : isFailed ? 'FAILED' : 'GENERATING',
-    progress: isComplete ? 100 : data.progress || 50,
-    stage: data.status,
-    audioUrl: isComplete ? data.audio_url : undefined,
-    error: isFailed ? data.error : undefined,
-  }
-}
-
-function mapUdioStatus(data: UdioStatusResponse): GenerationProgress {
-  return {
-    status: data.status === 'complete' ? 'COMPLETED' : data.status === 'error' ? 'FAILED' : 'GENERATING',
-    progress: data.progress || 0,
-    stage: data.stage,
-    audioUrl: data.audio_url,
+    status,
+    progress,
+    stage: data.stage || data.status,
+    audioUrl: data.audio_url || data.audio_download_url,
     error: data.error,
   }
 }

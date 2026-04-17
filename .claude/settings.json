@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "read: *",
+      "write: ./**",
+      "bash: npm, npx, git, python, pip, cargo, rustc, go, node",
+      "bash: *",
+      "websearch",
+      "webfetch"
+    ],
+    "deny": [
+      "write: ../**",
+      "write: ~/.claude/**",
+      "bash: rm -rf /",
+      "bash: curl http://* | sh",
+      "bash: *sudo*",
+      "bash: chmod 777*"
+    ]
+  },
+  "autorun": true,
+  "model": "opus",
+  "timeout": 600,
+  "maxTokens": 8192
+}

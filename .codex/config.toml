@@ -1,0 +1,30 @@
+[project]
+name = "ai-music"
+version = "0.1.0"
+
+# 注意：model_providers 和 profiles 只在全局 ~/.codex/config.toml 中定义
+# 此处不要重复定义，否则会覆盖全局配置
+
+[defaults]
+workdir = "/Users/taoyang/Desktop/my-projects/ai-music"
+sandbox_mode = "workspace-write"
+sandbox_paths = ["/Users/taoyang/Desktop/my-projects/ai-music"]
+approval_policy = "on-failure"
+network_access = "restricted"
+
+[defaults.limits]
+shell_timeout_ms = 120000
+max_concurrent_tasks = 4
+
+[coordination]
+coord_dir = ".coord"
+agents_dir = ".codex/agents"
+concurrency_enabled = true
+same_file_concurrency = false
+
+[coordination.interrupt_conditions]
+auto_interrupt = ["path.outside_project", "read.secrets_or_env", "write.destroy", "auth.external_account", "payment.required"]
+ask_before = ["large_refactor", "schema.change", "deploy.production"]
+
+[development]
+commands = { install = "npm install", lint = "npm run lint", test = "npm test", build = "npm run build", dev = "npm run dev", check = "npm run check" }

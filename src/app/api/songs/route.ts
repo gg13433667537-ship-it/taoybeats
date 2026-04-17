@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User, Song } from "@/lib/types"
+import { miniMaxProvider } from "@/lib/ai-providers"
 
 // Shared global storage
 declare global {
@@ -13,7 +14,6 @@ if (!global.songs) global.songs = new Map()
 if (!global.adminLogs) global.adminLogs = new Map()
 
 const users = global.users!
-const songs = global.songs as Map<string, Song>
 
 // Free tier limits
 const FREE_DAILY_LIMIT = 3
@@ -64,10 +64,8 @@ function checkAndResetUsage(user: User) {
 }
 
 function getSessionUser(request: NextRequest): User {
-  // For demo, get user from cookie
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
-    // Create demo user
     const demoUserId = 'demo-user'
     return getOrCreateUser(demoUserId, 'demo@taoybeats.com')
   }
@@ -82,7 +80,11 @@ function getSessionUser(request: NextRequest): User {
 
 export async function GET(request: NextRequest) {
   const user = getSessionUser(request)
-  const userSongs = Array.from(songs.values()).filter(s => s.userId === user.id)
+  const songsMap = global.songs as Map<string, Song> | undefined
+  if (!songsMap) {
+    return NextResponse.json({ songs: [] })
+  }
+  const userSongs = Array.from(songsMap.values()).filter(s => s.userId === user.id)
   return NextResponse.json({ songs: userSongs })
 }
 
@@ -99,12 +101,23 @@ export async function POST(request: NextRequest) {
       referenceSinger,
       referenceSong,
       userNotes,
+      isInstrumental,
+      apiKey,
+      apiUrl,
     } = body
 
-    // Validation
-    if (!title || !lyrics || !genre?.length || !mood) {
+    // Validation - lyrics not required if instrumental
+    if (!title || (!isInstrumental && !lyrics) || !genre?.length || !mood) {
       return NextResponse.json(
         { error: "Missing required fields: title, lyrics, genre, mood" },
+        { status: 400 }
+      )
+    }
+
+    // API Key validation
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "API key is required. Please configure your MiniMax API key." },
         { status: 400 }
       )
     }
@@ -145,6 +158,8 @@ export async function POST(request: NextRequest) {
     // Create song record
     const songId = crypto.randomUUID()
     const now = new Date().toISOString()
+    const shareToken = crypto.randomUUID().slice(0, 8)
+
     const song: Song = {
       id: songId,
       userId: user.id,
@@ -156,21 +171,23 @@ export async function POST(request: NextRequest) {
       referenceSinger,
       referenceSong,
       userNotes,
-      status: "GENERATING",
-      shareToken: crypto.randomUUID().slice(0, 8),
+      isInstrumental: isInstrumental || false,
+      status: "PENDING",
+      shareToken,
       createdAt: now,
       updatedAt: now,
     }
 
-    songs.set(songId, song)
+    const songsMap = global.songs as Map<string, Song>
+    songsMap.set(songId, song)
 
-    // Start generation in background
-    generateMusic(songId, song).catch(console.error)
+    // Start real generation in background
+    generateMusic(songId, song, apiKey, apiUrl).catch(console.error)
 
     return NextResponse.json({
       id: songId,
-      shareToken: song.shareToken,
-      status: "GENERATING",
+      shareToken,
+      status: "PENDING",
       usage: {
         daily: { used: user.dailyUsage, limit: FREE_DAILY_LIMIT },
         monthly: { used: user.monthlyUsage, limit: FREE_MONTHLY_LIMIT },
@@ -187,26 +204,76 @@ export async function POST(request: NextRequest) {
 
 async function generateMusic(
   songId: string,
-  song: Song
+  song: Song,
+  apiKey: string,
+  apiUrl?: string
 ) {
+  const songsMap = global.songs as Map<string, Song>
+
   try {
-    // Update to generating
-    songs.set(songId, { ...song, status: "GENERATING" })
+    // Update status to GENERATING
+    songsMap.set(songId, { ...song, status: "GENERATING", updatedAt: new Date().toISOString() })
 
-    // Simulate MiniMax API call
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    // Call MiniMax API
+    const taskId = await miniMaxProvider.generate({
+      title: song.title,
+      lyrics: song.lyrics || '',
+      genre: song.genre,
+      mood: song.mood || '',
+      instruments: song.instruments,
+      referenceSinger: song.referenceSinger,
+      referenceSong: song.referenceSong,
+      userNotes: song.userNotes,
+      isInstrumental: song.isInstrumental,
+    }, apiKey, apiUrl || 'https://api.minimaxi.com')
 
-    // Simulate completion
-    songs.set(songId, {
-      ...song,
-      status: "COMPLETED",
-      audioUrl: "/sample-audio.mp3",
-    })
+    // Poll for progress
+    const maxWaitTime = 10 * 60 * 1000 // 10 minutes max
+    const pollInterval = 5000 // 5 seconds
+    const startTime = Date.now()
+
+    while (Date.now() - startTime < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval))
+
+      const progress = await miniMaxProvider.getProgress(taskId, apiKey, apiUrl || 'https://api.minimaxi.com')
+
+      // Update song with latest status
+      const currentSong = songsMap.get(songId)
+      if (!currentSong) break
+
+      songsMap.set(songId, {
+        ...currentSong,
+        status: progress.status,
+        audioUrl: progress.audioUrl,
+        updatedAt: new Date().toISOString(),
+      })
+
+      if (progress.status === 'COMPLETED') {
+        console.log(`[Generate] Song ${songId} completed, audioUrl: ${progress.audioUrl}`)
+        break
+      }
+
+      if (progress.status === 'FAILED') {
+        console.error(`[Generate] Song ${songId} failed:`, progress.error)
+        break
+      }
+    }
+
+    // Final status check
+    const finalSong = songsMap.get(songId)
+    if (finalSong && finalSong.status !== 'COMPLETED' && finalSong.status !== 'FAILED') {
+      songsMap.set(songId, {
+        ...finalSong,
+        status: 'FAILED',
+        updatedAt: new Date().toISOString(),
+      })
+    }
   } catch (error) {
-    console.error("Generation error:", error)
-    songs.set(songId, {
+    console.error(`[Generate] Song ${songId} error:`, error)
+    songsMap.set(songId, {
       ...song,
-      status: "FAILED",
+      status: 'FAILED',
+      updatedAt: new Date().toISOString(),
     })
   }
 }

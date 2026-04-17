@@ -1,7 +1,7 @@
 // Simple i18n for TaoyBeats
 'use client'
 
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, startTransition } from 'react'
 
 type Language = 'en' | 'zh'
 
@@ -527,13 +527,19 @@ export function I18nProvider({ children, lang = 'en' }: { children: React.ReactN
     for (const cookie of cookies) {
       const [name, value] = cookie.trim().split('=')
       if (name === 'taoybeats-lang') {
-        setCurrentLang(value as Language)
+        startTransition(() => {
+          setCurrentLang(value as Language)
+        })
         return
       }
     }
     // Fallback to localStorage
     const saved = localStorage.getItem('taoybeats-lang') as Language
-    if (saved) setCurrentLang(saved)
+    if (saved) {
+      startTransition(() => {
+        setCurrentLang(saved)
+      })
+    }
   }, [])
 
   const handleSetLang = (newLang: Language) => {

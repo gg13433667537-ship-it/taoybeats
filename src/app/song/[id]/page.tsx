@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { Music, Play, Pause, Download, Share2, Check, Loader2, Volume2, VolumeX } from "lucide-react"
+import { Music, Play, Pause, Download, Share2, Check, Loader2, Volume2, VolumeX, RefreshCw } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 export default function SongSharePage() {
@@ -29,6 +29,7 @@ export default function SongSharePage() {
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
   const [waveformData, setWaveformData] = useState<number[]>([])
+  const [isRemixing, setIsRemixing] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const animationRef = useRef<number | null>(null)
@@ -185,6 +186,40 @@ export default function SongSharePage() {
   const handleDownload = () => {
     if (song?.audioUrl) {
       window.open(song.audioUrl, "_blank")
+    }
+  }
+
+  const handleRemix = async () => {
+    if (!song) return
+
+    // Get API key from localStorage or prompt user
+    const apiKey = localStorage.getItem('minimax_api_key')
+    if (!apiKey) {
+      alert('Please set your MiniMax API key in the generate page first.')
+      window.location.href = '/generate'
+      return
+    }
+
+    setIsRemixing(true)
+    try {
+      const res = await fetch(`/api/songs/${songId}/fork`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        // Redirect to generate page with fork parameters
+        window.location.href = `/generate?fork=${songId}&songId=${data.id}`
+      } else {
+        alert('Failed to remix song. Please try again.')
+      }
+    } catch (error) {
+      console.error('Remix error:', error)
+      alert('Failed to remix song. Please try again.')
+    } finally {
+      setIsRemixing(false)
     }
   }
 
@@ -377,8 +412,20 @@ export default function SongSharePage() {
                 Download
               </button>
               <button
+                onClick={handleRemix}
+                disabled={isGenerating || isRemixing}
+                className="flex-1 py-3 rounded-xl bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-400 font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isRemixing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                {isRemixing ? "Remixing..." : "Remix"}
+              </button>
+              <button
                 onClick={handleShare}
-                className="flex-1 py-3 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
+                className="py-3 px-4 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
               >
                 {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
                 {copied ? "Copied!" : "Share"}
