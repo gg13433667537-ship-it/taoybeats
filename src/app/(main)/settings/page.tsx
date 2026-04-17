@@ -100,11 +100,13 @@ export default function SettingsPage() {
 
           <div className="flex gap-8">
             {/* Sidebar */}
-            <nav className="w-64 flex-shrink-0">
+            <nav className="w-64 flex-shrink-0" role="tablist" aria-label="Settings sections">
               <div className="space-y-1">
                 {TABS.map(tab => (
                   <button
                     key={tab.id}
+                    role="tab"
+                    aria-selected={activeTab === tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors ${
                       activeTab === tab.id
@@ -112,7 +114,7 @@ export default function SettingsPage() {
                         : 'text-text-secondary hover:bg-surface hover:text-foreground'
                     }`}
                   >
-                    <tab.icon className="w-5 h-5" />
+                    <tab.icon className="w-5 h-5" aria-hidden="true" />
                     {tab.label}
                   </button>
                 ))}
@@ -128,7 +130,7 @@ export default function SettingsPage() {
                   <div className="space-y-6">
                     {/* Avatar */}
                     <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-full bg-accent flex items-center justify-center text-white text-xl font-bold">
+                      <div className="w-16 h-16 rounded-full bg-accent flex items-center justify-center text-white text-xl font-bold" aria-hidden="true">
                         D
                       </div>
                       <div>
@@ -162,9 +164,10 @@ export default function SettingsPage() {
 
                     <button
                       onClick={handleSave}
+                      aria-label={saved ? t('saved') : t('saveChanges')}
                       className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors flex items-center gap-2"
                     >
-                      {saved ? <Check className="w-4 h-4" /> : null}
+                      {saved ? <Check className="w-4 h-4" aria-hidden="true" /> : null}
                       {saved ? t('saved') : t('saveChanges')}
                     </button>
                   </div>
@@ -232,9 +235,10 @@ export default function SettingsPage() {
 
                     <button
                       onClick={handleSave}
+                      aria-label={saved ? t('saved') : t('saveChanges')}
                       className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors flex items-center gap-2"
                     >
-                      {saved ? <Check className="w-4 h-4" /> : null}
+                      {saved ? <Check className="w-4 h-4" aria-hidden="true" /> : null}
                       {saved ? t('saved') : t('saveChanges')}
                     </button>
                   </div>
