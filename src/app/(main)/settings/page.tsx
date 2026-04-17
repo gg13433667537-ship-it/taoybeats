@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Music, User, Key, Bell, Shield, Loader2, Check, AlertCircle } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
@@ -10,6 +10,23 @@ export default function SettingsPage() {
   const { t, lang } = useI18n()
   const [activeTab, setActiveTab] = useState('profile')
   const [saved, setSaved] = useState(false)
+  const [userRole, setUserRole] = useState<string>('USER')
+
+  useEffect(() => {
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=')
+      if (name === 'session-token') {
+        try {
+          const payload = JSON.parse(atob(value))
+          setUserRole(payload.role || 'USER')
+        } catch (e) {
+          // ignore
+        }
+        break
+      }
+    }
+  }, [])
 
   const TABS = [
     { id: 'profile', label: t('profile'), icon: User },
@@ -50,8 +67,17 @@ export default function SettingsPage() {
             onClick={() => router.push('/dashboard')}
             className="text-sm text-text-secondary hover:text-foreground transition-colors"
           >
-            Back to Dashboard
+            {t('dashboard')}
           </button>
+          {userRole === 'ADMIN' && (
+            <button
+              onClick={() => router.push('/admin')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+            >
+              <Shield className="w-4 h-4" />
+              <span className="text-sm font-medium">{t('admin')}</span>
+            </button>
+          )}
         </div>
       </header>
 

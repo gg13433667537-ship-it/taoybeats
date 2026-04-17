@@ -269,14 +269,14 @@ export default function AdminPage() {
             </div>
             <span className="text-xl font-bold text-foreground">TaoyBeats</span>
             <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 text-xs font-medium border border-purple-500/30">
-              Admin
+              {t('admin')}
             </span>
           </button>
           <button
             onClick={() => router.push("/dashboard")}
             className="px-4 py-2 rounded-lg bg-surface hover:bg-surface-elevated text-text-secondary hover:text-foreground text-sm transition-colors"
           >
-            Back to Dashboard
+            {t('backToDashboard')}
           </button>
         </div>
       </header>
@@ -294,7 +294,7 @@ export default function AdminPage() {
             }`}
           >
             <Users className="w-4 h-4 inline mr-2" />
-            Users
+            {t('users')}
           </button>
           <button
             onClick={() => setActiveTab("songs")}
@@ -305,7 +305,7 @@ export default function AdminPage() {
             }`}
           >
             <Music className="w-4 h-4 inline mr-2" />
-            Songs
+            {t('songs')}
           </button>
           <button
             onClick={() => setActiveTab("stats")}
@@ -316,7 +316,7 @@ export default function AdminPage() {
             }`}
           >
             <BarChart3 className="w-4 h-4 inline mr-2" />
-            Stats
+            {t('stats')}
           </button>
         </div>
 
@@ -331,7 +331,7 @@ export default function AdminPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by email or name..."
+                  placeholder={t('searchPlaceholder')}
                   className="w-full pl-10 pr-4 py-2 rounded-lg bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                 />
               </div>
@@ -339,7 +339,7 @@ export default function AdminPage() {
                 type="submit"
                 className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
               >
-                Search
+                {t('search')}
               </button>
             </form>
 
@@ -348,13 +348,13 @@ export default function AdminPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">User</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Role</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Tier</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Usage</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Created</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('user')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('role')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('status')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('tier')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('usage')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('created')}</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase tracking-wider">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -374,11 +374,11 @@ export default function AdminPage() {
                       <td className="px-4 py-4">
                         {user.isActive ? (
                           <span className="flex items-center gap-1 text-success text-sm">
-                            <CheckCircle className="w-4 h-4" /> Active
+                            <CheckCircle className="w-4 h-4" /> {t('active')}
                           </span>
                         ) : (
                           <span className="flex items-center gap-1 text-error text-sm">
-                            <UserX className="w-4 h-4" /> Disabled
+                            <UserX className="w-4 h-4" /> {t('inactive')}
                           </span>
                         )}
                       </td>
@@ -387,10 +387,10 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="text-sm">
-                          <span className="text-text-secondary">Daily: </span>
+                          <span className="text-text-secondary">{t('daily')}: </span>
                           <span className="text-foreground">{user.dailyUsage}</span>
                           <span className="text-text-secondary mx-1">|</span>
-                          <span className="text-text-secondary">Monthly: </span>
+                          <span className="text-text-secondary">{t('monthlyUsage')}: </span>
                           <span className="text-foreground">{user.monthlyUsage}</span>
                         </div>
                       </td>
@@ -425,8 +425,8 @@ export default function AdminPage() {
             {/* Pagination */}
             <div className="mt-4 flex items-center justify-between">
               <p className="text-sm text-text-secondary">
-                Showing {(userPagination.page - 1) * userPagination.limit + 1} to{" "}
-                {Math.min(userPagination.page * userPagination.limit, userPagination.total)} of {userPagination.total} users
+                {t('showing')} {(userPagination.page - 1) * userPagination.limit + 1} {t('to')}{" "}
+                {Math.min(userPagination.page * userPagination.limit, userPagination.total)} {t('of')} {userPagination.total} {t('users')}
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -437,7 +437,7 @@ export default function AdminPage() {
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <span className="text-sm text-text-secondary">
-                  Page {userPagination.page} of {userPagination.totalPages}
+                  {t('page')} {userPagination.page} {t('of')} {userPagination.totalPages}
                 </span>
                 <button
                   onClick={() => fetchUsers(userPagination.page + 1, searchQuery)}
@@ -459,11 +459,11 @@ export default function AdminPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Song</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">User</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Created</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('songs')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('user')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('status')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">{t('created')}</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-text-secondary uppercase tracking-wider">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -516,8 +516,8 @@ export default function AdminPage() {
             {/* Pagination */}
             <div className="mt-4 flex items-center justify-between">
               <p className="text-sm text-text-secondary">
-                Showing {(songPagination.page - 1) * songPagination.limit + 1} to{" "}
-                {Math.min(songPagination.page * songPagination.limit, songPagination.total)} of {songPagination.total} songs
+                {t('showing')} {(songPagination.page - 1) * songPagination.limit + 1} {t('to')}{" "}
+                {Math.min(songPagination.page * songPagination.limit, songPagination.total)} {t('of')} {songPagination.total} {t('songs')}
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -528,7 +528,7 @@ export default function AdminPage() {
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <span className="text-sm text-text-secondary">
-                  Page {songPagination.page} of {songPagination.totalPages}
+                  {t('page')} {songPagination.page} {t('of')} {songPagination.totalPages}
                 </span>
                 <button
                   onClick={() => fetchSongs(songPagination.page + 1)}
@@ -553,12 +553,12 @@ export default function AdminPage() {
                     <Users className="w-5 h-5 text-accent" />
                   </div>
                   <div>
-                    <p className="text-sm text-text-secondary">Total Users</p>
+                    <p className="text-sm text-text-secondary">{t('totalUsers')}</p>
                     <p className="text-2xl font-bold text-foreground">{stats.users.total}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 text-sm">
-                  <span className="text-success">{stats.users.active} active</span>
+                  <span className="text-success">{stats.users.active} {t('active')}</span>
                   <span className="text-purple-400">{stats.users.admins} admins</span>
                   <span className="text-accent">{stats.users.pro} pro</span>
                 </div>
@@ -570,13 +570,13 @@ export default function AdminPage() {
                     <Music className="w-5 h-5 text-success" />
                   </div>
                   <div>
-                    <p className="text-sm text-text-secondary">Total Songs</p>
+                    <p className="text-sm text-text-secondary">{t('totalSongs')}</p>
                     <p className="text-2xl font-bold text-foreground">{stats.songs.total}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 text-sm">
-                  <span className="text-success">{stats.songs.byStatus.COMPLETED} completed</span>
-                  <span className="text-accent">{stats.songs.byStatus.GENERATING} generating</span>
+                  <span className="text-success">{stats.songs.byStatus.COMPLETED} {t('completed')}</span>
+                  <span className="text-accent">{stats.songs.byStatus.GENERATING} {t('generatingLabel')}</span>
                 </div>
               </div>
 
@@ -586,11 +586,11 @@ export default function AdminPage() {
                     <BarChart3 className="w-5 h-5 text-info" />
                   </div>
                   <div>
-                    <p className="text-sm text-text-secondary">Daily Usage</p>
+                    <p className="text-sm text-text-secondary">{t('dailyUsage')}</p>
                     <p className="text-2xl font-bold text-foreground">{stats.usage.daily}</p>
                   </div>
                 </div>
-                <p className="text-sm text-text-secondary">Generations today</p>
+                <p className="text-sm text-text-secondary">{t('generationsToday')}</p>
               </div>
 
               <div className="p-6 rounded-xl bg-surface border border-border">
@@ -599,17 +599,17 @@ export default function AdminPage() {
                     <Clock className="w-5 h-5 text-warning" />
                   </div>
                   <div>
-                    <p className="text-sm text-text-secondary">Monthly Usage</p>
+                    <p className="text-sm text-text-secondary">{t('monthlyUsage')}</p>
                     <p className="text-2xl font-bold text-foreground">{stats.usage.monthly}</p>
                   </div>
                 </div>
-                <p className="text-sm text-text-secondary">Generations this month</p>
+                <p className="text-sm text-text-secondary">{t('generationsThisMonth')}</p>
               </div>
             </div>
 
             {/* Songs by Status */}
             <div className="p-6 rounded-xl bg-surface border border-border">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Songs by Status</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-4">{t('songsByStatus')}</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {Object.entries(stats.songs.byStatus).map(([status, count]) => (
                   <div key={status} className="p-4 rounded-lg bg-background border border-border">
@@ -624,10 +624,10 @@ export default function AdminPage() {
             <div className="p-6 rounded-xl bg-surface border border-border">
               <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-purple-400" />
-                Recent Admin Actions
+                {t('recentAdminActions')}
               </h3>
               {stats.logs.length === 0 ? (
-                <p className="text-text-secondary text-sm">No admin actions recorded yet.</p>
+                <p className="text-text-secondary text-sm">{t('noAdminActions')}</p>
               ) : (
                 <div className="space-y-3">
                   {stats.logs.map((log) => (
@@ -659,7 +659,7 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-xl bg-surface border border-border p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-foreground">Edit User</h3>
+              <h3 className="text-lg font-semibold text-foreground">{t('editUser')}</h3>
               <button
                 onClick={() => {
                   setShowUserModal(false)
@@ -673,12 +673,12 @@ export default function AdminPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-text-secondary mb-2">Email</label>
+                <label className="block text-sm text-text-secondary mb-2">{t('email')}</label>
                 <p className="text-foreground">{selectedUser.email}</p>
               </div>
 
               <div>
-                <label className="block text-sm text-text-secondary mb-2">Role</label>
+                <label className="block text-sm text-text-secondary mb-2">{t('role')}</label>
                 <select
                   defaultValue={selectedUser.role}
                   id="role-select"
@@ -691,7 +691,7 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-text-secondary mb-2">Tier</label>
+                <label className="block text-sm text-text-secondary mb-2">{t('tier')}</label>
                 <select
                   defaultValue={selectedUser.tier}
                   id="tier-select"
@@ -703,7 +703,7 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-text-secondary mb-2">Status</label>
+                <label className="block text-sm text-text-secondary mb-2">{t('status')}</label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -711,7 +711,7 @@ export default function AdminPage() {
                     defaultChecked={selectedUser.isActive}
                     className="w-4 h-4 rounded border-border bg-background text-accent focus:ring-accent"
                   />
-                  <span className="text-sm text-foreground">Active</span>
+                  <span className="text-sm text-foreground">{t('active')}</span>
                 </label>
               </div>
 
@@ -723,7 +723,7 @@ export default function AdminPage() {
                   }}
                   className="flex-1 px-4 py-2 rounded-lg bg-surface-elevated hover:bg-border text-foreground text-sm font-medium transition-colors"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={() => {
@@ -740,7 +740,7 @@ export default function AdminPage() {
                   className="flex-1 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Save Changes
+                  {t('save')}
                 </button>
               </div>
             </div>
@@ -756,19 +756,19 @@ export default function AdminPage() {
               <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-error" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground">Confirm Delete</h3>
+              <h3 className="text-lg font-semibold text-foreground">{t('confirmDelete')}</h3>
             </div>
             <p className="text-text-secondary text-sm mb-6">
               {showDeleteConfirm.type === "user"
-                ? "Are you sure you want to delete this user? This action cannot be undone."
-                : "Are you sure you want to delete this song? This action cannot be undone."}
+                ? t('confirmDeleteUser')
+                : t('confirmDeleteSong')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteConfirm({ show: false })}
                 className="flex-1 px-4 py-2 rounded-lg bg-surface-elevated hover:bg-border text-foreground text-sm font-medium transition-colors"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={() => {
@@ -782,7 +782,7 @@ export default function AdminPage() {
                 className="flex-1 px-4 py-2 rounded-lg bg-error hover:bg-error/90 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                Delete
+                {t('delete')}
               </button>
             </div>
           </div>

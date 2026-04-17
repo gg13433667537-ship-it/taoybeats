@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Music, Loader2, Play, Pause, Download, Share2, Copy, Check, AlertCircle, RefreshCw } from "lucide-react"
+import { Music, Loader2, Play, Pause, Download, Share2, Copy, Check, AlertCircle, RefreshCw, Shield } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 // Genre options
@@ -26,6 +26,23 @@ type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | '
 export default function GeneratePage() {
   const router = useRouter()
   const { t, lang } = useI18n()
+  const [userRole, setUserRole] = useState<string>('USER')
+
+  useEffect(() => {
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=')
+      if (name === 'session-token') {
+        try {
+          const payload = JSON.parse(atob(value))
+          setUserRole(payload.role || 'USER')
+        } catch (e) {
+          // ignore
+        }
+        break
+      }
+    }
+  }, [])
 
   // Form state
   const [apiUrl, setApiUrl] = useState("https://api.minimax.chat")
@@ -199,14 +216,23 @@ export default function GeneratePage() {
               onClick={() => router.push('/dashboard')}
               className="text-sm text-text-secondary hover:text-foreground transition-colors"
             >
-              Dashboard
+              {t('dashboard')}
             </button>
             <button
               onClick={() => router.push('/settings')}
               className="text-sm text-text-secondary hover:text-foreground transition-colors"
             >
-              Settings
+              {t('settings')}
             </button>
+            {userRole === 'ADMIN' && (
+              <button
+                onClick={() => router.push('/admin')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+              >
+                <Shield className="w-4 h-4" />
+                <span className="text-sm font-medium">{t('admin')}</span>
+              </button>
+            )}
           </nav>
         </div>
       </header>
