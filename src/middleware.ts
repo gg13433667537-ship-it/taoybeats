@@ -11,7 +11,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Check for auth token (JWT in cookie)
-  const token = request.cookies.get("auth-token")?.value
+  const token = request.cookies.get("session-token")?.value
   const isAuthenticated = !!token
 
   // Protected routes

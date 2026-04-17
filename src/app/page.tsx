@@ -1,7 +1,13 @@
+'use client'
+
 import Link from "next/link"
 import { Music, Zap, Share2, Download } from "lucide-react"
+import { useI18n } from "@/lib/i18n"
+import LanguageSwitcher from "@/components/LanguageSwitcher"
 
 export default function HomePage() {
+  const { t } = useI18n()
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
@@ -13,21 +19,22 @@ export default function HomePage() {
             </div>
             <span className="text-xl font-bold text-foreground">TaoyBeats</span>
           </div>
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="flex items-center gap-4">
+            <LanguageSwitcher />
             <Link href="/generate" className="text-sm text-text-secondary hover:text-foreground transition-colors">
-              Generate
+              {t('generate')}
             </Link>
             <Link href="/pricing" className="text-sm text-text-secondary hover:text-foreground transition-colors">
-              Pricing
+              {t('pricing')}
             </Link>
             <Link href="/login" className="text-sm text-text-secondary hover:text-foreground transition-colors">
-              Sign In
+              {t('signIn')}
             </Link>
             <Link
               href="/register"
               className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
             >
-              Get Started
+              {t('getStarted')}
             </Link>
           </nav>
         </div>
@@ -42,27 +49,26 @@ export default function HomePage() {
               <span className="text-sm text-text-secondary">AI-Powered Music Generation</span>
             </div>
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-foreground mb-6 tracking-tight">
-              Create Music with AI,<br />
+              {t('heroTitle1')}<br />
               <span className="bg-gradient-to-r from-accent to-accent-glow bg-clip-text text-transparent">
-                Share Your Sound
+                {t('heroTitle2')}
               </span>
             </h1>
             <p className="text-lg md:text-xl text-text-secondary max-w-2xl mx-auto mb-10">
-              Configure your own AI music backend, write lyrics, choose styles and moods.
-              Generate unique songs in minutes. Share and download with one click.
+              {t('heroDesc')}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 href="/register"
                 className="px-8 py-4 rounded-xl bg-accent hover:bg-accent-hover text-white text-lg font-semibold transition-all hover:shadow-lg hover:shadow-accent/25"
               >
-                Start Creating Free
+                {t('startCreatingFree')}
               </Link>
               <Link
                 href="/generate"
                 className="px-8 py-4 rounded-xl border border-border hover:border-accent text-foreground text-lg font-medium transition-colors"
               >
-                Try Demo
+                {t('tryDemo')}
               </Link>
             </div>
           </div>
@@ -72,23 +78,23 @@ export default function HomePage() {
         <section className="py-20 bg-surface/50">
           <div className="container mx-auto px-4">
             <h2 className="text-3xl font-bold text-center mb-12 text-foreground">
-              Everything You Need to Create
+              {t('featuresTitle')}
             </h2>
             <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
               <FeatureCard
                 icon={<Music className="w-6 h-6" />}
-                title="Customizable Generation"
-                description="Configure your AI backend, choose genres, moods, and instruments. Full control over your music creation."
+                title={t('customizableTitle')}
+                description={t('customizableDesc')}
               />
               <FeatureCard
                 icon={<Share2 className="w-6 h-6" />}
-                title="Easy Sharing"
-                description="Generate shareable links for your songs. Let friends and fans listen with a single click."
+                title={t('sharingTitle')}
+                description={t('sharingDesc')}
               />
               <FeatureCard
                 icon={<Download className="w-6 h-6" />}
-                title="Download Anywhere"
-                description="Export your generated music as MP3 files. Use them anywhere you want."
+                title={t('downloadTitle')}
+                description={t('downloadDesc')}
               />
             </div>
           </div>
@@ -98,13 +104,13 @@ export default function HomePage() {
         <section className="py-20">
           <div className="container mx-auto px-4">
             <h2 className="text-3xl font-bold text-center mb-12 text-foreground">
-              How It Works
+              {t('howItWorks')}
             </h2>
             <div className="grid md:grid-cols-4 gap-6 max-w-4xl mx-auto">
-              <StepCard step={1} title="Sign Up" description="Create your free account in seconds" />
-              <StepCard step={2} title="Configure" description="Set up your AI music API" />
-              <StepCard step={3} title="Generate" description="Write lyrics and create music" />
-              <StepCard step={4} title="Share" description="Download and share your creation" />
+              <StepCard step={1} title={t('step1Title')} description={t('step1Desc')} />
+              <StepCard step={2} title={t('step2Title')} description={t('step2Desc')} />
+              <StepCard step={3} title={t('step3Title')} description={t('step3Desc')} />
+              <StepCard step={4} title={t('step4Title')} description={t('step4Desc')} />
             </div>
           </div>
         </section>
@@ -113,17 +119,17 @@ export default function HomePage() {
         <section className="py-20 bg-gradient-to-b from-surface/50 to-transparent">
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Ready to Create?
+              {t('readyToCreate')}
             </h2>
             <p className="text-text-secondary mb-8 max-w-lg mx-auto">
-              Join thousands of music creators using TaoyBeats to bring their ideas to life.
+              {t('ctaDesc')}
             </p>
             <Link
               href="/register"
               className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-accent hover:bg-accent-hover text-white text-lg font-semibold transition-all hover:shadow-lg hover:shadow-accent/25"
             >
               <Zap className="w-5 h-5" />
-              Get Started for Free
+              {t('getStartedFree')}
             </Link>
           </div>
         </section>
@@ -140,9 +146,9 @@ export default function HomePage() {
               <span className="font-semibold text-foreground">TaoyBeats</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-text-secondary">
-              <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
-              <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
-              <span>© 2026 TaoyBeats. All rights reserved.</span>
+              <Link href="/privacy" className="hover:text-foreground transition-colors">{t('privacy')}</Link>
+              <Link href="/terms" className="hover:text-foreground transition-colors">{t('terms')}</Link>
+              <span>{t('copyright')}</span>
             </div>
           </div>
         </div>

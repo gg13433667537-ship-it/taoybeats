@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import "./globals.css"
+import { Providers } from "@/components/Providers"
 
 export const metadata: Metadata = {
   title: "TaoyBeats - AI Music Generation",
@@ -21,7 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased font-sans">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   )
