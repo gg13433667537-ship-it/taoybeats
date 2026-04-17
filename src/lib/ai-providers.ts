@@ -34,6 +34,7 @@ export type AIProvider = {
 }
 
 // MiniMax Provider - Real API Implementation
+// API Docs: https://api.minimax.chat/document
 export const miniMaxProvider: AIProvider = {
   name: 'MiniMax',
 
@@ -41,7 +42,13 @@ export const miniMaxProvider: AIProvider = {
     const baseUrl = apiUrl || 'https://api.minimax.chat'
     const model = modelId || 'music-2.6'
 
-    const response = await fetch(`${baseUrl}/api/v1/music/generate`, {
+    // Build prompt from song params (for music description)
+    const prompt = buildPrompt(params)
+
+    // Check if instrumental (no lyrics)
+    const isInstrumental = !params.lyrics || params.lyrics.trim() === ''
+
+    const response = await fetch(`${baseUrl}/api/v1/music_generation`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -49,8 +56,15 @@ export const miniMaxProvider: AIProvider = {
       },
       body: JSON.stringify({
         model,
-        prompt: buildPrompt(params),
-        duration: 180, // 3 minutes default
+        prompt,
+        lyrics: params.lyrics || undefined,
+        is_instrumental: isInstrumental,
+        stream: false,
+        output_format: 'url',
+        audio_setting: {
+          duration: 180, // 3 minutes default
+        },
+        aigc_watermark: false,
       }),
     })
 
@@ -60,14 +74,14 @@ export const miniMaxProvider: AIProvider = {
     }
 
     const data = await response.json()
-    // MiniMax returns task_id or id
-    return data.task_id || data.id
+    // MiniMax returns task_id in data
+    return data.task_id || data.data?.task_id
   },
 
   async getProgress(taskId, apiKey, apiUrl) {
     const baseUrl = apiUrl || 'https://api.minimax.chat'
 
-    const response = await fetch(`${baseUrl}/api/v1/music/status/${taskId}`, {
+    const response = await fetch(`${baseUrl}/api/v1/music_generation_info?task_id=${taskId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -85,7 +99,7 @@ export const miniMaxProvider: AIProvider = {
   async download(taskId, apiKey, apiUrl) {
     const baseUrl = apiUrl || 'https://api.minimax.chat'
 
-    const response = await fetch(`${baseUrl}/api/v1/music/download/${taskId}`, {
+    const response = await fetch(`${baseUrl}/api/v1/music_generation_info?task_id=${taskId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -97,7 +111,12 @@ export const miniMaxProvider: AIProvider = {
     }
 
     const data = await response.json()
-    return data.audio_url || data.url
+    // Get the audio URL from the response
+    const audioUrl = data.data?.audio_url || data.audio_url
+    if (!audioUrl) {
+      throw new Error('Audio not ready yet')
+    }
+    return audioUrl
   },
 }
 

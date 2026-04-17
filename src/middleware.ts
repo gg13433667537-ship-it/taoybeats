@@ -10,24 +10,40 @@ const adminRoutes = ["/admin"]
 // Routes that redirect to dashboard if authenticated
 const authRoutes = ["/login", "/register"]
 
+function getUserRole(token: string): string {
+  try {
+    const payload = JSON.parse(Buffer.from(token, "base64").toString())
+    return payload.role || 'USER'
+  } catch {
+    return 'USER'
+  }
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Check for auth token (JWT in cookie)
   const token = request.cookies.get("session-token")?.value
   const isAuthenticated = !!token
+  const userRole = token ? getUserRole(token) : 'USER'
 
-  // Protected routes
-  if (protectedRoutes.some((route) => pathname.startsWith(route))) {
+  // Admin routes - require ADMIN role
+  if (adminRoutes.some((route) => pathname.startsWith(route))) {
     if (!isAuthenticated) {
       const loginUrl = new URL("/login", request.url)
       loginUrl.searchParams.set("redirect", pathname)
       return NextResponse.redirect(loginUrl)
     }
+    // Check if user is ADMIN
+    if (userRole !== 'ADMIN') {
+      // Not admin - redirect to dashboard
+      return NextResponse.redirect(new URL("/dashboard", request.url))
+    }
+    return NextResponse.next()
   }
 
-  // Admin routes - require authentication
-  if (adminRoutes.some((route) => pathname.startsWith(route))) {
+  // Protected routes - require authentication
+  if (protectedRoutes.some((route) => pathname.startsWith(route))) {
     if (!isAuthenticated) {
       const loginUrl = new URL("/login", request.url)
       loginUrl.searchParams.set("redirect", pathname)
@@ -47,14 +63,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api/auth (Auth API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files (public folder)
-     */
     "/((?!api/auth|_next/static|_next/image|favicon.ico|public).*)",
   ],
 }
