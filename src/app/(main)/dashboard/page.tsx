@@ -346,16 +346,16 @@ export default function DashboardPage() {
                       {/* Play Button / Status */}
                       <div className="relative">
                         {song.status === 'COMPLETED' ? (
-                          <button className="w-12 h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors">
-                            <Play className="w-5 h-5 ml-0.5" />
+                          <button aria-label="Play song" className="w-12 h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors">
+                            <Play className="w-5 h-5 ml-0.5" aria-hidden="true" />
                           </button>
                         ) : song.status === 'GENERATING' ? (
                           <div className="w-12 h-12 rounded-full bg-accent/10 text-accent flex items-center justify-center">
-                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
                           </div>
                         ) : (
-                          <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center">
-                            <span className="text-sm">!</span>
+                          <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center" aria-label="Failed status">
+                            <span className="text-sm" aria-hidden="true">!</span>
                           </div>
                         )}
 
