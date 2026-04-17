@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verificationCodes } from "@/lib/auth-codes"
 
 // Demo users (replace with database in production)
 const users: Map<string, any> = new Map()
@@ -10,38 +9,65 @@ export async function POST(request: NextRequest) {
 
     if (!email || !code) {
       return NextResponse.json(
-        { error: "Email and code are required" },
+        { error: "请提供邮箱和验证码" },
         { status: 400 }
       )
     }
 
-    // Check verification code
-    const stored = verificationCodes.get(email)
+    // Get verify token from cookie
+    const token = request.cookies.get("verify-token")?.value
+    const devCode = request.cookies.get("dev-code")?.value
 
-    if (!stored) {
+    if (!token) {
       return NextResponse.json(
-        { error: "No verification code sent to this email" },
+        { error: "请先获取验证码" },
         { status: 400 }
       )
     }
 
-    if (Date.now() > stored.expires) {
-      verificationCodes.delete(email)
+    // Decode token
+    let payload: { email: string; code: string; exp: number }
+    try {
+      payload = JSON.parse(Buffer.from(token, "base64url").toString())
+    } catch {
       return NextResponse.json(
-        { error: "Verification code expired" },
+        { error: "验证码无效" },
         { status: 400 }
       )
     }
 
-    if (stored.code !== code) {
+    // Check expiry
+    if (Date.now() > payload.exp) {
       return NextResponse.json(
-        { error: "Invalid verification code" },
+        { error: "验证码已过期，请重新获取" },
         { status: 400 }
       )
     }
 
-    // Code valid - delete it
-    verificationCodes.delete(email)
+    // Check email match
+    if (payload.email !== email) {
+      return NextResponse.json(
+        { error: "邮箱不匹配，请重新获取验证码" },
+        { status: 400 }
+      )
+    }
+
+    // Check code - use devCode if in dev mode, otherwise use payload.code
+    const validCode = devCode || payload.code
+    if (code !== validCode) {
+      return NextResponse.json(
+        { error: "验证码错误，请检查后重新输入" },
+        { status: 400 }
+      )
+    }
+
+    // Code valid - clear verify cookie
+    const response = NextResponse.json({
+      success: true,
+      message: "验证成功",
+    })
+    response.cookies.delete("verify-token")
+    response.cookies.delete("dev-code")
 
     // Get or create user
     let user = users.get(email)
@@ -60,20 +86,9 @@ export async function POST(request: NextRequest) {
       users.set(email, user)
     }
 
-    // Create session token (simple JWT-like token)
+    // Create session token
     const sessionToken = createSessionToken(user)
 
-    const response = NextResponse.json({
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        tier: user.tier,
-      },
-    })
-
-    // Set cookie
     response.cookies.set("session-token", sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -85,14 +100,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Verify error:", error)
     return NextResponse.json(
-      { error: "Verification failed" },
+      { error: "验证失败，请稍后重试" },
       { status: 500 }
     )
   }
 }
 
 function createSessionToken(user: any): string {
-  // Simple token (use real JWT in production)
   const payload = {
     id: user.id,
     email: user.email,

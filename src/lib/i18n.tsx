@@ -379,30 +379,42 @@ interface I18nContextType {
 }
 
 const I18nContext = createContext<I18nContextType>({
-  lang: 'zh',
+  lang: 'en',
   setLang: () => {},
   t: () => '',
 })
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Language>('zh')
+export function I18nProvider({ children, lang = 'en' }: { children: React.ReactNode; lang?: Language }) {
+  const [currentLang, setCurrentLang] = useState<Language>(lang)
 
   useEffect(() => {
+    // Read from cookie on mount
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=')
+      if (name === 'taoybeats-lang') {
+        setCurrentLang(value as Language)
+        return
+      }
+    }
+    // Fallback to localStorage
     const saved = localStorage.getItem('taoybeats-lang') as Language
-    if (saved) setLang(saved)
+    if (saved) setCurrentLang(saved)
   }, [])
 
   const handleSetLang = (newLang: Language) => {
-    setLang(newLang)
+    setCurrentLang(newLang)
     localStorage.setItem('taoybeats-lang', newLang)
+    // Also set cookie for server-side reading
+    document.cookie = `taoybeats-lang=${newLang}; path=/; max-age=${60 * 60 * 24 * 365}`
   }
 
   const t = (key: TranslationKey): string => {
-    return translations[lang][key] || translations.en[key] || key
+    return translations[currentLang][key] || translations.en[key] || key
   }
 
   return (
-    <I18nContext.Provider value={{ lang, setLang: handleSetLang, t }}>
+    <I18nContext.Provider value={{ lang: currentLang, setLang: handleSetLang, t }}>
       {children}
     </I18nContext.Provider>
   )

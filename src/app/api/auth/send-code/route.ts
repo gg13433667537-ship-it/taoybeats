@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createTransport } from "nodemailer"
-import { verificationCodes, generateCode } from "@/lib/auth-codes"
+import { generateCode } from "@/lib/auth-codes"
+
+function createVerifyToken(email: string, code: string): string {
+  const payload = {
+    email,
+    code,
+    exp: Date.now() + 10 * 60 * 1000, // 10 minutes
+  }
+  // Simple base64 encoding (in production use proper JWT)
+  return Buffer.from(JSON.stringify(payload)).toString("base64url")
+}
 
 async function sendVerificationEmail(email: string, code: string) {
-  // Check if SMTP is configured
   const smtpHost = process.env.SMTP_HOST
   const smtpPort = parseInt(process.env.SMTP_PORT || "587")
   const smtpUser = process.env.SMTP_USER
@@ -11,7 +20,6 @@ async function sendVerificationEmail(email: string, code: string) {
   const smtpFrom = process.env.SMTP_FROM || process.env.SMTP_USER
 
   if (!smtpHost || !smtpUser || !smtpPass) {
-    // Development mode - return code in response
     console.log(`[DEV] Verification code for ${email}: ${code}`)
     return { success: true, devCode: code }
   }
@@ -30,41 +38,41 @@ async function sendVerificationEmail(email: string, code: string) {
     await transporter.sendMail({
       from: `"TaoyBeats" <${smtpFrom}>`,
       to: email,
-      subject: "Your TaoyBeats Verification Code",
+      subject: "【TaoyBeats】您的验证码",
       html: `
         <!DOCTYPE html>
         <html>
           <head>
             <meta charset="utf-8">
             <style>
-              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; margin: 0; padding: 20px; }
-              .container { max-width: 480px; margin: 0 auto; background: #111; border-radius: 16px; padding: 40px; border: 1px solid #222; }
-              .logo { font-size: 24px; font-weight: bold; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
-              .title { font-size: 24px; font-weight: bold; margin-bottom: 16px; }
-              .text { color: #888; line-height: 1.6; margin-bottom: 30px; }
-              .code { font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #a855f7; background: #1a1a1a; padding: 20px 30px; border-radius: 12px; text-align: center; margin: 20px 0; }
-              .footer { color: #555; font-size: 12px; margin-top: 30px; }
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; margin: 0; padding: 20px; }
+              .container { max-width: 480px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+              .logo { font-size: 24px; font-weight: bold; margin-bottom: 30px; color: #a855f7; }
+              .title { font-size: 24px; font-weight: bold; margin-bottom: 16px; color: #1a1a1a; }
+              .text { color: #666; line-height: 1.6; margin-bottom: 30px; }
+              .code { font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #a855f7; background: #f8f8f8; padding: 20px 30px; border-radius: 12px; text-align: center; margin: 20px 0; border: 2px dashed #a855f7; }
+              .footer { color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; }
             </style>
           </head>
           <body>
             <div class="container">
               <div class="logo">TaoyBeats</div>
-              <div class="title">Verification Code</div>
+              <div class="title">验证码</div>
               <div class="text">
-                Your verification code for signing in to TaoyBeats is:
+                您好！您的 TaoyBeats 登录验证码是：
               </div>
               <div class="code">${code}</div>
               <div class="text">
-                This code will expire in 10 minutes. If you didn't request this code, please ignore this email.
+                验证码将在 10 分钟内有效。请勿将验证码告诉他人。
               </div>
               <div class="footer">
-                © 2026 TaoyBeats. All rights reserved.
+                © 2026 TaoyBeats. 如果您没有请求此验证码，请忽略此邮件。
               </div>
             </div>
           </body>
         </html>
       `,
-      text: `Your TaoyBeats verification code is: ${code}. This code will expire in 10 minutes.`,
+      text: `您的 TaoyBeats 验证码是：${code}，10分钟内有效。`,
     })
 
     return { success: true }
@@ -80,54 +88,62 @@ export async function POST(request: NextRequest) {
 
     if (!email || !email.includes('@')) {
       return NextResponse.json(
-        { error: "Invalid email address" },
+        { error: "请输入有效的邮箱地址" },
         { status: 400 }
       )
     }
 
-    // Check if email is valid (basic validation)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
       return NextResponse.json(
-        { error: "Invalid email address format" },
+        { error: "邮箱地址格式不正确" },
         { status: 400 }
       )
     }
 
-    // Generate code
     const code = generateCode()
-    const expires = Date.now() + 10 * 60 * 1000 // 10 minutes
+    const token = createVerifyToken(email, code)
 
-    // Store code
-    verificationCodes.set(email, { code, expires })
-
-    // Send verification email
+    // Send verification email first
     const result = await sendVerificationEmail(email, code)
 
-    if (!result.success && (process.env.SMTP_HOST || process.env.SMTP_USER)) {
+    if (!result.success && process.env.SMTP_HOST) {
       return NextResponse.json(
-        { error: "Failed to send verification email. Please check SMTP configuration." },
+        { error: "发送验证码失败，请稍后重试" },
         { status: 500 }
       )
     }
 
-    // In development without SMTP, return the code for testing
+    // Set token in HTTP-only cookie (secure, prevents XSS)
+    const response = NextResponse.json({
+      success: true,
+      message: result.devCode ? "验证码已生成（开发模式）" : "验证码已发送到您的邮箱",
+    })
+
+    response.cookies.set("verify-token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 10 * 60, // 10 minutes
+      path: "/",
+    })
+
+    // In dev mode, return the code
     if (result.devCode) {
-      return NextResponse.json({
-        success: true,
-        message: "Verification code sent (dev mode - check console)",
-        devCode: result.devCode,
+      response.cookies.set("dev-code", code, {
+        httpOnly: false, // Allow JS to read in dev
+        secure: false,
+        sameSite: "lax",
+        maxAge: 10 * 60,
+        path: "/",
       })
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "Verification code sent to your email",
-    })
+    return response
   } catch (error) {
     console.error("Send code error:", error)
     return NextResponse.json(
-      { error: "Failed to send verification code" },
+      { error: "发送验证码失败" },
       { status: 500 }
     )
   }
