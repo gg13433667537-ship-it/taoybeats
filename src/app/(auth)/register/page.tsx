@@ -4,10 +4,12 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Music, Loader2, Mail, Lock, User, ArrowLeft } from "lucide-react"
+import { useI18n } from "@/lib/i18n"
 
 type Step = "email" | "code" | "profile"
 
 export default function RegisterPage() {
+  const { t } = useI18n()
   const router = useRouter()
   const [step, setStep] = useState<Step>("email")
   const [email, setEmail] = useState("")
@@ -128,19 +130,19 @@ export default function RegisterPage() {
             className="flex items-center gap-2 text-sm text-text-secondary hover:text-foreground transition-colors mb-8"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back
+            {t("back")}
           </button>
 
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-foreground mb-2">
-              {step === "email" && "Create your account"}
-              {step === "code" && "Enter verification code"}
-              {step === "profile" && "Almost there!"}
+              {step === "email" && t("createAccount")}
+              {step === "code" && t("enterVerificationCode")}
+              {step === "profile" && t("almostThere")}
             </h1>
             <p className="text-text-secondary">
-              {step === "email" && "Start creating AI music today"}
-              {step === "code" && `We sent a code to ${email}`}
-              {step === "profile" && "Tell us a bit about yourself"}
+              {step === "email" && t("startCreatingToday")}
+              {step === "code" && `${t("weSentCodeTo")} ${email}`}
+              {step === "profile" && t("tellUsAboutYourself")}
             </p>
           </div>
 
@@ -153,7 +155,7 @@ export default function RegisterPage() {
           {/* Dev code display (REMOVE IN PRODUCTION) */}
           {devCode && step === "code" && (
             <div className="mb-6 p-4 rounded-xl bg-accent/10 border border-accent/20 text-accent text-sm">
-              <p className="font-medium mb-1">Demo Mode - Your verification code:</p>
+              <p className="font-medium mb-1">{t("demoModeYourCode")}</p>
               <p className="text-2xl font-bold tracking-widest">{devCode}</p>
             </div>
           )}
@@ -163,7 +165,7 @@ export default function RegisterPage() {
             <form onSubmit={handleEmailSubmit} className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-2">
-                  Email
+                  {t("email")}
                 </label>
                 <input
                   id="email"
@@ -182,7 +184,7 @@ export default function RegisterPage() {
                 className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                {loading ? "Sending..." : "Continue with Email"}
+                {loading ? t("sending") : t("continueWithEmail")}
               </button>
             </form>
           )}
@@ -192,7 +194,7 @@ export default function RegisterPage() {
             <form onSubmit={handleCodeSubmit} className="space-y-4">
               <div>
                 <label htmlFor="code" className="block text-sm font-medium text-text-secondary mb-2">
-                  Verification Code
+                  {t("verificationCode")}
                 </label>
                 <input
                   id="code"
@@ -212,11 +214,11 @@ export default function RegisterPage() {
                 className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                {loading ? "Verifying..." : "Verify Email"}
+                {loading ? t("verifying") : t("verifyEmail")}
               </button>
 
               <p className="text-center text-sm text-text-muted">
-                Didn&apos;t receive the code?{" "}
+                {t("didntReceive")}{" "}
                 <button
                   onClick={() => {
                     setDevCode("")
@@ -224,7 +226,7 @@ export default function RegisterPage() {
                   }}
                   className="text-accent hover:underline"
                 >
-                  Try again
+                  {t("tryAgain")}
                 </button>
               </p>
             </form>
@@ -235,7 +237,7 @@ export default function RegisterPage() {
             <form onSubmit={handleProfileSubmit} className="space-y-4">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-text-secondary mb-2">
-                  What should we call you?
+                  {t("whatShouldWeCallYou")}
                 </label>
                 <input
                   id="name"
@@ -244,7 +246,7 @@ export default function RegisterPage() {
                   onChange={(e) => setName(e.target.value)}
                   required
                   className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
-                  placeholder="Your name"
+                  placeholder={t("yourNamePlaceholder")}
                 />
               </div>
 
@@ -254,15 +256,15 @@ export default function RegisterPage() {
                 className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <User className="w-4 h-4" />}
-                {loading ? "Saving..." : "Complete Sign Up"}
+                {loading ? t("saving") : t("completeSignUp")}
               </button>
             </form>
           )}
 
           <p className="mt-8 text-center text-sm text-text-muted">
-            Already have an account?{" "}
+            {t("alreadyHaveAccount")}{" "}
             <Link href="/login" className="text-accent hover:underline">
-              Sign in
+              {t("signInLink")}
             </Link>
           </p>
         </div>

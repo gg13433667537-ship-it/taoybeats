@@ -4,10 +4,12 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Music, Loader2, Mail, Lock, ArrowLeft } from "lucide-react"
+import { useI18n } from "@/lib/i18n"
 
 type Step = "email" | "code" | "password"
 
 export default function LoginPage() {
+  const { t } = useI18n()
   const router = useRouter()
   const [step, setStep] = useState<Step>("email")
   const [email, setEmail] = useState("")
@@ -99,19 +101,19 @@ export default function LoginPage() {
             className="flex items-center gap-2 text-sm text-text-secondary hover:text-foreground transition-colors mb-8"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back
+            {t("back")}
           </button>
 
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-foreground mb-2">
-              {step === "email" && "Welcome back"}
-              {step === "code" && "Enter verification code"}
-              {step === "password" && "Set your password"}
+              {step === "email" && t("welcomeBack")}
+              {step === "code" && t("enterVerificationCode")}
+              {step === "password" && t("setYourPassword")}
             </h1>
             <p className="text-text-secondary">
-              {step === "email" && "Enter your email to sign in"}
-              {step === "code" && `We sent a code to ${email}`}
-              {step === "password" && "Create a password for future logins"}
+              {step === "email" && t("enterYourEmailToSignIn")}
+              {step === "code" && `${t("weSentCodeTo")} ${email}`}
+              {step === "password" && t("createPasswordForFutureLogins")}
             </p>
           </div>
 
@@ -124,7 +126,7 @@ export default function LoginPage() {
           {/* Dev code display (REMOVE IN PRODUCTION) */}
           {devCode && step === "code" && (
             <div className="mb-6 p-4 rounded-xl bg-accent/10 border border-accent/20 text-accent text-sm">
-              <p className="font-medium mb-1">Demo Mode - Your verification code:</p>
+              <p className="font-medium mb-1">{t("demoModeYourCode")}</p>
               <p className="text-2xl font-bold tracking-widest">{devCode}</p>
             </div>
           )}
@@ -134,7 +136,7 @@ export default function LoginPage() {
             <form onSubmit={handleEmailSubmit} className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-2">
-                  Email
+                  {t("email")}
                 </label>
                 <input
                   id="email"
@@ -153,7 +155,7 @@ export default function LoginPage() {
                 className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                {loading ? "Sending..." : "Continue with Email"}
+                {loading ? t("sending") : t("continueWithEmail")}
               </button>
             </form>
           )}
@@ -163,7 +165,7 @@ export default function LoginPage() {
             <form onSubmit={handleCodeSubmit} className="space-y-4">
               <div>
                 <label htmlFor="code" className="block text-sm font-medium text-text-secondary mb-2">
-                  Verification Code
+                  {t("verificationCode")}
                 </label>
                 <input
                   id="code"
@@ -183,11 +185,11 @@ export default function LoginPage() {
                 className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                {loading ? "Verifying..." : "Verify & Sign In"}
+                {loading ? t("verifying") : t("verifySignIn")}
               </button>
 
               <p className="text-center text-sm text-text-muted">
-                Didn&apos;t receive the code?{" "}
+                {t("didntReceive")}{" "}
                 <button
                   onClick={() => {
                     setDevCode("")
@@ -195,16 +197,16 @@ export default function LoginPage() {
                   }}
                   className="text-accent hover:underline"
                 >
-                  Try again
+                  {t("tryAgain")}
                 </button>
               </p>
             </form>
           )}
 
           <p className="mt-8 text-center text-sm text-text-muted">
-            Don&apos;t have an account?{" "}
+            {t("noAccount")}{" "}
             <Link href="/register" className="text-accent hover:underline">
-              Sign up
+              {t("signUp")}
             </Link>
           </p>
         </div>
