@@ -1,9 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, startTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Music, Loader2, Play, Pause, Download, Share2, Copy, Check, AlertCircle, RefreshCw, Shield } from "lucide-react"
+import { Music, Loader2, Play, Pause, Download, Share2, Check, AlertCircle, RefreshCw, Shield } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
+
+// Waveform heights - pre-computed for consistency
+const waveformHeights = Array.from({ length: 50 }, (_, i) =>
+  `${Math.sin(i * 0.3) * 30 + 45}%`
+)
 
 // Genre options
 const GENRES = [
@@ -25,7 +30,7 @@ type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | '
 
 export default function GeneratePage() {
   const router = useRouter()
-  const { t, lang } = useI18n()
+  const { t } = useI18n()
   const [userRole, setUserRole] = useState<string>('USER')
 
   useEffect(() => {
@@ -35,8 +40,10 @@ export default function GeneratePage() {
       if (name === 'session-token') {
         try {
           const payload = JSON.parse(atob(value))
-          setUserRole(payload.role || 'USER')
-        } catch (e) {
+          startTransition(() => {
+            setUserRole(payload.role || 'USER')
+          })
+        } catch {
           // ignore
         }
         break
@@ -552,7 +559,7 @@ export default function GeneratePage() {
                           key={i}
                           className="w-1 bg-accent rounded-full transition-all duration-300"
                           style={{
-                            height: `${Math.sin(i * 0.3) * 30 + Math.random() * 50 + 20}%`,
+                            height: waveformHeights[i],
                             opacity: isPlaying ? (i < 25 ? 1 : 0.4) : 0.6
                           }}
                         />

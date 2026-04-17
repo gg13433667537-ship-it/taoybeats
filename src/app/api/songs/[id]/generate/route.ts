@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { miniMaxProvider } from "@/lib/ai-providers"
 
 export async function POST(
   request: NextRequest,
@@ -9,7 +8,7 @@ export async function POST(
 
   try {
     const body = await request.json()
-    const { apiKey, apiUrl } = body
+    const { apiKey } = body
 
     if (!apiKey) {
       return NextResponse.json(

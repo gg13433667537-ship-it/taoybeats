@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { User } from "@/lib/types"
 
 declare global {
-  var users: Map<string, any> | undefined
+  var users: Map<string, User> | undefined
 }
 
 if (!global.users) global.users = new Map()

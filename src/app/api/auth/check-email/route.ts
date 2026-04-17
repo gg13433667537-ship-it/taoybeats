@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { User } from "@/lib/types"
 
 declare global {
-  var users: Map<string, any> | undefined
-  var songs: Map<string, any> | undefined
-  var adminLogs: Map<string, any> | undefined
+  var users: Map<string, User> | undefined
+  var songs: Map<string, unknown> | undefined
+  var adminLogs: Map<string, unknown> | undefined
 }
 
 if (!global.users) global.users = new Map()

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { User, Song } from "@/lib/types"
 
 // Shared global storage
 declare global {
-  var users: Map<string, any> | undefined
-  var songs: Map<string, any> | undefined
-  var adminLogs: Map<string, any> | undefined
+  var users: Map<string, User> | undefined
+  var songs: Map<string, unknown> | undefined
+  var adminLogs: Map<string, unknown> | undefined
 }
 
 if (!global.users) global.users = new Map()
@@ -12,7 +13,7 @@ if (!global.songs) global.songs = new Map()
 if (!global.adminLogs) global.adminLogs = new Map()
 
 const users = global.users!
-const songs = global.songs!
+const songs = global.songs as Map<string, Song>
 
 // Free tier limits
 const FREE_DAILY_LIMIT = 3
@@ -26,25 +27,28 @@ function getMonthKey(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
-function getOrCreateUser(userId: string, email?: string) {
+function getOrCreateUser(userId: string, email?: string): User {
   let user = users.get(userId)
   if (!user) {
     user = {
       id: userId,
       email: email || `${userId}@example.com`,
       name: email?.split('@')[0] || 'User',
+      role: 'USER',
+      isActive: true,
       tier: 'FREE',
       dailyUsage: 0,
       monthlyUsage: 0,
       dailyResetAt: getDateKey(),
       monthlyResetAt: getMonthKey(),
+      createdAt: new Date().toISOString(),
     }
     users.set(userId, user)
   }
   return user
 }
 
-function checkAndResetUsage(user: any) {
+function checkAndResetUsage(user: User) {
   const today = getDateKey()
   const thisMonth = getMonthKey()
 
@@ -59,7 +63,7 @@ function checkAndResetUsage(user: any) {
   }
 }
 
-function getSessionUser(request: NextRequest): any {
+function getSessionUser(request: NextRequest): User {
   // For demo, get user from cookie
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
@@ -95,8 +99,6 @@ export async function POST(request: NextRequest) {
       referenceSinger,
       referenceSong,
       userNotes,
-      apiKey,
-      apiUrl,
     } = body
 
     // Validation
@@ -142,7 +144,8 @@ export async function POST(request: NextRequest) {
 
     // Create song record
     const songId = crypto.randomUUID()
-    const song = {
+    const now = new Date().toISOString()
+    const song: Song = {
       id: songId,
       userId: user.id,
       title,
@@ -154,15 +157,15 @@ export async function POST(request: NextRequest) {
       referenceSong,
       userNotes,
       status: "GENERATING",
-      audioUrl: null,
       shareToken: crypto.randomUUID().slice(0, 8),
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     }
 
     songs.set(songId, song)
 
     // Start generation in background
-    generateMusic(songId, song, apiKey, apiUrl).catch(console.error)
+    generateMusic(songId, song).catch(console.error)
 
     return NextResponse.json({
       id: songId,
@@ -184,9 +187,7 @@ export async function POST(request: NextRequest) {
 
 async function generateMusic(
   songId: string,
-  song: any,
-  apiKey?: string,
-  apiUrl?: string
+  song: Song
 ) {
   try {
     // Update to generating
@@ -206,7 +207,6 @@ async function generateMusic(
     songs.set(songId, {
       ...song,
       status: "FAILED",
-      error: "Generation failed",
     })
   }
 }

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
+import type { User } from "@/lib/types"
 
 declare global {
-  var users: Map<string, any> | undefined
-  var songs: Map<string, any> | undefined
-  var adminLogs: Map<string, any> | undefined
+  var users: Map<string, User> | undefined
+  var songs: Map<string, unknown> | undefined
+  var adminLogs: Map<string, unknown> | undefined
 }
 
 if (!global.users) global.users = new Map()
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     const isFirstUser = users.size === 0
 
     // Create user
-    const user = {
+    const user: User = {
       id: crypto.randomUUID(),
       email,
       name: name || email.split("@")[0],
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function createSessionToken(user: any): string {
+function createSessionToken(user: User): string {
   const payload = {
     id: user.id,
     email: user.email,

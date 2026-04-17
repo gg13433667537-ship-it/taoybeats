@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { User, UserRole } from "@/lib/types"
 
 declare global {
-  var users: Map<string, any> | undefined
-  var songs: Map<string, any> | undefined
-  var adminLogs: Map<string, any> | undefined
+  var users: Map<string, User> | undefined
+  var songs: Map<string, unknown> | undefined
+  var adminLogs: Map<string, unknown> | undefined
+}
+
+interface SessionUser {
+  id: string
+  email: string
+  role: UserRole
+}
+
+interface AdminLog {
+  id: string
+  adminId: string
+  adminEmail: string
+  action: string
+  targetId?: string
+  targetType?: string
+  details?: Record<string, unknown>
+  createdAt: string
 }
 
 if (!global.users) global.users = new Map()
@@ -13,7 +31,7 @@ if (!global.adminLogs) global.adminLogs = new Map()
 const songs = global.songs
 const adminLogs = global.adminLogs
 
-function getSessionUser(request: NextRequest): any | null {
+function getSessionUser(request: NextRequest): SessionUser | null {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) return null
 
@@ -29,12 +47,12 @@ function getSessionUser(request: NextRequest): any | null {
   }
 }
 
-function isAdmin(user: any): boolean {
+function isAdmin(user: SessionUser | null): boolean {
   return user?.role === 'ADMIN'
 }
 
-function logAdminAction(adminId: string, adminEmail: string, action: string, targetId?: string, targetType?: string, details?: any) {
-  const log = {
+function logAdminAction(adminId: string, adminEmail: string, action: string, targetId?: string, targetType?: string, details?: Record<string, unknown>) {
+  const log: AdminLog = {
     id: crypto.randomUUID(),
     adminId,
     adminEmail,
@@ -59,7 +77,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
   }
 
-  const song = songs.get(id)
+  const song = songs.get(id) as { title?: string } | undefined
   if (!song) {
     return NextResponse.json({ error: "Song not found" }, { status: 404 })
   }

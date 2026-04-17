@@ -1,16 +1,33 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, startTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap, Shield, LogOut, User, ChevronDown, Settings } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
+interface Song {
+  id: string
+  title: string
+  status: string
+  createdAt: string
+  progress?: number
+  duration?: string
+  genre?: string[]
+  [key: string]: unknown
+}
+
+interface Usage {
+  tier: string
+  daily: { used: number; limit: number; remaining: number }
+  monthly: { used: number; limit: number; remaining: number }
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const { t, lang } = useI18n()
-  const [songs, setSongs] = useState<any[]>([])
-  const [usage, setUsage] = useState<any>(null)
+  const [songs, setSongs] = useState<Song[]>([])
+  const [usage, setUsage] = useState<Usage | null>(null)
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string>('USER')
   const [userName, setUserName] = useState<string>('')
@@ -29,15 +46,14 @@ export default function DashboardPage() {
       const value = cookiePart.substring(equalIndex + 1)
       if (name === 'session-token') {
         try {
-          console.log("Session token value:", value.substring(0, 50) + "...")
           const payload = JSON.parse(atob(value))
-          console.log("Parsed payload role:", payload.role)
-          setUserRole(payload.role || 'USER')
-          setUserEmail(payload.email || '')
-          setUserName(payload.email?.split('@')[0] || 'User')
-        } catch (e) {
-          console.error("Failed to parse session token:", e)
-          console.error("Cookie value that failed:", value)
+          startTransition(() => {
+            setUserRole(payload.role || 'USER')
+            setUserEmail(payload.email || '')
+            setUserName(payload.email?.split('@')[0] || 'User')
+          })
+        } catch {
+          // ignore invalid session
         }
         break
       }

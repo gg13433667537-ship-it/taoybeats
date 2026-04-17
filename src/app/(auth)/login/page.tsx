@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Music, Loader2, Mail, Lock, ArrowLeft, Eye, EyeOff } from "lucide-react"

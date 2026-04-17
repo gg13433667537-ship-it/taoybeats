@@ -124,7 +124,7 @@ export const miniMaxProvider: AIProvider = {
 export const sunoProvider: AIProvider = {
   name: 'Suno',
 
-  async generate(params, apiKey, apiUrl, modelId) {
+  async generate(params, apiKey, apiUrl, _modelId) { // eslint-disable-line @typescript-eslint/no-unused-vars
     const baseUrl = apiUrl || 'https://api.suno.ai'
 
     const response = await fetch(`${baseUrl}/api/generate`, {
@@ -179,7 +179,7 @@ export const sunoProvider: AIProvider = {
 export const udioProvider: AIProvider = {
   name: 'Udio',
 
-  async generate(params, apiKey, apiUrl, modelId) {
+  async generate(params, apiKey, apiUrl, _modelId) { // eslint-disable-line @typescript-eslint/no-unused-vars
     const baseUrl = apiUrl || 'https://api.udio.com'
 
     const response = await fetch(`${baseUrl}/v1/music/generate`, {
@@ -277,7 +277,31 @@ function buildPrompt(params: SongParams): string {
 }
 
 // Map provider-specific status to unified format
-function mapMiniMaxStatus(data: any): GenerationProgress {
+interface MiniMaxStatusResponse {
+  status?: string
+  progress?: number
+  stage?: string
+  audio_url?: string
+  url?: string
+  error?: string
+}
+
+interface SunoStatusResponse {
+  status: string
+  progress?: number
+  audio_url?: string
+  error?: string
+}
+
+interface UdioStatusResponse {
+  status: string
+  progress?: number
+  stage?: string
+  audio_url?: string
+  error?: string
+}
+
+function mapMiniMaxStatus(data: MiniMaxStatusResponse): GenerationProgress {
   const statusMap: Record<string, GenerationStatus> = {
     pending: 'PENDING',
     processing: 'GENERATING',
@@ -286,7 +310,7 @@ function mapMiniMaxStatus(data: any): GenerationProgress {
   }
 
   return {
-    status: statusMap[data.status] || 'PENDING',
+    status: statusMap[data.status || ''] || 'PENDING',
     progress: data.progress || 0,
     stage: data.stage,
     audioUrl: data.audio_url || data.url,
@@ -294,7 +318,7 @@ function mapMiniMaxStatus(data: any): GenerationProgress {
   }
 }
 
-function mapSunoStatus(data: any): GenerationProgress {
+function mapSunoStatus(data: SunoStatusResponse): GenerationProgress {
   const isComplete = data.status === 'complete'
   const isFailed = data.status === 'failed'
 
@@ -307,7 +331,7 @@ function mapSunoStatus(data: any): GenerationProgress {
   }
 }
 
-function mapUdioStatus(data: any): GenerationProgress {
+function mapUdioStatus(data: UdioStatusResponse): GenerationProgress {
   return {
     status: data.status === 'complete' ? 'COMPLETED' : data.status === 'error' ? 'FAILED' : 'GENERATING',
     progress: data.progress || 0,

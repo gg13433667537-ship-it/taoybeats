@@ -6,7 +6,7 @@ import { Music, Check, Zap } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 export default function PricingPage() {
-  const { t, lang } = useI18n()
+  const { t } = useI18n()
   const [annual, setAnnual] = useState(false)
 
   const PLANS = [

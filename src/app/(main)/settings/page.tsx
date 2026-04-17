@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, startTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Music, User, Key, Bell, Shield, Loader2, Check, AlertCircle } from "lucide-react"
+import { Music, User, Key, Bell, Shield, Check } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { t, lang } = useI18n()
+  const { t } = useI18n()
   const [activeTab, setActiveTab] = useState('profile')
   const [saved, setSaved] = useState(false)
   const [userRole, setUserRole] = useState<string>('USER')
@@ -19,8 +19,10 @@ export default function SettingsPage() {
       if (name === 'session-token') {
         try {
           const payload = JSON.parse(atob(value))
-          setUserRole(payload.role || 'USER')
-        } catch (e) {
+          startTransition(() => {
+            setUserRole(payload.role || 'USER')
+          })
+        } catch {
           // ignore
         }
         break

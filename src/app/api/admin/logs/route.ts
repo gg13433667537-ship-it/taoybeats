@@ -1,18 +1,36 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { User, UserRole } from "@/lib/types"
 
 declare global {
-  var users: Map<string, any> | undefined
-  var songs: Map<string, any> | undefined
-  var adminLogs: Map<string, any> | undefined
+  var users: Map<string, User> | undefined
+  var songs: Map<string, unknown> | undefined
+  var adminLogs: Map<string, unknown> | undefined
+}
+
+interface SessionUser {
+  id: string
+  email: string
+  role: UserRole
+}
+
+interface AdminLog {
+  id: string
+  adminId: string
+  adminEmail: string
+  action: string
+  targetId?: string
+  targetType?: string
+  details?: Record<string, unknown>
+  createdAt: string
 }
 
 if (!global.users) global.users = new Map()
 if (!global.songs) global.songs = new Map()
 if (!global.adminLogs) global.adminLogs = new Map()
 
-const adminLogs = global.adminLogs
+const adminLogs = global.adminLogs as Map<string, AdminLog>
 
-function getSessionUser(request: NextRequest): any | null {
+function getSessionUser(request: NextRequest): SessionUser | null {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) return null
 
@@ -28,7 +46,7 @@ function getSessionUser(request: NextRequest): any | null {
   }
 }
 
-function isAdmin(user: any): boolean {
+function isAdmin(user: SessionUser | null): boolean {
   return user?.role === 'ADMIN'
 }
 
@@ -45,7 +63,7 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '50')
   const offset = (page - 1) * limit
 
-  let allLogs = Array.from(adminLogs.values())
+  const allLogs = Array.from(adminLogs.values())
 
   // Sort by createdAt desc
   allLogs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())

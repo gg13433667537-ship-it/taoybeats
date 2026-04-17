@@ -4,6 +4,9 @@
 // This is a minimal stub that allows TypeScript to compile
 // Replace with actual generated Prisma Client when network is available
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyRecord = Record<string, any>
+
 export const PrismaClient = class {
   constructor() {
     console.warn('Using Prisma stub - run npx prisma generate for actual client')
@@ -11,41 +14,41 @@ export const PrismaClient = class {
   user = {
     findUnique: async () => null,
     findMany: async () => [],
-    create: async (data: any) => data,
-    update: async (data: any) => data,
+    create: async (data: AnyRecord) => data,
+    update: async (data: AnyRecord) => data,
     delete: async () => null,
   }
   song = {
     findUnique: async () => null,
     findMany: async () => [],
-    create: async (data: any) => data,
-    update: async (data: any) => data,
+    create: async (data: AnyRecord) => data,
+    update: async (data: AnyRecord) => data,
     delete: async () => null,
   }
   apiConfig = {
     findUnique: async () => null,
     findMany: async () => [],
-    create: async (data: any) => data,
-    update: async (data: any) => data,
+    create: async (data: AnyRecord) => data,
+    update: async (data: AnyRecord) => data,
     delete: async () => null,
   }
   subscription = {
     findUnique: async () => null,
     findMany: async () => [],
-    create: async (data: any) => data,
-    update: async (data: any) => data,
+    create: async (data: AnyRecord) => data,
+    update: async (data: AnyRecord) => data,
     delete: async () => null,
   }
   account = {
     findUnique: async () => null,
     findMany: async () => [],
-    create: async (data: any) => data,
+    create: async (data: AnyRecord) => data,
     delete: async () => null,
   }
   session = {
     findUnique: async () => null,
     findMany: async () => [],
-    create: async (data: any) => data,
+    create: async (data: AnyRecord) => data,
     delete: async () => null,
   }
   $connect = async () => {}
