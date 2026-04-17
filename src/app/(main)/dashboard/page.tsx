@@ -3,13 +3,33 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap } from "lucide-react"
+import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap, Shield } from "lucide-react"
+import { useI18n } from "@/lib/i18n"
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { t, lang } = useI18n()
   const [songs, setSongs] = useState<any[]>([])
   const [usage, setUsage] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [userRole, setUserRole] = useState<string>('USER')
+  const [userName, setUserName] = useState<string>('')
+
+  // Get user info from session cookie
+  useEffect(() => {
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=')
+      if (name === 'session-token') {
+        try {
+          const payload = JSON.parse(atob(value))
+          setUserRole(payload.role || 'USER')
+          setUserName(payload.email?.split('@')[0] || 'User')
+        } catch (e) {}
+        break
+      }
+    }
+  }, [])
 
   // Fetch songs and usage
   useEffect(() => {
@@ -78,15 +98,24 @@ export default function DashboardPage() {
             <span className="text-xl font-bold text-foreground">TaoyBeats</span>
           </button>
           <div className="flex items-center gap-4">
+            {userRole === 'ADMIN' && (
+              <button
+                onClick={() => router.push('/admin')}
+                className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <Shield className="w-4 h-4" />
+                {lang === 'zh' ? '管理' : 'Admin'}
+              </button>
+            )}
             <button
               onClick={() => router.push('/generate')}
               className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Create
+              {t('createSong')}
             </button>
             <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-sm font-medium">
-              U
+              {userName.charAt(0).toUpperCase()}
             </div>
           </div>
         </div>
@@ -97,8 +126,8 @@ export default function DashboardPage() {
         <div className="max-w-5xl mx-auto">
           {/* Welcome */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-foreground mb-2">Your Music</h1>
-            <p className="text-text-secondary">Create, manage, and share your AI-generated songs</p>
+            <h1 className="text-3xl font-bold text-foreground mb-2">{t('yourMusic')}</h1>
+            <p className="text-text-secondary">{t('manageShare')}</p>
           </div>
 
           {/* Usage Stats */}
@@ -107,7 +136,7 @@ export default function DashboardPage() {
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">
                   <Zap className="w-4 h-4 text-accent" />
-                  <span className="text-sm text-text-secondary">Daily</span>
+                  <span className="text-sm text-text-secondary">{t('daily')}</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">
                   {usage.daily?.remaining ?? '—'}
@@ -123,7 +152,7 @@ export default function DashboardPage() {
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">
                   <Clock className="w-4 h-4 text-accent" />
-                  <span className="text-sm text-text-secondary">Monthly</span>
+                  <span className="text-sm text-text-secondary">{t('monthlyUsage')}</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">
                   {usage.monthly?.remaining === -1 ? '∞' : (usage.monthly?.remaining ?? '—')}
@@ -143,13 +172,13 @@ export default function DashboardPage() {
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">
                   <Music className="w-4 h-4 text-accent" />
-                  <span className="text-sm text-text-secondary">Total Songs</span>
+                  <span className="text-sm text-text-secondary">{t('totalSongs')}</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">{songs.length}</p>
               </div>
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm text-text-secondary">Tier</span>
+                  <span className="text-sm text-text-secondary">{t('tier')}</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">{usage.tier || 'FREE'}</p>
               </div>
@@ -159,12 +188,12 @@ export default function DashboardPage() {
           {/* Songs List */}
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-foreground">Recent Songs</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t('recentSongs')}</h2>
               <Link
                 href="/generate"
                 className="text-sm text-accent hover:underline"
               >
-                Create new song →
+                {t('createNewSong')} →
               </Link>
             </div>
 
@@ -175,14 +204,14 @@ export default function DashboardPage() {
             ) : songs.length === 0 ? (
               <div className="p-12 rounded-2xl bg-surface border border-border text-center">
                 <Music className="w-12 h-12 text-text-muted mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-foreground mb-2">No songs yet</h3>
-                <p className="text-text-secondary mb-6">Create your first AI-generated song</p>
+                <h3 className="text-lg font-medium text-foreground mb-2">{t('noSongsYet')}</h3>
+                <p className="text-text-secondary mb-6">{t('createFirstSong')}</p>
                 <Link
                   href="/generate"
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors"
                 >
                   <Plus className="w-4 h-4" />
-                  Create Song
+                  {t('createSong')}
                 </Link>
               </div>
             ) : (
@@ -241,8 +270,8 @@ export default function DashboardPage() {
                         <h3 className="font-medium text-foreground truncate">{song.title}</h3>
                         <div className="flex items-center gap-3 text-sm text-text-secondary">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(song.status)}`}>
-                            {song.status === 'COMPLETED' ? 'Ready' :
-                             song.status === 'GENERATING' ? `${song.progress ?? 0}%` : 'Failed'}
+                            {song.status === 'COMPLETED' ? t('ready') :
+                             song.status === 'GENERATING' ? `${song.progress ?? 0}%` : t('failed')}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />

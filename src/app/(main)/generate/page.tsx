@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Music, Loader2, Play, Pause, Download, Share2, Copy, Check, AlertCircle, RefreshCw } from "lucide-react"
+import { useI18n } from "@/lib/i18n"
 
 // Genre options
 const GENRES = [
@@ -24,6 +25,7 @@ type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | '
 
 export default function GeneratePage() {
   const router = useRouter()
+  const { t, lang } = useI18n()
 
   // Form state
   const [apiUrl, setApiUrl] = useState("https://api.minimax.chat")
@@ -215,10 +217,10 @@ export default function GeneratePage() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold text-foreground mb-2">
-                Create New Song
+                {t('createNewSongPage')}
               </h1>
               <p className="text-text-secondary">
-                Fill in the details below to generate your AI music
+                {t('fillDetails')}
               </p>
             </div>
             {generationStage === 'completed' && (
@@ -227,7 +229,7 @@ export default function GeneratePage() {
                 className="px-4 py-2 rounded-lg border border-border hover:border-accent text-foreground text-sm font-medium transition-colors flex items-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                Create Another
+                {t('createSong')}
               </button>
             )}
           </div>
@@ -244,11 +246,11 @@ export default function GeneratePage() {
             <div className="space-y-6">
               {/* API Configuration */}
               <section className="p-6 rounded-2xl bg-surface border border-border">
-                <h2 className="text-lg font-semibold text-foreground mb-4">API Configuration</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">{t('apiConfig')}</h2>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      Provider
+                      {t('provider')}
                     </label>
                     <select
                       value={provider}
@@ -264,7 +266,7 @@ export default function GeneratePage() {
 
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      API URL <span className="text-error">*</span>
+                      {t('apiUrl')} <span className="text-error">*</span>
                     </label>
                     <input
                       type="url"
@@ -277,7 +279,7 @@ export default function GeneratePage() {
 
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      API Key <span className="text-error">*</span>
+                      {t('apiKey')} <span className="text-error">*</span>
                     </label>
                     <input
                       type="password"
@@ -292,11 +294,11 @@ export default function GeneratePage() {
 
               {/* Song Details */}
               <section className="p-6 rounded-2xl bg-surface border border-border">
-                <h2 className="text-lg font-semibold text-foreground mb-4">Song Details</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">{t('songDetails')}</h2>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      Song Title <span className="text-error">*</span>
+                      {t('songTitle')} <span className="text-error">*</span>
                     </label>
                     <input
                       type="text"
@@ -310,7 +312,7 @@ export default function GeneratePage() {
 
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      Lyrics <span className="text-error">*</span>
+                      {t('lyrics')} <span className="text-error">*</span>
                     </label>
                     <textarea
                       value={lyrics}
@@ -326,7 +328,7 @@ export default function GeneratePage() {
                   {/* Genre */}
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      Genre <span className="text-error">*</span>
+                      {t('genre')} <span className="text-error">*</span>
                     </label>
                     <div className="flex flex-wrap gap-2">
                       {GENRES.map(genre => (
@@ -348,7 +350,7 @@ export default function GeneratePage() {
                   {/* Mood */}
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      Mood <span className="text-error">*</span>
+                      {t('mood')} <span className="text-error">*</span>
                     </label>
                     <select
                       value={mood}
@@ -365,7 +367,7 @@ export default function GeneratePage() {
                   {/* Instruments */}
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      Instruments
+                      {t('instruments')}
                     </label>
                     <div className="flex flex-wrap gap-2">
                       {INSTRUMENTS.map(instrument => (
@@ -388,7 +390,7 @@ export default function GeneratePage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-text-secondary mb-2">
-                        Reference Singer
+                        {t('referenceSinger')}
                       </label>
                       <input
                         type="text"
@@ -400,7 +402,7 @@ export default function GeneratePage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-text-secondary mb-2">
-                        Reference Song
+                        {t('referenceSong')}
                       </label>
                       <input
                         type="text"
@@ -415,12 +417,12 @@ export default function GeneratePage() {
                   {/* User Notes */}
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      Your Notes <span className="text-text-muted">(private)</span>
+                      {t('yourNotesPrivate')}
                     </label>
                     <textarea
                       value={userNotes}
                       onChange={(e) => setUserNotes(e.target.value)}
-                      placeholder="What is this song about? Any specific feelings or ideas you want to convey?"
+                      placeholder={t('notesPlaceholder')}
                       rows={3}
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent resize-none"
                     />
@@ -437,12 +439,12 @@ export default function GeneratePage() {
                 {generationStage !== 'idle' && generationStage !== 'completed' && generationStage !== 'failed' ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Generating...
+                    {t('generatingEllipsis')}
                   </>
                 ) : (
                   <>
                     <Music className="w-5 h-5" />
-                    Generate Song
+                    {t('generateSong')}
                   </>
                 )}
               </button>
@@ -453,7 +455,7 @@ export default function GeneratePage() {
                   className="w-full py-4 rounded-xl border border-error text-error font-semibold transition-colors flex items-center justify-center gap-2"
                 >
                   <RefreshCw className="w-5 h-5" />
-                  Try Again
+                  {t('pleaseTryAgain')}
                 </button>
               )}
             </div>
@@ -463,7 +465,7 @@ export default function GeneratePage() {
               {/* Progress */}
               {generationStage !== 'idle' && (
                 <section className="p-6 rounded-2xl bg-surface border border-border">
-                  <h2 className="text-lg font-semibold text-foreground mb-4">Generation Progress</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-4">{t('generationProgress')}</h2>
 
                   {/* Progress Bar */}
                   <div className="mb-4">
@@ -493,18 +495,18 @@ export default function GeneratePage() {
                     )}
                     <div>
                       <p className="font-medium text-foreground capitalize">
-                        {generationStage === 'completed' ? 'Generation Complete!' :
-                         generationStage === 'failed' ? 'Generation Failed' :
-                         generationStage === 'initializing' ? 'Initializing...' :
-                         generationStage === 'generating' ? 'Creating Music...' :
-                         'Finalizing...'}
+                        {generationStage === 'completed' ? t('complete') :
+                         generationStage === 'failed' ? t('failed') :
+                         generationStage === 'initializing' ? t('initializing') :
+                         generationStage === 'generating' ? t('creatingMusic') :
+                         t('almostDone')}
                       </p>
                       <p className="text-sm text-text-secondary">
-                        {generationStage === 'completed' ? 'Your song is ready!' :
-                         generationStage === 'failed' ? 'Please try again' :
-                         generationStage === 'initializing' ? 'Setting up...' :
+                        {generationStage === 'completed' ? t('yourSongReady') :
+                         generationStage === 'failed' ? t('pleaseTryAgain') :
+                         generationStage === 'initializing' ? t('initializing') :
                          generationStage === 'generating' ? `${progress}% complete` :
-                         'Almost done...'}
+                         t('almostDone')}
                       </p>
                     </div>
                   </div>
@@ -570,23 +572,23 @@ export default function GeneratePage() {
 
               {/* Tips */}
               <section className="p-6 rounded-2xl bg-surface border border-border">
-                <h2 className="text-lg font-semibold text-foreground mb-4">Tips for Better Results</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">{t('tipsBetterResults')}</h2>
                 <ul className="space-y-2 text-sm text-text-secondary">
                   <li className="flex items-start gap-2">
                     <span className="text-accent">•</span>
-                    Use specific and descriptive lyrics for better AI understanding
+                    {t('tip1')}
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-accent">•</span>
-                    Matching mood and genre creates more coherent songs
+                    {t('tip2')}
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-accent">•</span>
-                    Adding reference artists helps shape the style
+                    {t('tip3')}
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-accent">•</span>
-                    Generation usually takes 2-5 minutes depending on complexity
+                    {t('tip4')}
                   </li>
                 </ul>
               </section>

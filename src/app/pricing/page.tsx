@@ -3,52 +3,54 @@
 import { useState } from "react"
 import Link from "next/link"
 import { Music, Check, Zap } from "lucide-react"
-
-const PLANS = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    description: "Perfect for trying out TaoyBeats",
-    features: [
-      "3 songs per day",
-      "10 songs per month",
-      "Basic genres and moods",
-      "Share songs",
-      "Download MP3",
-    ],
-    notIncluded: [
-      "Priority queue",
-      "Advanced customization",
-    ],
-    cta: "Get Started",
-    popular: false,
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$9.99",
-    period: "/month",
-    description: "For serious music creators",
-    features: [
-      "50 songs per day",
-      "Unlimited songs per month",
-      "All genres and moods",
-      "Priority queue",
-      "Advanced customization",
-      "Share songs",
-      "Download MP3",
-      "Early access to new features",
-    ],
-    notIncluded: [],
-    cta: "Upgrade to Pro",
-    popular: true,
-  },
-]
+import { useI18n } from "@/lib/i18n"
 
 export default function PricingPage() {
+  const { t, lang } = useI18n()
   const [annual, setAnnual] = useState(false)
+
+  const PLANS = [
+    {
+      id: "free",
+      name: t('free'),
+      price: "$0",
+      period: t('forever'),
+      description: t('perfectTrying'),
+      features: [
+        "3 songs per day",
+        "10 songs per month",
+        "Basic genres and moods",
+        "Share songs",
+        "Download MP3",
+      ],
+      notIncluded: [
+        "Priority queue",
+        "Advanced customization",
+      ],
+      cta: t('pricingGetStarted'),
+      popular: false,
+    },
+    {
+      id: "pro",
+      name: t('pro'),
+      price: "$9.99",
+      period: t('perMonth'),
+      description: t('seriousCreators'),
+      features: [
+        "50 songs per day",
+        "Unlimited songs per month",
+        "All genres and moods",
+        "Priority queue",
+        "Advanced customization",
+        "Share songs",
+        "Download MP3",
+        "Early access to new features",
+      ],
+      notIncluded: [],
+      cta: t('upgradeToPro'),
+      popular: true,
+    },
+  ]
 
   return (
     <div className="min-h-screen bg-background">
@@ -79,17 +81,17 @@ export default function PricingPage() {
       <main className="container mx-auto px-4 py-16">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-foreground mb-4">
-            Simple, transparent pricing
+            {t('simplePricing')}
           </h1>
           <p className="text-lg text-text-secondary max-w-2xl mx-auto">
-            Start for free. Upgrade when you need more.
+            {t('startFreeUpgrade')}
           </p>
         </div>
 
         {/* Billing Toggle */}
         <div className="flex items-center justify-center gap-4 mb-12">
           <span className={`text-sm ${!annual ? 'text-foreground' : 'text-text-secondary'}`}>
-            Monthly
+            {t('monthly')}
           </span>
           <button
             onClick={() => setAnnual(!annual)}
@@ -104,7 +106,7 @@ export default function PricingPage() {
             />
           </button>
           <span className={`text-sm ${annual ? 'text-foreground' : 'text-text-secondary'}`}>
-            Annual <span className="text-success text-xs">Save 20%</span>
+            {t('annual')} <span className="text-success text-xs">{t('save20')}</span>
           </span>
         </div>
 
@@ -122,7 +124,7 @@ export default function PricingPage() {
               {plan.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-accent text-white text-sm font-medium flex items-center gap-1">
                   <Zap className="w-3 h-3" />
-                  Most Popular
+                  {t('mostPopular')}
                 </div>
               )}
 
@@ -161,7 +163,7 @@ export default function PricingPage() {
                     : 'border border-border hover:border-accent text-foreground'
                 }`}
               >
-                {plan.cta}
+                {plan.id === 'free' ? t('pricingGetStarted') : t('upgradeToPro')}
               </Link>
             </div>
           ))}
@@ -170,25 +172,25 @@ export default function PricingPage() {
         {/* FAQ */}
         <div className="mt-16 max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-foreground text-center mb-8">
-            Frequently Asked Questions
+            {t('faqTitle')}
           </h2>
           <div className="space-y-4">
             {[
               {
-                q: "What counts as a song?",
-                a: "Each generation request counts as one song, regardless of the length or complexity.",
+                q: t('faq1Q'),
+                a: t('faq1A'),
               },
               {
-                q: "Can I unused songs roll over?",
-                a: "No, daily and monthly limits reset at the start of each day/month.",
+                q: t('faq2Q'),
+                a: t('faq2A'),
               },
               {
-                q: "Can I cancel anytime?",
-                a: "Yes, you can cancel your subscription at any time. You'll keep Pro access until the end of your billing period.",
+                q: t('faq3Q'),
+                a: t('faq3A'),
               },
               {
-                q: "What payment methods do you accept?",
-                a: "We accept all major credit cards through Stripe.",
+                q: t('faq4Q'),
+                a: t('faq4A'),
               },
             ].map((item, i) => (
               <div key={i} className="p-4 rounded-xl bg-surface border border-border">

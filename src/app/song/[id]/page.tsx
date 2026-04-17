@@ -4,8 +4,10 @@ import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { Music, Play, Pause, Download, Share2, Copy, Check, Loader2 } from "lucide-react"
+import { useI18n } from "@/lib/i18n"
 
 export default function SongSharePage() {
+  const { t, lang } = useI18n()
   const params = useParams()
   const songId = params.id as string
 
@@ -59,7 +61,7 @@ export default function SongSharePage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 text-accent animate-spin" />
-          <p className="text-text-secondary">Loading...</p>
+          <p className="text-text-secondary">{t('generatingEllipsis')}</p>
         </div>
       </div>
     )
@@ -69,13 +71,13 @@ export default function SongSharePage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Song Not Found</h1>
-          <p className="text-text-secondary mb-6">This song may have been removed or the link is invalid.</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">{t('songNotFound')}</h1>
+          <p className="text-text-secondary mb-6">{t('songRemovedOrInvalid')}</p>
           <Link
             href="/"
             className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors"
           >
-            Go to TaoyBeats
+            {t('goToTaoyBeats')}
           </Link>
         </div>
       </div>
@@ -97,7 +99,7 @@ export default function SongSharePage() {
             href="/register"
             className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
           >
-            Create Your Own
+            {t('createYourOwn')}
           </Link>
         </div>
       </header>
@@ -184,7 +186,7 @@ export default function SongSharePage() {
             {/* Footer */}
             <div className="mt-8 pt-6 border-t border-border text-center">
               <p className="text-text-secondary text-sm">
-                Created with{" "}
+                {t('createdWith')}{" "}
                 <Link href="/" className="text-accent hover:underline">
                   TaoyBeats
                 </Link>

@@ -3,18 +3,20 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Music, User, Key, Bell, Shield, Loader2, Check, AlertCircle } from "lucide-react"
-
-const TABS = [
-  { id: 'profile', label: 'Profile', icon: User },
-  { id: 'api', label: 'API Configuration', icon: Key },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'security', label: 'Security', icon: Shield },
-]
+import { useI18n } from "@/lib/i18n"
 
 export default function SettingsPage() {
   const router = useRouter()
+  const { t, lang } = useI18n()
   const [activeTab, setActiveTab] = useState('profile')
   const [saved, setSaved] = useState(false)
+
+  const TABS = [
+    { id: 'profile', label: t('profile'), icon: User },
+    { id: 'api', label: t('apiConfiguration'), icon: Key },
+    { id: 'notifications', label: t('notifications'), icon: Bell },
+    { id: 'security', label: t('security'), icon: Shield },
+  ]
 
   // Profile state
   const [name, setName] = useState('Demo User')
@@ -56,7 +58,7 @@ export default function SettingsPage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-foreground mb-8">Settings</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-8">{t('settingsTitle')}</h1>
 
           <div className="flex gap-8">
             {/* Sidebar */}
@@ -83,7 +85,7 @@ export default function SettingsPage() {
             <div className="flex-1">
               {activeTab === 'profile' && (
                 <section className="p-6 rounded-2xl bg-surface border border-border">
-                  <h2 className="text-lg font-semibold text-foreground mb-6">Profile Settings</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-6">{t('profileSettings')}</h2>
 
                   <div className="space-y-6">
                     {/* Avatar */}
@@ -93,7 +95,7 @@ export default function SettingsPage() {
                       </div>
                       <div>
                         <button className="px-4 py-2 rounded-lg border border-border text-foreground text-sm font-medium hover:bg-background transition-colors">
-                          Change Avatar
+                          {t('changeAvatar')}
                         </button>
                       </div>
                     </div>
@@ -125,7 +127,7 @@ export default function SettingsPage() {
                       className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors flex items-center gap-2"
                     >
                       {saved ? <Check className="w-4 h-4" /> : null}
-                      {saved ? 'Saved!' : 'Save Changes'}
+                      {saved ? t('saved') : t('saveChanges')}
                     </button>
                   </div>
                 </section>
@@ -133,9 +135,9 @@ export default function SettingsPage() {
 
               {activeTab === 'api' && (
                 <section className="p-6 rounded-2xl bg-surface border border-border">
-                  <h2 className="text-lg font-semibold text-foreground mb-6">API Configuration</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-6">{t('apiConfiguration')}</h2>
                   <p className="text-text-secondary mb-6">
-                    Configure your AI music generation API. You can use Suno, MiniMax, Udio, or any compatible API.
+                    {t('apiConfigDesc')}
                   </p>
 
                   <div className="space-y-6">
@@ -195,7 +197,7 @@ export default function SettingsPage() {
                       className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors flex items-center gap-2"
                     >
                       {saved ? <Check className="w-4 h-4" /> : null}
-                      {saved ? 'Saved!' : 'Save Configuration'}
+                      {saved ? t('saved') : t('saveChanges')}
                     </button>
                   </div>
                 </section>
@@ -203,13 +205,13 @@ export default function SettingsPage() {
 
               {activeTab === 'notifications' && (
                 <section className="p-6 rounded-2xl bg-surface border border-border">
-                  <h2 className="text-lg font-semibold text-foreground mb-6">Notification Preferences</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-6">{t('notifications')}</h2>
 
                   <div className="space-y-4">
                     {[
-                      { label: 'Generation complete', description: 'Get notified when your song is ready' },
-                      { label: 'Generation failed', description: 'Get notified if generation fails' },
-                      { label: 'Weekly summary', description: 'Receive a weekly summary of your creations' },
+                      { label: t('generationComplete'), description: 'Get notified when your song is ready' },
+                      { label: t('generationFailed'), description: 'Get notified if generation fails' },
+                      { label: t('weeklySummary'), description: 'Receive a weekly summary of your creations' },
                     ].map((item, i) => (
                       <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-background border border-border">
                         <div>
@@ -228,39 +230,39 @@ export default function SettingsPage() {
 
               {activeTab === 'security' && (
                 <section className="p-6 rounded-2xl bg-surface border border-border">
-                  <h2 className="text-lg font-semibold text-foreground mb-6">Security Settings</h2>
+                  <h2 className="text-lg font-semibold text-foreground mb-6">{t('securitySettings')}</h2>
 
                   <div className="space-y-6">
                     <div>
-                      <h3 className="font-medium text-foreground mb-4">Change Password</h3>
+                      <h3 className="font-medium text-foreground mb-4">{t('changePassword')}</h3>
                       <div className="space-y-4">
                         <input
                           type="password"
-                          placeholder="Current password"
+                          placeholder={t('currentPassword')}
                           className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                         />
                         <input
                           type="password"
-                          placeholder="New password"
+                          placeholder={t('newPassword')}
                           className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                         />
                         <input
                           type="password"
-                          placeholder="Confirm new password"
+                          placeholder={t('confirmPassword')}
                           className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                         />
                       </div>
                     </div>
 
                     <button className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors">
-                      Update Password
+                      {t('updatePassword')}
                     </button>
 
                     <div className="pt-6 border-t border-border">
-                      <h3 className="font-medium text-foreground mb-4">Sessions</h3>
-                      <p className="text-sm text-text-secondary mb-4">Manage your active sessions across devices.</p>
+                      <h3 className="font-medium text-foreground mb-4">{t('sessions')}</h3>
+                      <p className="text-sm text-text-secondary mb-4">{t('manageSessions')}</p>
                       <button className="px-4 py-2 rounded-lg border border-error text-error text-sm font-medium hover:bg-error/10 transition-colors">
-                        Sign Out All Devices
+                        {t('signOutAllDevices')}
                       </button>
                     </div>
                   </div>
