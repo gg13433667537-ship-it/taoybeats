@@ -100,6 +100,13 @@ export async function POST(request: NextRequest) {
       // Store by both email and id for easy lookup
       users.set(email, user)
       users.set(user.id, user)
+    } else {
+      // If this is the only user, make them ADMIN
+      if (users.size === 1 && user.role !== 'ADMIN') {
+        user.role = 'ADMIN'
+        users.set(email, user)
+        if (user.id) users.set(user.id, user)
+      }
     }
 
     // Create session token

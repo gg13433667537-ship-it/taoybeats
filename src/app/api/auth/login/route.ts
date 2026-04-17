@@ -58,6 +58,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // If this is the only user, make them ADMIN (first user rule)
+    if (users.size === 1 && user.role !== 'ADMIN') {
+      user.role = 'ADMIN'
+      users.set(email, user)
+      if (user.id) users.set(user.id, user)
+    }
+
     // Create session token
     const sessionToken = createSessionToken(user)
 
