@@ -420,6 +420,8 @@ export default function GeneratePage() {
                   <div className="flex items-center gap-3 p-4 rounded-xl bg-surface-elevated border border-border">
                     <button
                       type="button"
+                      role="switch"
+                      aria-checked={isInstrumental}
                       onClick={() => setIsInstrumental(!isInstrumental)}
                       className={`relative w-12 h-6 rounded-full transition-colors ${
                         isInstrumental ? 'bg-accent' : 'bg-border'
