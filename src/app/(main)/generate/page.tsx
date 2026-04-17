@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Music, Loader2, Play, Pause, Download, Share2, Check, AlertCircle } from "lucide-react"
+import { Music, Loader2, Play, Pause, Download, Share2, Copy, Check, AlertCircle, RefreshCw } from "lucide-react"
 
 // Genre options
 const GENRES = [
@@ -26,7 +26,7 @@ export default function GeneratePage() {
   const router = useRouter()
 
   // Form state
-  const [apiUrl, setApiUrl] = useState("")
+  const [apiUrl, setApiUrl] = useState("https://api.minimax.chat")
   const [apiKey, setApiKey] = useState("")
   const [provider, setProvider] = useState("minimax")
   const [title, setTitle] = useState("")
@@ -44,6 +44,7 @@ export default function GeneratePage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // Handle genre toggle
   const toggleGenre = (genre: string) => {
@@ -108,11 +109,7 @@ export default function GeneratePage() {
             setGenerationStage('initializing')
             break
           case 'generating_melody':
-            setGenerationStage('generating')
-            break
           case 'generating_lyrics':
-            setGenerationStage('generating')
-            break
           case 'rendering_audio':
             setGenerationStage('generating')
             break
@@ -143,7 +140,6 @@ export default function GeneratePage() {
   // Handle download
   const handleDownload = () => {
     if (audioUrl) {
-      // In production, trigger actual download
       window.open(audioUrl, '_blank')
     }
   }
@@ -159,8 +155,26 @@ export default function GeneratePage() {
       })
     } else {
       await navigator.clipboard.writeText(shareUrl)
-      alert('Link copied to clipboard!')
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
+  }
+
+  // Handle reset
+  const handleReset = () => {
+    setTitle("")
+    setLyrics("")
+    setSelectedGenres([])
+    setMood("")
+    setSelectedInstruments([])
+    setReferenceSinger("")
+    setReferenceSong("")
+    setUserNotes("")
+    setGenerationStage('idle')
+    setProgress(0)
+    setAudioUrl(null)
+    setError(null)
+    router.replace('/generate')
   }
 
   return (
@@ -194,8 +208,25 @@ export default function GeneratePage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Create New Song</h1>
-          <p className="text-text-secondary mb-8">Fill in the details below to generate your AI music</p>
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground mb-2">
+                Create New Song
+              </h1>
+              <p className="text-text-secondary">
+                Fill in the details below to generate your AI music
+              </p>
+            </div>
+            {generationStage === 'completed' && (
+              <button
+                onClick={handleReset}
+                className="px-4 py-2 rounded-lg border border-border hover:border-accent text-foreground text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Create Another
+              </button>
+            )}
+          </div>
 
           {error && (
             <div className="mb-6 p-4 rounded-xl bg-error/10 border border-error/20 text-error flex items-center gap-3">
@@ -220,8 +251,8 @@ export default function GeneratePage() {
                       onChange={(e) => setProvider(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground focus:outline-none focus:border-accent"
                     >
-                      <option value="suno">Suno</option>
                       <option value="minimax">MiniMax</option>
+                      <option value="suno">Suno</option>
                       <option value="udio">Udio</option>
                       <option value="custom">Custom</option>
                     </select>
@@ -235,7 +266,7 @@ export default function GeneratePage() {
                       type="url"
                       value={apiUrl}
                       onChange={(e) => setApiUrl(e.target.value)}
-                      placeholder="https://api.example.com"
+                      placeholder="https://api.minimax.chat"
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                     />
                   </div>
@@ -411,6 +442,16 @@ export default function GeneratePage() {
                   </>
                 )}
               </button>
+
+              {generationStage === 'failed' && (
+                <button
+                  onClick={handleGenerate}
+                  className="w-full py-4 rounded-xl border border-error text-error font-semibold transition-colors flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  Try Again
+                </button>
+              )}
             </div>
 
             {/* Right Column - Preview & Progress */}
@@ -434,15 +475,15 @@ export default function GeneratePage() {
                   {/* Stage */}
                   <div className="flex items-center gap-3">
                     {generationStage === 'completed' ? (
-                      <div className="w-8 h-8 rounded-full bg-success flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-success flex items-center justify-center">
                         <Check className="w-5 h-5 text-white" />
                       </div>
                     ) : generationStage === 'failed' ? (
-                      <div className="w-8 h-8 rounded-full bg-error flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-error flex items-center justify-center">
                         <AlertCircle className="w-5 h-5 text-white" />
                       </div>
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center">
                         <Loader2 className="w-5 h-5 text-white animate-spin" />
                       </div>
                     )}
@@ -450,14 +491,16 @@ export default function GeneratePage() {
                       <p className="font-medium text-foreground capitalize">
                         {generationStage === 'completed' ? 'Generation Complete!' :
                          generationStage === 'failed' ? 'Generation Failed' :
-                         generationStage.replace('_', ' ')}
+                         generationStage === 'initializing' ? 'Initializing...' :
+                         generationStage === 'generating' ? 'Creating Music...' :
+                         'Finalizing...'}
                       </p>
                       <p className="text-sm text-text-secondary">
                         {generationStage === 'completed' ? 'Your song is ready!' :
                          generationStage === 'failed' ? 'Please try again' :
-                         generationStage === 'initializing' ? 'Preparing...' :
-                         generationStage === 'generating' ? 'Creating music...' :
-                         'Finalizing...'}
+                         generationStage === 'initializing' ? 'Setting up...' :
+                         generationStage === 'generating' ? `${progress}% complete` :
+                         'Almost done...'}
                       </p>
                     </div>
                   </div>
@@ -470,15 +513,15 @@ export default function GeneratePage() {
                   <h2 className="text-lg font-semibold text-foreground mb-4">{title}</h2>
 
                   {/* Waveform placeholder */}
-                  <div className="h-24 rounded-xl bg-background mb-4 flex items-center justify-center">
-                    <div className="flex items-end gap-1 h-16">
-                      {Array.from({ length: 40 }).map((_, i) => (
+                  <div className="h-24 rounded-xl bg-background mb-4 flex items-center justify-center overflow-hidden">
+                    <div className="flex items-end gap-1 h-16 px-4">
+                      {Array.from({ length: 50 }).map((_, i) => (
                         <div
                           key={i}
-                          className="w-1 bg-accent rounded-full"
+                          className="w-1 bg-accent rounded-full transition-all duration-300"
                           style={{
-                            height: `${Math.random() * 100}%`,
-                            opacity: i < 20 ? 1 : 0.3
+                            height: `${Math.sin(i * 0.3) * 30 + Math.random() * 50 + 20}%`,
+                            opacity: isPlaying ? (i < 25 ? 1 : 0.4) : 0.6
                           }}
                         />
                       ))}
@@ -486,7 +529,7 @@ export default function GeneratePage() {
                   </div>
 
                   {/* Controls */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 mb-4">
                     <button
                       onClick={() => setIsPlaying(!isPlaying)}
                       className="w-12 h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors"
@@ -494,15 +537,15 @@ export default function GeneratePage() {
                       {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
                     </button>
                     <div className="flex-1">
-                      <div className="h-1 rounded-full bg-background">
+                      <div className="h-1 rounded-full bg-border">
                         <div className="h-full w-1/3 bg-accent rounded-full" />
                       </div>
-                      <p className="mt-1 text-xs text-text-muted">0:45 / 3:12</p>
+                      <p className="mt-1 text-xs text-text-muted">0:00 / 3:24</p>
                     </div>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-3 mt-4">
+                  <div className="flex gap-3">
                     <button
                       onClick={handleDownload}
                       className="flex-1 py-3 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
@@ -514,8 +557,8 @@ export default function GeneratePage() {
                       onClick={handleShare}
                       className="flex-1 py-3 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
                     >
-                      <Share2 className="w-4 h-4" />
-                      Share
+                      {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                      {copied ? 'Copied!' : 'Share'}
                     </button>
                   </div>
                 </section>
