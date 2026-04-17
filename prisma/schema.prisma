@@ -17,6 +17,13 @@ model User {
   name          String?
   image         String?
   password      String?
+  role          Role      @default(USER)
+  isActive      Boolean   @default(true)
+  tier          String    @default("FREE")
+  dailyUsage    Int       @default(0)
+  monthlyUsage  Int       @default(0)
+  dailyResetAt  String?
+  monthlyResetAt String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -25,6 +32,23 @@ model User {
   songs    Song[]
   apiConfig ApiConfig?
   subscription Subscription?
+}
+
+enum Role {
+  USER
+  PRO
+  ADMIN
+}
+
+model AdminLog {
+  id          String   @id @default(uuid())
+  adminId     String
+  adminEmail  String
+  action      String
+  targetId    String?
+  targetType  String?
+  details     Json?
+  createdAt   DateTime @default(now())
 }
 
 model Account {

@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 
-// In-memory user storage (replace with database)
-const users: Map<string, any> = new Map()
+// Shared global storage
+declare global {
+  var users: Map<string, any> | undefined
+  var songs: Map<string, any> | undefined
+  var adminLogs: Map<string, any> | undefined
+}
 
-// In-memory song storage
-const songs: Map<string, any> = new Map()
+if (!global.users) global.users = new Map()
+if (!global.songs) global.songs = new Map()
+if (!global.adminLogs) global.adminLogs = new Map()
+
+const users = global.users!
+const songs = global.songs!
 
 // Free tier limits
 const FREE_DAILY_LIMIT = 3

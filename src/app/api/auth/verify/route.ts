@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 
-// Demo users (replace with database in production)
-const users: Map<string, any> = new Map()
+// Shared global storage
+declare global {
+  var users: Map<string, any> | undefined
+  var songs: Map<string, any> | undefined
+  var adminLogs: Map<string, any> | undefined
+}
+
+if (!global.users) global.users = new Map()
+if (!global.songs) global.songs = new Map()
+if (!global.adminLogs) global.adminLogs = new Map()
+
+const users = global.users!
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,10 +82,14 @@ export async function POST(request: NextRequest) {
     // Get or create user
     let user = users.get(email)
     if (!user) {
+      // Check if this is the first user (make them ADMIN)
+      const isFirstUser = users.size === 0
       user = {
         id: crypto.randomUUID(),
         email,
         name: email.split('@')[0],
+        role: isFirstUser ? 'ADMIN' : 'USER',
+        isActive: true,
         tier: 'FREE',
         dailyUsage: 0,
         monthlyUsage: 0,
@@ -83,7 +97,9 @@ export async function POST(request: NextRequest) {
         monthlyResetAt: getMonthKey(),
         createdAt: new Date().toISOString(),
       }
+      // Store by both email and id for easy lookup
       users.set(email, user)
+      users.set(user.id, user)
     }
 
     // Create session token
@@ -110,6 +126,7 @@ function createSessionToken(user: any): string {
   const payload = {
     id: user.id,
     email: user.email,
+    role: user.role,
     exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
   }
   return Buffer.from(JSON.stringify(payload)).toString("base64")

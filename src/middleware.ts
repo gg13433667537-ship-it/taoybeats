@@ -4,6 +4,9 @@ import type { NextRequest } from "next/server"
 // Routes that require authentication
 const protectedRoutes = ["/dashboard", "/generate", "/settings"]
 
+// Routes that require admin role
+const adminRoutes = ["/admin"]
+
 // Routes that redirect to dashboard if authenticated
 const authRoutes = ["/login", "/register"]
 
@@ -16,6 +19,15 @@ export function middleware(request: NextRequest) {
 
   // Protected routes
   if (protectedRoutes.some((route) => pathname.startsWith(route))) {
+    if (!isAuthenticated) {
+      const loginUrl = new URL("/login", request.url)
+      loginUrl.searchParams.set("redirect", pathname)
+      return NextResponse.redirect(loginUrl)
+    }
+  }
+
+  // Admin routes - require authentication
+  if (adminRoutes.some((route) => pathname.startsWith(route))) {
     if (!isAuthenticated) {
       const loginUrl = new URL("/login", request.url)
       loginUrl.searchParams.set("redirect", pathname)
