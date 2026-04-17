@@ -1,17 +1,82 @@
 import { NextRequest, NextResponse } from "next/server"
-import { miniMaxProvider } from "@/lib/ai-providers"
 
-// In-memory store for demo (replace with database in production)
+// In-memory user storage (replace with database)
+const users: Map<string, any> = new Map()
+
+// In-memory song storage
 const songs: Map<string, any> = new Map()
 
+// Free tier limits
+const FREE_DAILY_LIMIT = 3
+const FREE_MONTHLY_LIMIT = 10
+
+function getDateKey(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+function getMonthKey(): string {
+  return new Date().toISOString().slice(0, 7)
+}
+
+function getOrCreateUser(userId: string, email?: string) {
+  let user = users.get(userId)
+  if (!user) {
+    user = {
+      id: userId,
+      email: email || `${userId}@example.com`,
+      name: email?.split('@')[0] || 'User',
+      tier: 'FREE',
+      dailyUsage: 0,
+      monthlyUsage: 0,
+      dailyResetAt: getDateKey(),
+      monthlyResetAt: getMonthKey(),
+    }
+    users.set(userId, user)
+  }
+  return user
+}
+
+function checkAndResetUsage(user: any) {
+  const today = getDateKey()
+  const thisMonth = getMonthKey()
+
+  if (user.dailyResetAt !== today) {
+    user.dailyUsage = 0
+    user.dailyResetAt = today
+  }
+
+  if (user.monthlyResetAt !== thisMonth) {
+    user.monthlyUsage = 0
+    user.monthlyResetAt = thisMonth
+  }
+}
+
+function getSessionUser(request: NextRequest): any {
+  // For demo, get user from cookie
+  const sessionToken = request.cookies.get('session-token')?.value
+  if (!sessionToken) {
+    // Create demo user
+    const demoUserId = 'demo-user'
+    return getOrCreateUser(demoUserId, 'demo@taoybeats.com')
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(sessionToken, 'base64').toString())
+    return getOrCreateUser(payload.id, payload.email)
+  } catch {
+    return getOrCreateUser('demo-user')
+  }
+}
+
 export async function GET(request: NextRequest) {
-  // Return all songs for demo
-  const allSongs = Array.from(songs.values())
-  return NextResponse.json({ songs: allSongs })
+  const user = getSessionUser(request)
+  const userSongs = Array.from(songs.values()).filter(s => s.userId === user.id)
+  return NextResponse.json({ songs: userSongs })
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const user = getSessionUser(request)
     const body = await request.json()
     const {
       title,
@@ -34,10 +99,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check usage limits
+    checkAndResetUsage(user)
+
+    if (user.tier === 'FREE') {
+      if (user.dailyUsage >= FREE_DAILY_LIMIT) {
+        return NextResponse.json(
+          {
+            error: "Daily limit reached",
+            message: `You've used all ${FREE_DAILY_LIMIT} free generations today. Upgrade to Pro for 50/day.`,
+            daily: { used: user.dailyUsage, limit: FREE_DAILY_LIMIT },
+            code: "DAILY_LIMIT_REACHED",
+          },
+          { status: 429 }
+        )
+      }
+
+      if (user.monthlyUsage >= FREE_MONTHLY_LIMIT) {
+        return NextResponse.json(
+          {
+            error: "Monthly limit reached",
+            message: `You've used all ${FREE_MONTHLY_LIMIT} free generations this month. Upgrade to Pro for unlimited.`,
+            monthly: { used: user.monthlyUsage, limit: FREE_MONTHLY_LIMIT },
+            code: "MONTHLY_LIMIT_REACHED",
+          },
+          { status: 429 }
+        )
+      }
+    }
+
+    // Increment usage
+    user.dailyUsage++
+    user.monthlyUsage++
+
     // Create song record
     const songId = crypto.randomUUID()
     const song = {
       id: songId,
+      userId: user.id,
       title,
       lyrics,
       genre,
@@ -61,6 +160,10 @@ export async function POST(request: NextRequest) {
       id: songId,
       shareToken: song.shareToken,
       status: "GENERATING",
+      usage: {
+        daily: { used: user.dailyUsage, limit: FREE_DAILY_LIMIT },
+        monthly: { used: user.monthlyUsage, limit: FREE_MONTHLY_LIMIT },
+      },
     })
   } catch (error) {
     console.error("Error creating song:", error)
@@ -82,14 +185,13 @@ async function generateMusic(
     songs.set(songId, { ...song, status: "GENERATING" })
 
     // Simulate MiniMax API call
-    // In production, use: miniMaxProvider.generate({...}, apiKey, apiUrl, 'music-2.6')
     await new Promise((resolve) => setTimeout(resolve, 2000))
 
     // Simulate completion
     songs.set(songId, {
       ...song,
       status: "COMPLETED",
-      audioUrl: "/sample-audio.mp3", // Placeholder
+      audioUrl: "/sample-audio.mp3",
     })
   } catch (error) {
     console.error("Generation error:", error)

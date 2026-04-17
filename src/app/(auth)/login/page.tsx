@@ -2,53 +2,91 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Music, Loader2 } from "lucide-react"
+import { Music, Loader2, Mail, Lock, ArrowLeft } from "lucide-react"
+
+type Step = "email" | "code" | "password"
 
 export default function LoginPage() {
   const router = useRouter()
+  const [step, setStep] = useState<Step>("email")
   const [email, setEmail] = useState("")
+  const [code, setCode] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [devCode, setDevCode] = useState("") // For demo only
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Handle email submission (send code)
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    })
+    try {
+      const res = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
 
-    if (result?.error) {
-      setError("Invalid email or password")
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send code")
+      }
+
+      // For demo, show the code
+      if (data.devCode) {
+        setDevCode(data.devCode)
+      }
+
+      setStep("code")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
       setLoading(false)
-    } else {
-      router.push("/dashboard")
     }
   }
 
-  const handleGoogleLogin = () => {
-    signIn("google", { callbackUrl: "/dashboard" })
+  // Handle code verification
+  const handleCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError("")
+
+    try {
+      const res = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Verification failed")
+      }
+
+      // Success - redirect to dashboard
+      router.push("/dashboard")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification failed")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
       <header className="border-b border-border">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
+        <div className="container mx-auto px-4 py-4">
+          <Link href="/" className="flex items-center gap-2 w-fit">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-glow flex items-center justify-center">
               <Music className="w-5 h-5 text-white" />
             </div>
             <span className="text-xl font-bold text-foreground">TaoyBeats</span>
-          </Link>
-          <Link href="/register" className="text-sm text-text-secondary hover:text-foreground transition-colors">
-            Create Account
           </Link>
         </div>
       </header>
@@ -56,88 +94,116 @@ export default function LoginPage() {
       {/* Login Form */}
       <main className="flex-1 flex items-center justify-center py-12 px-4">
         <div className="w-full max-w-md">
+          <button
+            onClick={() => step !== "email" && setStep("email")}
+            className="flex items-center gap-2 text-sm text-text-secondary hover:text-foreground transition-colors mb-8"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-foreground mb-2">Welcome back</h1>
-            <p className="text-text-secondary">Sign in to continue creating</p>
+            <h1 className="text-2xl font-bold text-foreground mb-2">
+              {step === "email" && "Welcome back"}
+              {step === "code" && "Enter verification code"}
+              {step === "password" && "Set your password"}
+            </h1>
+            <p className="text-text-secondary">
+              {step === "email" && "Enter your email to sign in"}
+              {step === "code" && `We sent a code to ${email}`}
+              {step === "password" && "Create a password for future logins"}
+            </p>
           </div>
 
-          {/* OAuth Buttons */}
-          <div className="space-y-3 mb-6">
-            <button
-              onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-surface hover:bg-surface-elevated text-foreground transition-colors"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-              Continue with Google
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border"></div>
+          {error && (
+            <div className="mb-6 p-4 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
+              {error}
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-background text-text-muted">or continue with email</span>
-            </div>
-          </div>
+          )}
 
-          {/* Email Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm">
-                {error}
+          {/* Dev code display (REMOVE IN PRODUCTION) */}
+          {devCode && step === "code" && (
+            <div className="mb-6 p-4 rounded-xl bg-accent/10 border border-accent/20 text-accent text-sm">
+              <p className="font-medium mb-1">Demo Mode - Your verification code:</p>
+              <p className="text-2xl font-bold tracking-widest">{devCode}</p>
+            </div>
+          )}
+
+          {/* Email Step */}
+          {step === "email" && (
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-2">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                  placeholder="you@example.com"
+                />
               </div>
-            )}
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-2">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
-                placeholder="you@example.com"
-              />
-            </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                {loading ? "Sending..." : "Continue with Email"}
+              </button>
+            </form>
+          )}
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-text-secondary mb-2">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
-                placeholder="••••••••"
-              />
-            </div>
+          {/* Code Step */}
+          {step === "code" && (
+            <form onSubmit={handleCodeSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="code" className="block text-sm font-medium text-text-secondary mb-2">
+                  Verification Code
+                </label>
+                <input
+                  id="code"
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors text-center text-2xl tracking-widest font-mono"
+                  placeholder="000000"
+                  maxLength={6}
+                />
+              </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50"
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Sign In
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={loading || code.length !== 6}
+                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                {loading ? "Verifying..." : "Verify & Sign In"}
+              </button>
 
-          <p className="mt-6 text-center text-sm text-text-secondary">
+              <p className="text-center text-sm text-text-muted">
+                Didn&apos;t receive the code?{" "}
+                <button
+                  onClick={() => {
+                    setDevCode("")
+                    setStep("email")
+                  }}
+                  className="text-accent hover:underline"
+                >
+                  Try again
+                </button>
+              </p>
+            </form>
+          )}
+
+          <p className="mt-8 text-center text-sm text-text-muted">
             Don&apos;t have an account?{" "}
-            <Link href="/register" className="text-accent hover:text-accent-glow transition-colors">
+            <Link href="/register" className="text-accent hover:underline">
               Sign up
             </Link>
           </p>
