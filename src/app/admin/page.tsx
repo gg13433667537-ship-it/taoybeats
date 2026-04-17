@@ -447,15 +447,17 @@ export default function AdminPage() {
                               }))
                               setShowUserModal(true)
                             }}
+                            aria-label="Edit user"
                             className="p-2 rounded-lg hover:bg-surface-elevated text-text-secondary hover:text-foreground transition-colors"
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-4 h-4" aria-hidden="true" />
                           </button>
                           <button
                             onClick={() => setShowDeleteConfirm({ show: true, userId: user.id, type: "user" })}
+                            aria-label="Delete user"
                             className="p-2 rounded-lg hover:bg-error/10 text-text-secondary hover:text-error transition-colors"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
                           </button>
                         </div>
                       </td>
@@ -475,9 +477,10 @@ export default function AdminPage() {
                 <button
                   onClick={() => fetchUsers(userPagination.page - 1, searchQuery)}
                   disabled={userPagination.page <= 1}
+                  aria-label="Previous page"
                   className="p-2 rounded-lg bg-surface border border-border hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-4 h-4" aria-hidden="true" />
                 </button>
                 <span className="text-sm text-text-secondary">
                   {t('page')} {userPagination.page} {t('of')} {userPagination.totalPages}
@@ -485,9 +488,10 @@ export default function AdminPage() {
                 <button
                   onClick={() => fetchUsers(userPagination.page + 1, searchQuery)}
                   disabled={userPagination.page >= userPagination.totalPages}
+                  aria-label="Next page"
                   className="p-2 rounded-lg bg-surface border border-border hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -538,15 +542,17 @@ export default function AdminPage() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => router.push(`/song/${song.id}`)}
+                            aria-label="View song"
                             className="p-2 rounded-lg hover:bg-surface-elevated text-text-secondary hover:text-foreground transition-colors"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-4 h-4" aria-hidden="true" />
                           </button>
                           <button
                             onClick={() => setShowDeleteConfirm({ show: true, songId: song.id, type: "song" })}
+                            aria-label="Delete song"
                             className="p-2 rounded-lg hover:bg-error/10 text-text-secondary hover:text-error transition-colors"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
                           </button>
                         </div>
                       </td>
@@ -566,9 +572,10 @@ export default function AdminPage() {
                 <button
                   onClick={() => fetchSongs(songPagination.page - 1)}
                   disabled={songPagination.page <= 1}
+                  aria-label="Previous page"
                   className="p-2 rounded-lg bg-surface border border-border hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-4 h-4" aria-hidden="true" />
                 </button>
                 <span className="text-sm text-text-secondary">
                   {t('page')} {songPagination.page} {t('of')} {songPagination.totalPages}
@@ -576,9 +583,10 @@ export default function AdminPage() {
                 <button
                   onClick={() => fetchSongs(songPagination.page + 1)}
                   disabled={songPagination.page >= songPagination.totalPages}
+                  aria-label="Next page"
                   className="p-2 rounded-lg bg-surface border border-border hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -708,9 +716,10 @@ export default function AdminPage() {
                   setShowUserModal(false)
                   setSelectedUser(null)
                 }}
+                aria-label="Close modal"
                 className="p-2 rounded-lg hover:bg-surface-elevated text-text-secondary hover:text-foreground transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
