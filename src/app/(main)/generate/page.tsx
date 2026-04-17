@@ -92,7 +92,11 @@ export default function GeneratePage() {
       })
 
       if (!createResponse.ok) {
-        throw new Error('Failed to create song')
+        const errorData = await createResponse.json().catch(() => ({}))
+        if (createResponse.status === 429) {
+          throw new Error(errorData.message || 'Daily or monthly limit reached. Please upgrade to Pro for more generations.')
+        }
+        throw new Error(errorData.error || 'Failed to create song')
       }
 
       const { id: songId } = await createResponse.json()

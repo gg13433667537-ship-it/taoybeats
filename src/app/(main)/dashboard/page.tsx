@@ -1,41 +1,42 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Music, Plus, Play, MoreHorizontal, Clock, Trash2, Share2, Download } from "lucide-react"
-
-// Demo songs data
-const DEMO_SONGS = [
-  {
-    id: "1",
-    title: "Summer Vibes",
-    status: "COMPLETED",
-    createdAt: "2 hours ago",
-    duration: "3:24",
-    genre: ["Pop", "Dance"]
-  },
-  {
-    id: "2",
-    title: "Midnight Dreams",
-    status: "COMPLETED",
-    createdAt: "1 day ago",
-    duration: "4:12",
-    genre: ["R&B", "Soul"]
-  },
-  {
-    id: "3",
-    title: "Electric Pulse",
-    status: "GENERATING",
-    createdAt: "Just now",
-    progress: 65,
-    genre: ["Electronic"]
-  }
-]
+import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap } from "lucide-react"
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [songs] = useState(DEMO_SONGS)
+  const [songs, setSongs] = useState<any[]>([])
+  const [usage, setUsage] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Fetch songs and usage
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch songs
+        const songsRes = await fetch("/api/songs")
+        if (songsRes.ok) {
+          const songsData = await songsRes.json()
+          setSongs(songsData.songs || [])
+        }
+
+        // Fetch usage
+        const usageRes = await fetch("/api/usage")
+        if (usageRes.ok) {
+          const usageData = await usageRes.json()
+          setUsage(usageData)
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -48,6 +49,21 @@ export default function DashboardPage() {
       default:
         return 'bg-text-muted/10 text-text-muted'
     }
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins} min ago`
+    if (diffHours < 24) return `${diffHours} hours ago`
+    if (diffDays < 7) return `${diffDays} days ago`
+    return date.toLocaleDateString()
   }
 
   return (
@@ -70,7 +86,7 @@ export default function DashboardPage() {
               Create
             </button>
             <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-sm font-medium">
-              D
+              U
             </div>
           </div>
         </div>
@@ -85,32 +101,78 @@ export default function DashboardPage() {
             <p className="text-text-secondary">Create, manage, and share your AI-generated songs</p>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 mb-8">
-            <div className="p-4 rounded-xl bg-surface border border-border">
-              <p className="text-2xl font-bold text-foreground">{songs.filter(s => s.status === 'COMPLETED').length}</p>
-              <p className="text-sm text-text-secondary">Total Songs</p>
+          {/* Usage Stats */}
+          {usage && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="p-4 rounded-xl bg-surface border border-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="w-4 h-4 text-accent" />
+                  <span className="text-sm text-text-secondary">Daily</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">
+                  {usage.daily?.remaining ?? '—'}
+                  <span className="text-sm text-text-muted font-normal"> / {usage.daily?.limit ?? '—'}</span>
+                </p>
+                <div className="mt-2 h-1 rounded-full bg-border overflow-hidden">
+                  <div
+                    className="h-full bg-accent rounded-full"
+                    style={{ width: `${((usage.daily?.used ?? 0) / (usage.daily?.limit ?? 1)) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-surface border border-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="w-4 h-4 text-accent" />
+                  <span className="text-sm text-text-secondary">Monthly</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">
+                  {usage.monthly?.remaining === -1 ? '∞' : (usage.monthly?.remaining ?? '—')}
+                  <span className="text-sm text-text-muted font-normal">
+                    {usage.monthly?.limit === -1 ? '' : ` / ${usage.monthly?.limit ?? '—'}`}
+                  </span>
+                </p>
+                {usage.monthly?.limit !== -1 && (
+                  <div className="mt-2 h-1 rounded-full bg-border overflow-hidden">
+                    <div
+                      className="h-full bg-accent rounded-full"
+                      style={{ width: `${((usage.monthly?.used ?? 0) / (usage.monthly?.limit ?? 1)) * 100}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="p-4 rounded-xl bg-surface border border-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <Music className="w-4 h-4 text-accent" />
+                  <span className="text-sm text-text-secondary">Total Songs</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{songs.length}</p>
+              </div>
+              <div className="p-4 rounded-xl bg-surface border border-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm text-text-secondary">Tier</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{usage.tier || 'FREE'}</p>
+              </div>
             </div>
-            <div className="p-4 rounded-xl bg-surface border border-border">
-              <p className="text-2xl font-bold text-foreground">
-                {songs.filter(s => s.status === 'COMPLETED' && s.duration).reduce((acc, s) => {
-                  const [mins, secs] = (s.duration || '0:00').split(':').map(Number)
-                  return acc + mins * 60 + secs
-                }, 0) || 0}
-              </p>
-              <p className="text-sm text-text-secondary">Total Minutes</p>
-            </div>
-            <div className="p-4 rounded-xl bg-surface border border-border">
-              <p className="text-2xl font-bold text-foreground">3</p>
-              <p className="text-sm text-text-secondary">Daily Remaining</p>
-            </div>
-          </div>
+          )}
 
           {/* Songs List */}
           <section>
-            <h2 className="text-lg font-semibold text-foreground mb-4">Recent Songs</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground">Recent Songs</h2>
+              <Link
+                href="/generate"
+                className="text-sm text-accent hover:underline"
+              >
+                Create new song →
+              </Link>
+            </div>
 
-            {songs.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-accent animate-spin" />
+              </div>
+            ) : songs.length === 0 ? (
               <div className="p-12 rounded-2xl bg-surface border border-border text-center">
                 <Music className="w-12 h-12 text-text-muted mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-2">No songs yet</h3>
@@ -139,7 +201,7 @@ export default function DashboardPage() {
                           </button>
                         ) : song.status === 'GENERATING' ? (
                           <div className="w-12 h-12 rounded-full bg-accent/10 text-accent flex items-center justify-center">
-                            <div className="w-5 h-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                            <Loader2 className="w-5 h-5 animate-spin" />
                           </div>
                         ) : (
                           <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center">
@@ -180,16 +242,16 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-3 text-sm text-text-secondary">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(song.status)}`}>
                             {song.status === 'COMPLETED' ? 'Ready' :
-                             song.status === 'GENERATING' ? `${song.progress}%` : 'Failed'}
+                             song.status === 'GENERATING' ? `${song.progress ?? 0}%` : 'Failed'}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            {song.createdAt}
+                            {formatDate(song.createdAt)}
                           </span>
                           {song.duration && (
                             <span>{song.duration}</span>
                           )}
-                          {song.genre && (
+                          {song.genre && Array.isArray(song.genre) && (
                             <span>{song.genre.join(', ')}</span>
                           )}
                         </div>
