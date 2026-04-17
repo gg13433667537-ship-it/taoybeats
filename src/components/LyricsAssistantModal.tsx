@@ -144,17 +144,12 @@ export default function LyricsAssistantModal({
     setState(s => ({ ...s, isGenerating: true, error: null }))
 
     try {
-      const apiKey = localStorage.getItem('minimax_api_key')
-      if (!apiKey) {
-        setState(s => ({ ...s, error: "请先在设置页面配置MiniMax API Key", isGenerating: false }))
-        return
-      }
-
       const prompt = [
         selectedStyles.length > 0 ? selectedStyles.join(', ') : '',
         mood,
       ].filter(Boolean).join(', ')
 
+      // API key is now handled server-side
       const response = await fetch('/api/lyrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -163,8 +158,6 @@ export default function LyricsAssistantModal({
           prompt: prompt || undefined,
           lyrics: framework.trim() || undefined,
           title: title.trim(),
-          apiKey,
-          apiUrl: 'https://api.minimaxi.com',
         }),
       })
 

@@ -7,7 +7,6 @@ interface CloneVoiceModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: (voiceId: string) => void
-  apiKey: string
 }
 
 type Tab = 'upload' | 'record' | 'design'
@@ -201,7 +200,7 @@ function VoiceDesignContent({
   )
 }
 
-export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: CloneVoiceModalProps) {
+export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoiceModalProps) {
   const [state, setState] = useState<ModalState>(initialState)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -331,7 +330,6 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
           file_data: base64,
           filename,
           purpose: 'prompt_audio',
-          apiKey,
         }),
       })
 
@@ -354,7 +352,6 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
         body: JSON.stringify({
           file_id: fileId,
           voice_id: voiceId,
-          apiKey,
         }),
       })
 
@@ -413,7 +410,6 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
         body: JSON.stringify({
           prompt,
           preview_text: PREVIEW_TEXT,
-          apiKey,
         }),
       })
 

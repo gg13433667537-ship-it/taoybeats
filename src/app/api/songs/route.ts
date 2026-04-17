@@ -7,11 +7,15 @@ declare global {
   var users: Map<string, User> | undefined
   var songs: Map<string, unknown> | undefined
   var adminLogs: Map<string, unknown> | undefined
+  var systemApiKey: string | undefined
+  var systemApiUrl: string | undefined
 }
 
 if (!global.users) global.users = new Map()
 if (!global.songs) global.songs = new Map()
 if (!global.adminLogs) global.adminLogs = new Map()
+if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY || 'sk-cp-IM9XKrS2pUcf2w_ybwstx2D3n4YcYGroc6DSF8UHQowdvqsiBRkdPDGQ-qAGvIAqwL0j-HVHhKzpcg5m5QG2oX-HrfVniF_xbKCTFsnBEusnFFD-69nrWEU'
+if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
 
 const users = global.users!
 
@@ -104,8 +108,6 @@ export async function POST(request: NextRequest) {
       isInstrumental,
       voiceId,
       referenceAudio,
-      apiKey,
-      apiUrl,
     } = body
 
     // Validation - lyrics not required if instrumental
@@ -116,13 +118,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // API Key validation
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "API key is required. Please configure your MiniMax API key." },
-        { status: 400 }
-      )
-    }
+    // Use system API key - no client-side API key required
+    const apiKey = global.systemApiKey!
+    const apiUrl = global.systemApiUrl!
 
     // Check usage limits
     checkAndResetUsage(user)

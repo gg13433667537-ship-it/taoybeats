@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Music, Loader2, Download, Share2, Check, AlertCircle, RefreshCw, Shield, Info, Sparkles } from "lucide-react"
+import { Music, Loader2, Download, Share2, Check, AlertCircle, RefreshCw, Shield, Sparkles } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 import AudioPlayer from "@/components/AudioPlayer"
 import LyricsAssistantModal from "@/components/LyricsAssistantModal"
@@ -55,8 +55,7 @@ export default function GeneratePage() {
     return 'USER'
   })()
 
-  // Form state - API Key is now required
-  const [apiKey, setApiKey] = useState("")
+  // Form state
   const [title, setTitle] = useState("")
   const [lyrics, setLyrics] = useState("")
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
@@ -83,13 +82,6 @@ export default function GeneratePage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [stageMessage, setStageMessage] = useState<string>('')
-
-  // Load API key from localStorage on mount
-  useEffect(() => {
-    const savedKey = localStorage.getItem('minimax_api_key')
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (savedKey) setApiKey(savedKey)
-  }, [])
 
   // Load forked song data if fork parameter is present
   useEffect(() => {
@@ -131,10 +123,6 @@ export default function GeneratePage() {
 
   // Handle generation
   const handleGenerate = async () => {
-    if (!apiKey) {
-      setError("MiniMax API Key is required. Please enter your API key.")
-      return
-    }
     if (!title) {
       setError("Please enter a song title.")
       return
@@ -175,8 +163,6 @@ export default function GeneratePage() {
           isInstrumental,
           voiceId: selectedVoiceId,
           referenceAudio,
-          apiKey,
-          apiUrl: 'https://api.minimaxi.com',
         }),
       })
 
@@ -373,31 +359,6 @@ export default function GeneratePage() {
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Left Column - Form */}
             <div className="space-y-6">
-              {/* API Configuration */}
-              <section className="p-6 rounded-2xl bg-surface border border-border">
-                <h2 className="text-lg font-semibold text-foreground mb-4">MiniMax API</h2>
-                <div className="flex items-start gap-3 mb-4 p-3 rounded-lg bg-accent/10 border border-accent/20">
-                  <Info className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-text-secondary">
-                    Using <span className="font-medium text-accent">Music 2.6</span> model for high-quality music generation
-                  </p>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">
-                      API Key <span className="text-error">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="Enter your MiniMax API key"
-                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                </div>
-              </section>
-
               {/* Song Details */}
               <section className="p-6 rounded-2xl bg-surface border border-border">
                 <h2 className="text-lg font-semibold text-foreground mb-4">{t('songDetails')}</h2>
@@ -580,18 +541,15 @@ export default function GeneratePage() {
                   </div>
 
                   {/* Voice Selector */}
-                  {apiKey && (
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">
-                        人声音色
-                      </label>
-                      <VoiceSelector
-                        selectedVoiceId={selectedVoiceId}
-                        onSelectVoice={setSelectedVoiceId}
-                        apiKey={apiKey}
-                      />
-                    </div>
-                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
+                      人声音色
+                    </label>
+                    <VoiceSelector
+                      selectedVoiceId={selectedVoiceId}
+                      onSelectVoice={setSelectedVoiceId}
+                    />
+                  </div>
                 </div>
               </section>
 

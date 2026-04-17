@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 
+// Use system API key - hardcoded for all users
+declare global {
+  var systemApiKey: string | undefined
+  var systemApiUrl: string | undefined
+}
+
+if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY || 'sk-cp-IM9XKrS2pUcf2w_ybwstx2D3n4YcYGroc6DSF8UHQowdvqsiBRkdPDGQ-qAGvIAqwL0j-HVHhKzpcg5m5QG2oX-HrfVniF_xbKCTFsnBEusnFFD-69nrWEU'
+if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { file_id, voice_id, clone_prompt, text, model, language_boost, need_noise_reduction, need_volume_normalization, aigc_watermark, apiKey, apiUrl } = body
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "API key is required" },
-        { status: 400 }
-      )
-    }
+    const { file_id, voice_id, clone_prompt, text, model, language_boost, need_noise_reduction, need_volume_normalization, aigc_watermark } = body
 
     if (!file_id) {
       return NextResponse.json(
@@ -26,7 +28,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const baseUrl = apiUrl || 'https://api.minimaxi.com'
+    // Use system API key for all requests
+    const apiKey = global.systemApiKey
+    const baseUrl = global.systemApiUrl
 
     // Build request payload
     const payload: Record<string, unknown> = {

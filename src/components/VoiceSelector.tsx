@@ -16,7 +16,7 @@ interface Voice {
 interface VoiceSelectorProps {
   selectedVoiceId: string | null
   onSelectVoice: (voiceId: string) => void
-  apiKey: string
+  apiKey?: string
 }
 
 const systemVoices: Voice[] = [
@@ -33,15 +33,14 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
   const [error, setError] = useState<string | null>(null)
 
   const loadVoices = useCallback(async () => {
-    if (!apiKey) return
-
     setIsLoading(true)
     setError(null)
 
     const abortController = new AbortController()
 
     try {
-      const response = await fetch(`/api/voice/list?voice_type=all&apiKey=${encodeURIComponent(apiKey)}`, {
+      // API key is now handled server-side, no need to pass it from client
+      const response = await fetch(`/api/voice/list?voice_type=all`, {
         signal: abortController.signal,
       })
       const data = await response.json()
@@ -69,7 +68,7 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
       if (abortController.signal.aborted) return
       setIsLoading(false)
     }
-  }, [apiKey])
+  }, [])
 
   // Watch for isOpen changes - intentionally calls loadVoices which triggers setState
   // This is a standard "load on open" pattern for modals/dropdowns
@@ -251,7 +250,6 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
           onSelectVoice(voiceId)
           loadVoices()
         }}
-        apiKey={apiKey}
       />
     </>
   )

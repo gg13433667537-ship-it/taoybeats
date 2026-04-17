@@ -46,8 +46,9 @@ export default function LoginPage() {
         }
         setStep("login")
       } else {
-        // User doesn't exist - redirect to register
-        router.push("/register")
+        // User doesn't exist - show error instead of auto redirecting
+        setError("该邮箱尚未注册，请先注册")
+        setStep("email") // Stay on email step
       }
     } catch (err) {
       console.error("Check email error:", err)
@@ -160,7 +161,11 @@ export default function LoginPage() {
       <main className="flex-1 flex items-center justify-center py-12 px-4">
         <div className="w-full max-w-md">
           <button
-            onClick={() => step !== "email" && setStep("email")}
+            onClick={() => {
+              setStep("email")
+              setError("")
+              setEmail("")
+            }}
             aria-label={t("back")}
             className="flex items-center gap-2 text-sm text-text-secondary hover:text-foreground transition-colors mb-8"
           >
