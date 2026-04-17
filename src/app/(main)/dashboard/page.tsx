@@ -171,12 +171,14 @@ export default function DashboardPage() {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
+                aria-label="User menu"
+                aria-expanded={showDropdown}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface transition-colors"
               >
                 <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-sm font-medium">
                   {userName.charAt(0).toUpperCase()}
                 </div>
-                <ChevronDown className={`w-4 h-4 text-text-secondary transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-text-secondary transition-transform ${showDropdown ? 'rotate-180' : ''}`} aria-hidden="true" />
               </button>
 
               {showDropdown && (
@@ -193,14 +195,14 @@ export default function DashboardPage() {
                       onClick={() => { setShowDropdown(false); router.push('/settings'); }}
                       className="w-full flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-background transition-colors"
                     >
-                      <Settings className="w-4 h-4 text-text-muted" />
+                      <Settings className="w-4 h-4 text-text-muted" aria-hidden="true" />
                       {t('settings')}
                     </button>
                     <button
                       onClick={() => { setShowDropdown(false); router.push('/dashboard'); }}
                       className="w-full flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-background transition-colors"
                     >
-                      <User className="w-4 h-4 text-text-muted" />
+                      <User className="w-4 h-4 text-text-muted" aria-hidden="true" />
                       {t('mySongs')}
                     </button>
                   </div>
@@ -209,9 +211,10 @@ export default function DashboardPage() {
                   <div className="border-t border-border py-2">
                     <button
                       onClick={handleLogout}
+                      aria-label="Logout"
                       className="w-full flex items-center gap-3 px-4 py-2 text-sm text-error hover:bg-error/10 transition-colors"
                     >
-                      <LogOut className="w-4 h-4" />
+                      <LogOut className="w-4 h-4" aria-hidden="true" />
                       {t('logout')}
                     </button>
                   </div>
@@ -235,14 +238,15 @@ export default function DashboardPage() {
           {dashboardError && (
             <div className="mb-6 p-4 rounded-xl bg-error/10 border border-error/20 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-error" />
+                <AlertCircle className="w-5 h-5 text-error" aria-hidden="true" />
                 <span className="text-error text-sm">{dashboardError}</span>
               </div>
               <button
                 onClick={() => setDashboardError(null)}
+                aria-label="Dismiss error"
                 className="p-1 rounded hover:bg-error/10 text-error/60 hover:text-error transition-colors"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
           )}
@@ -252,7 +256,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">
-                  <Zap className="w-4 h-4 text-accent" />
+                  <Zap className="w-4 h-4 text-accent" aria-hidden="true" />
                   <span className="text-sm text-text-secondary">{t('daily')}</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">
@@ -268,7 +272,7 @@ export default function DashboardPage() {
               </div>
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">
-                  <Clock className="w-4 h-4 text-accent" />
+                  <Clock className="w-4 h-4 text-accent" aria-hidden="true" />
                   <span className="text-sm text-text-secondary">{t('monthlyUsage')}</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">
@@ -288,7 +292,7 @@ export default function DashboardPage() {
               </div>
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">
-                  <Music className="w-4 h-4 text-accent" />
+                  <Music className="w-4 h-4 text-accent" aria-hidden="true" />
                   <span className="text-sm text-text-secondary">{t('totalSongs')}</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">{songs.length}</p>
@@ -409,16 +413,16 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         {song.status === 'COMPLETED' && (
                           <>
-                            <button className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors">
-                              <Download className="w-4 h-4" />
+                            <button aria-label="Download song" className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors">
+                              <Download className="w-4 h-4" aria-hidden="true" />
                             </button>
-                            <button className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors">
-                              <Share2 className="w-4 h-4" />
+                            <button aria-label="Share song" className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors">
+                              <Share2 className="w-4 h-4" aria-hidden="true" />
                             </button>
                           </>
                         )}
-                        <button className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors">
-                          <MoreHorizontal className="w-4 h-4" />
+                        <button aria-label="More options" className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors">
+                          <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
