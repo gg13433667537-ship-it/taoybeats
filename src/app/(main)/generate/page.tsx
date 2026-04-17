@@ -28,7 +28,7 @@ export default function GeneratePage() {
   // Form state
   const [apiUrl, setApiUrl] = useState("")
   const [apiKey, setApiKey] = useState("")
-  const [provider, setProvider] = useState("suno")
+  const [provider, setProvider] = useState("minimax")
   const [title, setTitle] = useState("")
   const [lyrics, setLyrics] = useState("")
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
@@ -61,8 +61,8 @@ export default function GeneratePage() {
 
   // Handle generation
   const handleGenerate = async () => {
-    if (!apiUrl || !apiKey || !title || !lyrics || selectedGenres.length === 0 || !mood) {
-      setError("Please fill in all required fields")
+    if (!apiKey || !title || !lyrics || selectedGenres.length === 0 || !mood) {
+      setError("Please fill in all required fields (API Key, Title, Lyrics, Genre, Mood)")
       return
     }
 
@@ -71,25 +71,73 @@ export default function GeneratePage() {
     setProgress(0)
     setAudioUrl(null)
 
-    // Simulate SSE progress for demo
-    // In production, connect to actual SSE endpoint
-    const stages = [
-      { stage: 'initializing', duration: 1000, progress: 5 },
-      { stage: 'generating_melody', duration: 3000, progress: 30 },
-      { stage: 'generating_lyrics', duration: 4000, progress: 60 },
-      { stage: 'rendering_audio', duration: 3000, progress: 85 },
-      { stage: 'finalizing', duration: 1000, progress: 100 },
-    ]
+    try {
+      // Step 1: Create song record via API
+      const createResponse = await fetch('/api/songs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          lyrics,
+          genre: selectedGenres,
+          mood,
+          instruments: selectedInstruments,
+          referenceSinger,
+          referenceSong,
+          userNotes,
+          apiKey,
+          apiUrl: apiUrl || 'https://api.minimax.chat',
+        }),
+      })
 
-    for (const s of stages) {
-      await new Promise(resolve => setTimeout(resolve, s.duration))
-      setGenerationStage(s.stage as GenerationStage)
-      setProgress(s.progress)
+      if (!createResponse.ok) {
+        throw new Error('Failed to create song')
+      }
+
+      const { id: songId } = await createResponse.json()
+
+      // Step 2: Connect to SSE stream for progress updates
+      const eventSource = new EventSource(`/api/songs/${songId}/stream`)
+
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        setProgress(data.progress)
+
+        switch (data.stage) {
+          case 'initializing':
+            setGenerationStage('initializing')
+            break
+          case 'generating_melody':
+            setGenerationStage('generating')
+            break
+          case 'generating_lyrics':
+            setGenerationStage('generating')
+            break
+          case 'rendering_audio':
+            setGenerationStage('generating')
+            break
+          case 'finalizing':
+            setGenerationStage('finalizing')
+            break
+          case 'completed':
+            setGenerationStage('completed')
+            if (data.audioUrl) {
+              setAudioUrl(data.audioUrl)
+            }
+            eventSource.close()
+            break
+        }
+      }
+
+      eventSource.onerror = () => {
+        setGenerationStage('failed')
+        setError('Connection lost. Please try again.')
+        eventSource.close()
+      }
+    } catch (err) {
+      setGenerationStage('failed')
+      setError(err instanceof Error ? err.message : 'Generation failed')
     }
-
-    // Simulate completion
-    setGenerationStage('completed')
-    setAudioUrl('/sample-audio.mp3') // Placeholder
   }
 
   // Handle download

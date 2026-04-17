@@ -33,34 +33,42 @@ export type AIProvider = {
   download: (taskId: string, apiKey: string, apiUrl: string) => Promise<string> // returns audio URL
 }
 
-// MiniMax Provider
+// MiniMax Provider - Real API Implementation
 export const miniMaxProvider: AIProvider = {
   name: 'MiniMax',
 
   async generate(params, apiKey, apiUrl, modelId) {
-    const response = await fetch(`${apiUrl}/api/v1/music/generate`, {
+    const baseUrl = apiUrl || 'https://api.minimax.chat'
+    const model = modelId || 'music-2.6'
+
+    const response = await fetch(`${baseUrl}/api/v1/music/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: modelId || 'music-01',
+        model,
         prompt: buildPrompt(params),
-        duration: 180, // 3 minutes
+        duration: 180, // 3 minutes default
       }),
     })
 
     if (!response.ok) {
-      throw new Error(`MiniMax API error: ${response.status}`)
+      const error = await response.text()
+      throw new Error(`MiniMax API error: ${response.status} - ${error}`)
     }
 
     const data = await response.json()
+    // MiniMax returns task_id or id
     return data.task_id || data.id
   },
 
   async getProgress(taskId, apiKey, apiUrl) {
-    const response = await fetch(`${apiUrl}/api/v1/music/status/${taskId}`, {
+    const baseUrl = apiUrl || 'https://api.minimax.chat'
+
+    const response = await fetch(`${baseUrl}/api/v1/music/status/${taskId}`, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
@@ -75,7 +83,10 @@ export const miniMaxProvider: AIProvider = {
   },
 
   async download(taskId, apiKey, apiUrl) {
-    const response = await fetch(`${apiUrl}/api/v1/music/download/${taskId}`, {
+    const baseUrl = apiUrl || 'https://api.minimax.chat'
+
+    const response = await fetch(`${baseUrl}/api/v1/music/download/${taskId}`, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
@@ -86,7 +97,7 @@ export const miniMaxProvider: AIProvider = {
     }
 
     const data = await response.json()
-    return data.audio_url
+    return data.audio_url || data.url
   },
 }
 
@@ -95,7 +106,9 @@ export const sunoProvider: AIProvider = {
   name: 'Suno',
 
   async generate(params, apiKey, apiUrl, modelId) {
-    const response = await fetch(`${apiUrl}/api/generate`, {
+    const baseUrl = apiUrl || 'https://api.suno.ai'
+
+    const response = await fetch(`${baseUrl}/api/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -118,7 +131,9 @@ export const sunoProvider: AIProvider = {
   },
 
   async getProgress(taskId, apiKey, apiUrl) {
-    const response = await fetch(`${apiUrl}/api/get/${taskId}`, {
+    const baseUrl = apiUrl || 'https://api.suno.ai'
+
+    const response = await fetch(`${baseUrl}/api/get/${taskId}`, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
@@ -146,7 +161,9 @@ export const udioProvider: AIProvider = {
   name: 'Udio',
 
   async generate(params, apiKey, apiUrl, modelId) {
-    const response = await fetch(`${apiUrl}/v1/music/generate`, {
+    const baseUrl = apiUrl || 'https://api.udio.com'
+
+    const response = await fetch(`${baseUrl}/v1/music/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -168,7 +185,9 @@ export const udioProvider: AIProvider = {
   },
 
   async getProgress(taskId, apiKey, apiUrl) {
-    const response = await fetch(`${apiUrl}/v1/music/status/${taskId}`, {
+    const baseUrl = apiUrl || 'https://api.udio.com'
+
+    const response = await fetch(`${baseUrl}/v1/music/status/${taskId}`, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
@@ -251,7 +270,7 @@ function mapMiniMaxStatus(data: any): GenerationProgress {
     status: statusMap[data.status] || 'PENDING',
     progress: data.progress || 0,
     stage: data.stage,
-    audioUrl: data.audio_url,
+    audioUrl: data.audio_url || data.url,
     error: data.error,
   }
 }
