@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap, Shield } from "lucide-react"
+import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap, Shield, LogOut, User, ChevronDown, Settings } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 export default function DashboardPage() {
@@ -14,6 +14,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string>('USER')
   const [userName, setUserName] = useState<string>('')
+  const [userEmail, setUserEmail] = useState<string>('')
+  const [showDropdown, setShowDropdown] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Get user info from session cookie
   useEffect(() => {
@@ -24,12 +27,34 @@ export default function DashboardPage() {
         try {
           const payload = JSON.parse(atob(value))
           setUserRole(payload.role || 'USER')
+          setUserEmail(payload.email || '')
           setUserName(payload.email?.split('@')[0] || 'User')
         } catch (e) {}
         break
       }
     }
   }, [])
+
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Logout
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+      router.push("/")
+    } catch (error) {
+      console.error("Logout error:", error)
+    }
+  }
 
   // Fetch songs and usage
   useEffect(() => {
@@ -114,8 +139,57 @@ export default function DashboardPage() {
               <Plus className="w-4 h-4" />
               {t('createSong')}
             </button>
-            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-sm font-medium">
-              {userName.charAt(0).toUpperCase()}
+
+            {/* User Dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowDropdown(!showDropdown)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-sm font-medium">
+                  {userName.charAt(0).toUpperCase()}
+                </div>
+                <ChevronDown className={`w-4 h-4 text-text-secondary transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showDropdown && (
+                <div className="absolute right-0 top-full mt-2 w-64 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
+                  {/* User Info */}
+                  <div className="px-4 py-3 border-b border-border">
+                    <p className="text-sm font-medium text-foreground">{userName}</p>
+                    <p className="text-xs text-text-muted truncate">{userEmail}</p>
+                  </div>
+
+                  {/* Menu Items */}
+                  <div className="py-2">
+                    <button
+                      onClick={() => { setShowDropdown(false); router.push('/settings'); }}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-background transition-colors"
+                    >
+                      <Settings className="w-4 h-4 text-text-muted" />
+                      {t('settings')}
+                    </button>
+                    <button
+                      onClick={() => { setShowDropdown(false); router.push('/dashboard'); }}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-background transition-colors"
+                    >
+                      <User className="w-4 h-4 text-text-muted" />
+                      {t('mySongs')}
+                    </button>
+                  </div>
+
+                  {/* Logout */}
+                  <div className="border-t border-border py-2">
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-error hover:bg-error/10 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      {t('logout')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

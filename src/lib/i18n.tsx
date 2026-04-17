@@ -15,6 +15,7 @@ const translations = {
     dashboard: 'Dashboard',
     settings: 'Settings',
     signOut: 'Sign Out',
+    logout: 'Log Out',
     admin: 'Admin',
 
     // Hero
@@ -77,6 +78,7 @@ const translations = {
     enterVerificationCode: 'Enter verification code',
     setYourPassword: 'Set your password',
     enterYourEmailToSignIn: 'Enter your email to sign in',
+    enterYourPassword: 'Enter your password',
     weSentCodeTo: 'We sent a code to',
     createPasswordForFutureLogins: 'Create a password for future logins',
     demoModeYourCode: 'Demo Mode - Your verification code:',
@@ -90,9 +92,18 @@ const translations = {
     yourNamePlaceholder: 'Your name',
     completeSignUp: 'Complete Sign Up',
     saving: 'Saving...',
+    signInWithPassword: 'Sign in with password',
+    signInWithCode: 'Sign in with code',
+    signingIn: 'Signing in...',
+    creating: 'Creating...',
+    enterPassword: 'Enter your password',
+    passwordPlaceholder: 'Your password',
+    yourName: 'Your name',
+    optional: 'optional',
 
     // Dashboard
     yourMusic: 'Your Music',
+    mySongs: 'My Songs',
     manageShare: 'Create, manage, and share your AI-generated songs',
     daily: 'Daily',
     monthlyUsage: 'Monthly',
@@ -252,6 +263,7 @@ const translations = {
     dashboard: '仪表盘',
     settings: '设置',
     signOut: '退出',
+    logout: '退出登录',
     admin: '管理员',
 
     // Hero
@@ -314,6 +326,7 @@ const translations = {
     enterVerificationCode: '输入验证码',
     setYourPassword: '设置密码',
     enterYourEmailToSignIn: '输入邮箱以登录',
+    enterYourPassword: '输入密码',
     weSentCodeTo: '验证码已发送至',
     createPasswordForFutureLogins: '创建密码以便下次登录',
     demoModeYourCode: '演示模式 - 您的验证码：',
@@ -327,9 +340,18 @@ const translations = {
     yourNamePlaceholder: '你的名字',
     completeSignUp: '完成注册',
     saving: '保存中...',
+    signInWithPassword: '使用密码登录',
+    signInWithCode: '使用验证码登录',
+    signingIn: '登录中...',
+    creating: '创建中...',
+    enterPassword: '输入密码',
+    passwordPlaceholder: '输入密码',
+    yourName: '你的名字',
+    optional: '可选',
 
     // Dashboard
     yourMusic: '我的音乐',
+    mySongs: '我的歌曲',
     manageShare: '创建、管理和分享你的 AI 音乐作品',
     daily: '今日',
     monthlyUsage: '本月',

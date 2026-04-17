@@ -3,103 +3,59 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Music, Loader2, Mail, Lock, User, ArrowLeft } from "lucide-react"
+import { Music, Loader2, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
-
-type Step = "email" | "code" | "profile"
 
 export default function RegisterPage() {
   const { t } = useI18n()
   const router = useRouter()
-  const [step, setStep] = useState<Step>("email")
   const [email, setEmail] = useState("")
-  const [code, setCode] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [name, setName] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [devCode, setDevCode] = useState("") // For demo only
+  const [showPassword, setShowPassword] = useState(false)
 
-  // Handle email submission (send code)
-  const handleEmailSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError("")
 
+    // Validate
+    if (!email || !email.includes("@")) {
+      setError("请输入有效的邮箱地址")
+      return
+    }
+
+    if (password.length < 6) {
+      setError("密码长度至少为6个字符")
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError("两次输入的密码不一致")
+      return
+    }
+
+    setLoading(true)
+
     try {
-      const res = await fetch("/api/auth/send-code", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, password, name }),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to send code")
-      }
-
-      // For demo, show the code
-      if (data.devCode) {
-        setDevCode(data.devCode)
-      }
-
-      setStep("code")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Handle code verification
-  const handleCodeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError("")
-
-    try {
-      const res = await fetch("/api/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || "Verification failed")
-      }
-
-      // Success - go to profile step
-      setStep("profile")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Verification failed")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Handle profile completion
-  const handleProfileSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError("")
-
-    try {
-      const res = await fetch("/api/auth/profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name }),
-      })
-
-      if (!res.ok) {
-        throw new Error("Failed to save profile")
+        throw new Error(data.error || "注册失败")
       }
 
       // Success - redirect to dashboard
       router.push("/dashboard")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong")
+      setError(err instanceof Error ? err.message : "注册失败")
     } finally {
       setLoading(false)
     }
@@ -122,27 +78,20 @@ export default function RegisterPage() {
       {/* Register Form */}
       <main className="flex-1 flex items-center justify-center py-12 px-4">
         <div className="w-full max-w-md">
-          <button
-            onClick={() => {
-              if (step === "code") setStep("email")
-              else if (step === "profile") setStep("code")
-            }}
+          <Link
+            href="/login"
             className="flex items-center gap-2 text-sm text-text-secondary hover:text-foreground transition-colors mb-8"
           >
             <ArrowLeft className="w-4 h-4" />
             {t("back")}
-          </button>
+          </Link>
 
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-foreground mb-2">
-              {step === "email" && t("createAccount")}
-              {step === "code" && t("enterVerificationCode")}
-              {step === "profile" && t("almostThere")}
+              {t("createAccount")}
             </h1>
             <p className="text-text-secondary">
-              {step === "email" && t("startCreatingToday")}
-              {step === "code" && `${t("weSentCodeTo")} ${email}`}
-              {step === "profile" && t("tellUsAboutYourself")}
+              {t("startCreatingToday")}
             </p>
           </div>
 
@@ -152,114 +101,99 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* Dev code display (REMOVE IN PRODUCTION) */}
-          {devCode && step === "code" && (
-            <div className="mb-6 p-4 rounded-xl bg-accent/10 border border-accent/20 text-accent text-sm">
-              <p className="font-medium mb-1">{t("demoModeYourCode")}</p>
-              <p className="text-2xl font-bold tracking-widest">{devCode}</p>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Name */}
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-text-secondary mb-2">
+                {t("yourName")} <span className="text-text-muted">({t("optional")})</span>
+              </label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                  placeholder={t("yourNamePlaceholder")}
+                />
+              </div>
             </div>
-          )}
 
-          {/* Email Step */}
-          {step === "email" && (
-            <form onSubmit={handleEmailSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-2">
-                  {t("email")}
-                </label>
+            {/* Email */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-2">
+                {t("email")}
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
                 <input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
                   placeholder="you@example.com"
                 />
               </div>
+            </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                {loading ? t("sending") : t("continueWithEmail")}
-              </button>
-            </form>
-          )}
-
-          {/* Code Step */}
-          {step === "code" && (
-            <form onSubmit={handleCodeSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="code" className="block text-sm font-medium text-text-secondary mb-2">
-                  {t("verificationCode")}
-                </label>
+            {/* Password */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-text-secondary mb-2">
+                {t("password")}
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
                 <input
-                  id="code"
-                  type="text"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors text-center text-2xl tracking-widest font-mono"
-                  placeholder="000000"
-                  maxLength={6}
+                  minLength={6}
+                  className="w-full pl-12 pr-12 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                  placeholder={t("passwordPlaceholder")}
                 />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading || code.length !== 6}
-                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                {loading ? t("verifying") : t("verifyEmail")}
-              </button>
-
-              <p className="text-center text-sm text-text-muted">
-                {t("didntReceive")}{" "}
                 <button
-                  onClick={() => {
-                    setDevCode("")
-                    setStep("email")
-                  }}
-                  className="text-accent hover:underline"
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-foreground"
                 >
-                  {t("tryAgain")}
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
-              </p>
-            </form>
-          )}
+              </div>
+            </div>
 
-          {/* Profile Step */}
-          {step === "profile" && (
-            <form onSubmit={handleProfileSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-text-secondary mb-2">
-                  {t("whatShouldWeCallYou")}
-                </label>
+            {/* Confirm Password */}
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-text-secondary mb-2">
+                {t("confirmPassword")}
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
                 <input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  id="confirmPassword"
+                  type={showPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
-                  placeholder={t("yourNamePlaceholder")}
+                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                  placeholder={t("confirmPassword")}
                 />
               </div>
+            </div>
 
-              <button
-                type="submit"
-                disabled={loading || !name.trim()}
-                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <User className="w-4 h-4" />}
-                {loading ? t("saving") : t("completeSignUp")}
-              </button>
-            </form>
-          )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {loading ? t("creating") : t("createAccount")}
+            </button>
+          </form>
 
           <p className="mt-8 text-center text-sm text-text-muted">
             {t("alreadyHaveAccount")}{" "}
