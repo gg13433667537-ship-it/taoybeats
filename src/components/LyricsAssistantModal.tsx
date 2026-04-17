@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { X, Loader2, Sparkles, RefreshCw, Check, AlertCircle } from "lucide-react"
 
 interface LyricsAssistantModalProps {
@@ -100,13 +100,13 @@ export default function LyricsAssistantModal({
     }
   }, [initialTitle, initialMood, loadDraft])
 
-  // Watch for isOpen changes using useState
-  useState(() => {
+  // Watch for isOpen changes
+  useEffect(() => {
     handleOpenChange(isOpen)
-  })
+  }, [isOpen, handleOpenChange])
 
   // Auto-save to localStorage
-  useState(() => {
+  useEffect(() => {
     if (!isOpen || !generatedLyrics) return
 
     const interval = setInterval(() => {
@@ -253,7 +253,7 @@ export default function LyricsAssistantModal({
               <p className="text-sm text-text-muted">输入框架，AI帮你创作完整歌词</p>
             </div>
           </div>
-          <button onClick={handleClose} className="p-2 rounded-lg hover:bg-surface-elevated transition-colors">
+          <button onClick={handleClose} aria-label="Close" className="p-2 rounded-lg hover:bg-surface-elevated transition-colors">
             <X className="w-5 h-5 text-text-muted" />
           </button>
         </div>
@@ -288,6 +288,7 @@ export default function LyricsAssistantModal({
                 <button
                   key={style}
                   onClick={() => toggleStyle(style)}
+                  aria-pressed={selectedStyles.includes(style)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     selectedStyles.includes(style)
                       ? 'bg-accent text-white'
@@ -309,6 +310,7 @@ export default function LyricsAssistantModal({
                 <button
                   key={m}
                   onClick={() => setState(s => ({ ...s, mood: m }))}
+                  aria-pressed={mood === m}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     mood === m
                       ? 'bg-accent text-white'
@@ -341,16 +343,17 @@ export default function LyricsAssistantModal({
             <button
               onClick={handleGenerate}
               disabled={isGenerating || !title.trim()}
+              aria-label="Generate lyrics with AI"
               className="px-8 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isGenerating ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
                   生成中...
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-5 h-5" />
+                  <Sparkles className="w-5 h-5" aria-hidden="true" />
                   AI生成歌词
                 </>
               )}
@@ -378,25 +381,27 @@ export default function LyricsAssistantModal({
                 <button
                   onClick={handleGenerate}
                   disabled={isGenerating}
+                  aria-label="Regenerate lyrics"
                   className="px-4 py-2 rounded-lg border border-border hover:border-accent text-text-secondary text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className="w-4 h-4" aria-hidden="true" />
                   重新生成
                 </button>
 
                 <button
                   onClick={handleConfirm}
                   disabled={isConfirming || !editedLyrics}
+                  aria-label="Confirm and use lyrics"
                   className="px-6 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   {isConfirming ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                       确认中...
                     </>
                   ) : (
                     <>
-                      <Check className="w-4 h-4" />
+                      <Check className="w-4 h-4" aria-hidden="true" />
                       确认使用歌词
                     </>
                   )}

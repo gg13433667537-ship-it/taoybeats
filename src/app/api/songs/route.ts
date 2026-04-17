@@ -102,6 +102,8 @@ export async function POST(request: NextRequest) {
       referenceSong,
       userNotes,
       isInstrumental,
+      voiceId,
+      referenceAudio,
       apiKey,
       apiUrl,
     } = body
@@ -172,6 +174,8 @@ export async function POST(request: NextRequest) {
       referenceSong,
       userNotes,
       isInstrumental: isInstrumental || false,
+      voiceId,
+      referenceAudio,
       status: "PENDING",
       shareToken,
       createdAt: now,
@@ -182,7 +186,9 @@ export async function POST(request: NextRequest) {
     songsMap.set(songId, song)
 
     // Start real generation in background
-    generateMusic(songId, song, apiKey, apiUrl).catch(console.error)
+    generateMusic(songId, song, apiKey, apiUrl).catch((err) => {
+      console.error(`[Generate] Song ${songId} background generation failed:`, err)
+    })
 
     return NextResponse.json({
       id: songId,
@@ -225,6 +231,8 @@ async function generateMusic(
       referenceSong: song.referenceSong,
       userNotes: song.userNotes,
       isInstrumental: song.isInstrumental,
+      voiceId: song.voiceId,
+      referenceAudio: song.referenceAudio,
     }, apiKey, apiUrl || 'https://api.minimaxi.com')
 
     // Poll for progress

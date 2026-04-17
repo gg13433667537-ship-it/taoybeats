@@ -97,6 +97,7 @@ export default function AdminPage() {
   const [showUserModal, setShowUserModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ show: boolean; userId?: string; songId?: string; type?: "user" | "song" }>({ show: false })
   const [actionLoading, setActionLoading] = useState(false)
+  const [adminError, setAdminError] = useState<string | null>(null)
   // Edit form state
   const [editFormState, setEditFormState] = useState({
     role: "USER",
@@ -181,11 +182,11 @@ export default function AdminPage() {
         setShowUserModal(false)
         setSelectedUser(null)
       } else {
-        alert(data.error || "更新失败")
+        setAdminError(data.error || "更新失败")
       }
     } catch (error) {
       console.error("Error updating user:", error)
-      alert("更新失败，请稍后重试")
+      setAdminError("更新失败，请稍后重试")
     }
     setActionLoading(false)
   }
@@ -200,11 +201,11 @@ export default function AdminPage() {
         await Promise.all([fetchUsers(userPagination.page, searchQuery), fetchStats()])
         setShowDeleteConfirm({ show: false })
       } else {
-        alert(data.error || "删除失败")
+        setAdminError(data.error || "删除失败")
       }
     } catch (error) {
       console.error("Error deleting user:", error)
-      alert("删除失败，请稍后重试")
+      setAdminError("删除失败，请稍后重试")
     }
     setActionLoading(false)
   }
@@ -299,9 +300,26 @@ export default function AdminPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
+        {adminError && (
+          <div className="mb-6 p-4 rounded-xl bg-error/10 border border-error/20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-error" />
+              <span className="text-error text-sm">{adminError}</span>
+            </div>
+            <button
+              onClick={() => setAdminError(null)}
+              aria-label="Dismiss error"
+              className="p-1 rounded hover:bg-error/10 text-error/60 hover:text-error transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         {/* Tabs */}
-        <div className="flex items-center gap-2 mb-8 border-b border-border">
+        <div role="tablist" className="flex items-center gap-2 mb-8 border-b border-border">
           <button
+            role="tab"
+            aria-selected={activeTab === "users"}
             onClick={() => setActiveTab("users")}
             className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
               activeTab === "users"
@@ -309,10 +327,12 @@ export default function AdminPage() {
                 : "border-transparent text-text-secondary hover:text-foreground"
             }`}
           >
-            <Users className="w-4 h-4 inline mr-2" />
+            <Users className="w-4 h-4 inline mr-2" aria-hidden="true" />
             {t('users')}
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === "songs"}
             onClick={() => setActiveTab("songs")}
             className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
               activeTab === "songs"
@@ -320,10 +340,12 @@ export default function AdminPage() {
                 : "border-transparent text-text-secondary hover:text-foreground"
             }`}
           >
-            <Music className="w-4 h-4 inline mr-2" />
+            <Music className="w-4 h-4 inline mr-2" aria-hidden="true" />
             {t('songs')}
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === "stats"}
             onClick={() => setActiveTab("stats")}
             className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
               activeTab === "stats"
@@ -331,7 +353,7 @@ export default function AdminPage() {
                 : "border-transparent text-text-secondary hover:text-foreground"
             }`}
           >
-            <BarChart3 className="w-4 h-4 inline mr-2" />
+            <BarChart3 className="w-4 h-4 inline mr-2" aria-hidden="true" />
             {t('stats')}
           </button>
         </div>

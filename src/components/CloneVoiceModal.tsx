@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
-import { X, Upload, Mic, Loader2, AlertCircle, Check, Music } from "lucide-react"
+import { useState, useRef, useCallback, useEffect } from "react"
+import { X, Upload, Mic, Loader2, AlertCircle, Check, Music, Sparkles, Play, Pause } from "lucide-react"
 
 interface CloneVoiceModalProps {
   isOpen: boolean
@@ -10,7 +10,19 @@ interface CloneVoiceModalProps {
   apiKey: string
 }
 
-type Tab = 'upload' | 'record'
+type Tab = 'upload' | 'record' | 'design'
+
+// Preset voices for AI design
+const PRESET_VOICES = [
+  { name: '温暖男声', prompt: '一个25岁的男孩，声音温暖柔和，带有一点磁性' },
+  { name: '活泼女声', prompt: '一个20岁的女孩，声音活泼可爱，充满青春活力' },
+  { name: '磁性低沉', prompt: '一个30岁的男人，声音低沉有磁性，像深夜电台主持' },
+  { name: '甜美女声', prompt: '一个18岁的女孩，声音甜美动人，清脆悦耳' },
+  { name: '硬朗大叔', prompt: '一个40岁的男人，声音粗犷有力，成熟稳重' },
+  { name: '清亮少年', prompt: '一个16岁的少年，声音清澈明亮，阳光帅气' },
+]
+
+const PREVIEW_TEXT = '你好，我是你的AI音色助手。很高兴为你服务。'
 
 interface ModalState {
   activeTab: Tab
@@ -20,7 +32,12 @@ interface ModalState {
   error: string | null
   success: string | null
   audioBlob: Blob | null
-  demoAudioUrl: string | null
+  // Design tab
+  selectedPreset: string | null
+  customPrompt: string
+  isDesigning: boolean
+  trialAudioUrl: string | null
+  designedVoiceId: string | null
 }
 
 const initialState: ModalState = {
@@ -31,7 +48,11 @@ const initialState: ModalState = {
   error: null,
   success: null,
   audioBlob: null,
-  demoAudioUrl: null,
+  selectedPreset: null,
+  customPrompt: '',
+  isDesigning: false,
+  trialAudioUrl: null,
+  designedVoiceId: null,
 }
 
 // Helper to generate unique voice ID
@@ -39,24 +60,174 @@ const generateVoiceId = (): string => {
   return `voice_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
 }
 
+// Voice Design Content Subcomponent
+interface VoiceDesignContentProps {
+  selectedPreset: string | null
+  customPrompt: string
+  isDesigning: boolean
+  trialAudioUrl: string | null
+  designedVoiceId: string | null
+  onSelectPreset: (preset: string) => void
+  onCustomPromptChange: (prompt: string) => void
+  onDesign: () => void
+  onUse: () => void
+}
+
+function VoiceDesignContent({
+  selectedPreset,
+  customPrompt,
+  isDesigning,
+  trialAudioUrl,
+  designedVoiceId,
+  onSelectPreset,
+  onCustomPromptChange,
+  onDesign,
+  onUse,
+}: VoiceDesignContentProps) {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const togglePlay = () => {
+    if (!audioRef.current) return
+    if (isPlaying) {
+      audioRef.current.pause()
+    } else {
+      audioRef.current.play()
+    }
+    setIsPlaying(!isPlaying)
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Presets */}
+      <div>
+        <label className="block text-sm font-medium text-text-secondary mb-2">预设音色（选择即可）</label>
+        <div className="grid grid-cols-3 gap-2">
+          {PRESET_VOICES.map(preset => (
+            <button
+              key={preset.name}
+              onClick={() => onSelectPreset(preset.name)}
+              className={`p-2 rounded-lg border text-left transition-colors ${
+                selectedPreset === preset.name
+                  ? 'border-accent bg-accent/10'
+                  : 'border-border hover:border-accent'
+              }`}
+            >
+              <p className="text-xs font-medium text-foreground">{preset.name}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="flex items-center gap-4">
+        <div className="flex-1 h-px bg-border" />
+        <span className="text-xs text-text-muted">或</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+
+      {/* Custom Input */}
+      <div>
+        <label className="block text-sm font-medium text-text-secondary mb-2">自定义描述</label>
+        <textarea
+          value={customPrompt}
+          onChange={(e) => onCustomPromptChange(e.target.value)}
+          placeholder="输入音色描述，例如：一个25岁的男孩，声音温柔，有点沙哑..."
+          rows={2}
+          className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent resize-none text-sm"
+        />
+      </div>
+
+      {/* Preview Audio */}
+      {trialAudioUrl && (
+        <div className="p-3 rounded-xl bg-surface-elevated">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-foreground">试听音色</p>
+            <button
+              onClick={togglePlay}
+              aria-label={isPlaying ? "Pause" : "Play"}
+              className="p-1.5 rounded-lg hover:bg-surface transition-colors"
+            >
+              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            </button>
+          </div>
+          <audio
+            ref={audioRef}
+            src={trialAudioUrl}
+            onEnded={() => setIsPlaying(false)}
+            className="hidden"
+          />
+          <div className="h-8 rounded-lg bg-surface flex items-center justify-center text-xs text-text-muted">
+            音频预览
+          </div>
+        </div>
+      )}
+
+      {/* Fee Notice */}
+      <div className="p-2 rounded-lg bg-warning/10 border border-warning/20">
+        <p className="text-xs text-warning">💡 AI生成音色会产生费用，2元/万字符</p>
+      </div>
+
+      {/* Generate Button */}
+      <button
+        onClick={onDesign}
+        disabled={isDesigning || (!selectedPreset && !customPrompt.trim())}
+        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+      >
+        {isDesigning ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            生成中...
+          </>
+        ) : (
+          <>
+            <Sparkles className="w-4 h-4" />
+            生成音色
+          </>
+        )}
+      </button>
+
+      {/* Use Button */}
+      {designedVoiceId && (
+        <button
+          onClick={onUse}
+          className="w-full py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+        >
+          <Check className="w-4 h-4" />
+          使用这个音色
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: CloneVoiceModalProps) {
   const [state, setState] = useState<ModalState>(initialState)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { activeTab, isCloning, isRecording, recordingTime, error, success, audioBlob } = state
+  const { activeTab, isCloning, isRecording, recordingTime, error, success, audioBlob, selectedPreset, customPrompt, isDesigning, trialAudioUrl, designedVoiceId } = state
 
   // Cleanup on unmount
   const cleanup = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current)
     }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop()
     }
   }, [])
+
+  // Register cleanup on unmount
+  useEffect(() => {
+    return cleanup
+  }, [cleanup])
 
   // Handle open/close - reset state when opening
   const handleOpenChange = useCallback((open: boolean) => {
@@ -69,9 +240,9 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
   }, [cleanup])
 
   // Watch for isOpen changes
-  useState(() => {
+  useEffect(() => {
     handleOpenChange(isOpen)
-  })
+  }, [isOpen, handleOpenChange])
 
   // File upload
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -195,10 +366,10 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
 
       setState(s => ({ ...s, success: '音色克隆成功！' }))
       if (cloneData.demo_audio) {
-        setState(s => ({ ...s, demoAudioUrl: `data:audio/wav;base64,${cloneData.demo_audio}` }))
+        setState(s => ({ ...s, trialAudioUrl: `data:audio/wav;base64,${cloneData.demo_audio}` }))
       }
 
-      setTimeout(() => {
+      timeoutRef.current = setTimeout(() => {
         onSuccess(cloneData.voice_id)
         onClose()
       }, 1500)
@@ -220,6 +391,66 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
       reader.onerror = reject
       reader.readAsDataURL(blob)
     })
+  }
+
+  // Handle voice design
+  const handleVoiceDesign = async () => {
+    const prompt = state.selectedPreset
+      ? PRESET_VOICES.find(p => p.name === state.selectedPreset)?.prompt
+      : state.customPrompt.trim()
+
+    if (!prompt) {
+      setState(s => ({ ...s, error: '请选择预设音色或输入自定义描述' }))
+      return
+    }
+
+    setState(s => ({ ...s, isDesigning: true, error: null }))
+
+    try {
+      const response = await fetch('/api/voice/design', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          preview_text: PREVIEW_TEXT,
+          apiKey,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '生成失败')
+      }
+
+      let trialUrl = null
+      if (data.trial_audio) {
+        try {
+          const hex = data.trial_audio
+          const bytes = new Uint8Array(hex.length / 2)
+          for (let i = 0; i < hex.length; i += 2) {
+            bytes[i / 2] = parseInt(hex.substr(i, 2), 16)
+          }
+          const blob = new Blob([bytes], { type: 'audio/wav' })
+          trialUrl = URL.createObjectURL(blob)
+        } catch {
+          // Ignore audio conversion errors
+        }
+      }
+
+      setState(s => ({
+        ...s,
+        isDesigning: false,
+        designedVoiceId: data.voice_id,
+        trialAudioUrl: trialUrl,
+      }))
+    } catch (err) {
+      setState(s => ({
+        ...s,
+        error: err instanceof Error ? err.message : '生成失败，请重试',
+        isDesigning: false,
+      }))
+    }
   }
 
   const handleClose = () => {
@@ -264,24 +495,39 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
             </div>
           )}
 
-          <div className="flex gap-2 p-1 bg-surface-elevated rounded-xl">
+          <div role="tablist" className="flex gap-2 p-1 bg-surface-elevated rounded-xl">
             <button
+              role="tab"
+              aria-selected={activeTab === 'upload'}
               onClick={() => setState(s => ({ ...s, activeTab: 'upload' }))}
               className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                 activeTab === 'upload' ? 'bg-surface text-foreground shadow-sm' : 'text-text-muted hover:text-foreground'
               }`}
             >
-              <Upload className="w-4 h-4" />
+              <Upload className="w-4 h-4" aria-hidden="true" />
               上传音频
             </button>
             <button
+              role="tab"
+              aria-selected={activeTab === 'record'}
               onClick={() => setState(s => ({ ...s, activeTab: 'record' }))}
               className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                 activeTab === 'record' ? 'bg-surface text-foreground shadow-sm' : 'text-text-muted hover:text-foreground'
               }`}
             >
-              <Mic className="w-4 h-4" />
+              <Mic className="w-4 h-4" aria-hidden="true" />
               录音
+            </button>
+            <button
+              role="tab"
+              aria-selected={activeTab === 'design'}
+              onClick={() => setState(s => ({ ...s, activeTab: 'design' }))}
+              className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                activeTab === 'design' ? 'bg-surface text-foreground shadow-sm' : 'text-text-muted hover:text-foreground'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" aria-hidden="true" />
+              AI生成
             </button>
           </div>
 
@@ -365,18 +611,44 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
             </div>
           )}
 
-          <div className="p-4 rounded-xl bg-accent/5 border border-accent/20">
-            <p className="text-sm text-accent font-medium mb-1">💡 录音技巧</p>
-            <ul className="text-xs text-text-muted space-y-1">
-              <li>• 请用普通话清晰朗读</li>
-              <li>• 确保环境安静，无背景噪音</li>
-              <li>• 时长3-8秒效果最佳</li>
-            </ul>
-          </div>
+          {activeTab === 'design' && (
+            <VoiceDesignContent
+              selectedPreset={selectedPreset}
+              customPrompt={customPrompt}
+              isDesigning={isDesigning}
+              trialAudioUrl={trialAudioUrl}
+              designedVoiceId={designedVoiceId}
+              onSelectPreset={(preset) => setState(s => ({ ...s, selectedPreset: preset, customPrompt: '' }))}
+              onCustomPromptChange={(prompt) => setState(s => ({ ...s, customPrompt: prompt, selectedPreset: null }))}
+              onDesign={handleVoiceDesign}
+              onUse={() => {
+                if (designedVoiceId) {
+                  onSuccess(designedVoiceId)
+                  onClose()
+                }
+              }}
+            />
+          )}
+
+          {activeTab !== 'design' && (
+            <div className="p-4 rounded-xl bg-accent/5 border border-accent/20">
+              <p className="text-sm text-accent font-medium mb-1">💡 录音技巧</p>
+              <ul className="text-xs text-text-muted space-y-1">
+                <li>• 请用普通话清晰朗读</li>
+                <li>• 确保环境安静，无背景噪音</li>
+                <li>• 时长3-8秒效果最佳</li>
+              </ul>
+            </div>
+          )}
 
           <button
-            onClick={handleClone}
-            disabled={!audioBlob || isCloning}
+            onClick={activeTab === 'design' ? () => {
+              if (designedVoiceId) {
+                onSuccess(designedVoiceId)
+                onClose()
+              }
+            } : handleClone}
+            disabled={activeTab === 'design' ? !designedVoiceId : !audioBlob || isCloning}
             className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isCloning ? (
@@ -384,6 +656,8 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
                 <Loader2 className="w-5 h-5 animate-spin" />
                 克隆中...
               </>
+            ) : activeTab === 'design' ? (
+              '继续克隆'
             ) : (
               '开始克隆'
             )}

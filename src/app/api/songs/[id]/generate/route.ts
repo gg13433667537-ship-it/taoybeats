@@ -42,7 +42,9 @@ export async function POST(
 
     // Start generation in background
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
-    generateMusic(id, updatedSong, apiKey, baseUrl).catch(console.error)
+    generateMusic(id, updatedSong, apiKey, baseUrl).catch((err) => {
+      console.error(`[Regenerate] Song ${id} background generation failed:`, err)
+    })
 
     return NextResponse.json({
       id,
@@ -80,6 +82,9 @@ async function generateMusic(
       referenceSinger: song.referenceSinger,
       referenceSong: song.referenceSong,
       userNotes: song.userNotes,
+      isInstrumental: song.isInstrumental,
+      voiceId: song.voiceId,
+      referenceAudio: song.referenceAudio,
     }, apiKey, apiUrl)
 
     // Poll for progress

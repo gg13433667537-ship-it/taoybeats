@@ -121,29 +121,30 @@ export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayer
       {/* Play/Pause */}
       <button
         onClick={togglePlay}
+        aria-label={isPlaying ? "Pause" : "Play"}
         className="w-12 h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors flex-shrink-0"
       >
         {isPlaying ? (
-          <Pause className="w-5 h-5" />
+          <Pause className="w-5 h-5" aria-hidden="true" />
         ) : (
-          <Play className="w-5 h-5 ml-0.5" />
+          <Play className="w-5 h-5 ml-0.5" aria-hidden="true" />
         )}
       </button>
 
       {/* Skip buttons */}
       <button
         onClick={() => skip(-10)}
+        aria-label="Back 10 seconds"
         className="text-text-secondary hover:text-foreground transition-colors"
-        title="Back 10s"
       >
-        <SkipBack className="w-5 h-5" />
+        <SkipBack className="w-5 h-5" aria-hidden="true" />
       </button>
       <button
         onClick={() => skip(10)}
+        aria-label="Forward 10 seconds"
         className="text-text-secondary hover:text-foreground transition-colors"
-        title="Forward 10s"
       >
-        <SkipForward className="w-5 h-5" />
+        <SkipForward className="w-5 h-5" aria-hidden="true" />
       </button>
 
       {/* Track info */}
@@ -160,6 +161,7 @@ export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayer
           max={duration || 100}
           value={currentTime}
           onChange={handleSeek}
+          aria-label={`Progress: ${formatTime(currentTime)} of ${formatTime(duration)}`}
           className="w-full h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent"
           style={{
             background: `linear-gradient(to right, #a855f7 ${progress}%, #2a2a2a ${progress}%)`,
@@ -175,6 +177,7 @@ export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayer
       <div className="flex items-center gap-2 flex-shrink-0">
         <button
           onClick={toggleMute}
+          aria-label={isMuted ? "Unmute" : "Mute"}
           className="text-text-secondary hover:text-foreground transition-colors"
         >
           {isMuted || volume === 0 ? (
@@ -190,6 +193,7 @@ export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayer
           step={0.1}
           value={isMuted ? 0 : volume}
           onChange={handleVolumeChange}
+          aria-label={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
           className="w-20 h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent"
         />
       </div>

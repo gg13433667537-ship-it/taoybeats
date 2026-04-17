@@ -30,6 +30,8 @@ export interface Song {
   referenceSong?: string
   userNotes?: string
   isInstrumental?: boolean
+  voiceId?: string
+  referenceAudio?: string
   status: SongStatus
   audioUrl?: string
   coverUrl?: string

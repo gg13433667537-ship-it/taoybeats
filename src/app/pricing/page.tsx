@@ -94,6 +94,8 @@ export default function PricingPage() {
             {t('monthly')}
           </span>
           <button
+            role="switch"
+            aria-checked={annual}
             onClick={() => setAnnual(!annual)}
             className={`relative w-14 h-7 rounded-full transition-colors ${
               annual ? 'bg-accent' : 'bg-border'
@@ -141,14 +143,14 @@ export default function PricingPage() {
               </div>
 
               <ul className="space-y-3 mb-8">
-                {plan.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-3 text-sm">
                     <Check className="w-4 h-4 text-success flex-shrink-0 mt-0.5" />
                     <span className="text-foreground">{feature}</span>
                   </li>
                 ))}
-                {plan.notIncluded.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm opacity-50">
+                {plan.notIncluded.map((feature) => (
+                  <li key={feature} className="flex items-start gap-3 text-sm opacity-50">
                     <Check className="w-4 h-4 flex-shrink-0 mt-0.5" />
                     <span className="text-text-secondary">{feature}</span>
                   </li>
@@ -176,24 +178,12 @@ export default function PricingPage() {
           </h2>
           <div className="space-y-4">
             {[
-              {
-                q: t('faq1Q'),
-                a: t('faq1A'),
-              },
-              {
-                q: t('faq2Q'),
-                a: t('faq2A'),
-              },
-              {
-                q: t('faq3Q'),
-                a: t('faq3A'),
-              },
-              {
-                q: t('faq4Q'),
-                a: t('faq4A'),
-              },
-            ].map((item, i) => (
-              <div key={i} className="p-4 rounded-xl bg-surface border border-border">
+              { key: 'faq1', q: t('faq1Q'), a: t('faq1A') },
+              { key: 'faq2', q: t('faq2Q'), a: t('faq2A') },
+              { key: 'faq3', q: t('faq3Q'), a: t('faq3A') },
+              { key: 'faq4', q: t('faq4Q'), a: t('faq4A') },
+            ].map((item) => (
+              <div key={item.key} className="p-4 rounded-xl bg-surface border border-border">
                 <h3 className="font-medium text-foreground mb-2">{item.q}</h3>
                 <p className="text-sm text-text-secondary">{item.a}</p>
               </div>

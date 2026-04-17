@@ -25,6 +25,8 @@ export type SongParams = {
   referenceSong?: string
   userNotes?: string
   isInstrumental?: boolean
+  voiceId?: string
+  referenceAudio?: string
 }
 
 export type AIProvider = {
@@ -69,6 +71,8 @@ export const miniMaxProvider: AIProvider = {
           format: 'mp3'
         },
         aigc_watermark: false,
+        voice_id: params.voiceId,
+        reference_audio: params.referenceAudio,
       }),
     })
 

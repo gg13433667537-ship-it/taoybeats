@@ -161,9 +161,10 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           <button
             onClick={() => step !== "email" && setStep("email")}
+            aria-label={t("back")}
             className="flex items-center gap-2 text-sm text-text-secondary hover:text-foreground transition-colors mb-8"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
             {t("back")}
           </button>
 
@@ -214,9 +215,10 @@ export default function LoginPage() {
               <button
                 onClick={() => checkEmail(email)}
                 disabled={!email || !email.includes("@")}
+                aria-label={t("continueWithEmail")}
                 className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                <Mail className="w-4 h-4" />
+                <Mail className="w-4 h-4" aria-hidden="true" />
                 {t("continueWithEmail")}
               </button>
             </div>
@@ -247,6 +249,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   className="absolute right-3 top-9 text-text-muted hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -256,9 +259,10 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading || !password}
+                aria-label={loading ? t("signingIn") : t("signIn")}
                 className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Lock className="w-4 h-4" aria-hidden="true" />}
                 {loading ? t("signingIn") : t("signIn")}
               </button>
 
@@ -304,9 +308,10 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading || code.length !== 6}
+                aria-label={loading ? t("verifying") : t("verifySignIn")}
                 className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Lock className="w-4 h-4" aria-hidden="true" />}
                 {loading ? t("verifying") : t("verifySignIn")}
               </button>
 

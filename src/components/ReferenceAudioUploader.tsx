@@ -96,6 +96,7 @@ export default function ReferenceAudioUploader({
           </div>
           <button
             onClick={onRemove}
+            aria-label="Remove reference audio"
             className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
           >
             <X className="w-4 h-4" />
@@ -108,10 +109,18 @@ export default function ReferenceAudioUploader({
   return (
     <div>
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            fileInputRef.current?.click()
+          }
+        }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        aria-label="Upload reference audio"
         className={`p-6 rounded-xl border-2 border-dashed transition-colors cursor-pointer ${
           isDragging
             ? 'border-accent bg-accent/5'
@@ -123,6 +132,7 @@ export default function ReferenceAudioUploader({
           type="file"
           accept="audio/mp3,audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/m4a,audio/x-m4a"
           onChange={handleFileChange}
+          aria-label="Reference audio file input"
           className="hidden"
         />
 

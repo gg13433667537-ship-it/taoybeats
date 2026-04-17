@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { Music, Play, Pause, Download, Share2, Check, Loader2, Volume2, VolumeX, RefreshCw } from "lucide-react"
+import { Music, Play, Pause, Download, Share2, Check, Loader2, Volume2, VolumeX, RefreshCw, AlertCircle, X } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 export default function SongSharePage() {
@@ -30,6 +30,7 @@ export default function SongSharePage() {
   const [isMuted, setIsMuted] = useState(false)
   const [waveformData, setWaveformData] = useState<number[]>([])
   const [isRemixing, setIsRemixing] = useState(false)
+  const [songError, setSongError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const animationRef = useRef<number | null>(null)
@@ -50,6 +51,7 @@ export default function SongSharePage() {
         }
       } catch (error) {
         console.error("Error fetching song:", error)
+        setSongError("加载歌曲失败，请刷新页面重试")
       } finally {
         setLoading(false)
       }
@@ -169,7 +171,11 @@ export default function SongSharePage() {
   }, [waveformData, isPlaying, currentTime, duration])
 
   const handleShare = async () => {
-    const shareUrl = window.location.href
+    // Use shareToken for public URL, fall back to current URL
+    const shareToken = (song as { shareToken?: string })?.shareToken
+    const shareUrl = shareToken
+      ? `${window.location.origin}/song/${shareToken}`
+      : window.location.href
     if (navigator.share) {
       await navigator.share({
         title: song?.title || "TaoyBeats Song",
@@ -195,8 +201,7 @@ export default function SongSharePage() {
     // Get API key from localStorage or prompt user
     const apiKey = localStorage.getItem('minimax_api_key')
     if (!apiKey) {
-      alert('Please set your MiniMax API key in the generate page first.')
-      window.location.href = '/generate'
+      setSongError('请先在生成页面设置 MiniMax API Key')
       return
     }
 
@@ -213,11 +218,11 @@ export default function SongSharePage() {
         // Redirect to generate page with fork parameters
         window.location.href = `/generate?fork=${songId}&songId=${data.id}`
       } else {
-        alert('Failed to remix song. Please try again.')
+        setSongError('Remix失败，请重试')
       }
     } catch (error) {
       console.error('Remix error:', error)
-      alert('Failed to remix song. Please try again.')
+      setSongError('Remix失败，请重试')
     } finally {
       setIsRemixing(false)
     }
@@ -262,6 +267,24 @@ export default function SongSharePage() {
           src={song.audioUrl}
           preload="metadata"
         />
+      )}
+
+      {/* Error Banner */}
+      {songError && (
+        <div className="mx-auto mt-4 max-w-5xl px-4 pt-4">
+          <div className="p-4 rounded-xl bg-error/10 border border-error/20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-error" />
+              <span className="text-error text-sm">{songError}</span>
+            </div>
+            <button
+              onClick={() => setSongError(null)}
+              className="p-1 rounded hover:bg-error/10 text-error/60 hover:text-error transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Header */}
@@ -406,28 +429,31 @@ export default function SongSharePage() {
               <button
                 onClick={handleDownload}
                 disabled={!song.audioUrl || isGenerating}
+                aria-label="Download song"
                 className="flex-1 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-4 h-4" aria-hidden="true" />
                 Download
               </button>
               <button
                 onClick={handleRemix}
                 disabled={isGenerating || isRemixing}
+                aria-label={isRemixing ? "Remixing..." : "Remix this song"}
                 className="flex-1 py-3 rounded-xl bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-400 font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isRemixing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                 ) : (
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className="w-4 h-4" aria-hidden="true" />
                 )}
                 {isRemixing ? "Remixing..." : "Remix"}
               </button>
               <button
                 onClick={handleShare}
+                aria-label={copied ? "Link copied!" : "Share song"}
                 className="py-3 px-4 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
               >
-                {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                {copied ? <Check className="w-4 h-4" aria-hidden="true" /> : <Share2 className="w-4 h-4" aria-hidden="true" />}
                 {copied ? "Copied!" : "Share"}
               </button>
             </div>

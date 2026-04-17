@@ -42,14 +42,24 @@ export default function SettingsPage() {
   const [email, setEmail] = useState('demo@taoybeats.com')
 
   // API state
-  const [apiProvider, setApiProvider] = useState('suno')
+  const [apiProvider, setApiProvider] = useState('minimax')
   const [apiUrl, setApiUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [modelId, setModelId] = useState('')
 
+  // Load API key from localStorage on mount
+  useEffect(() => {
+    const savedKey = localStorage.getItem('minimax_api_key')
+    const savedUrl = localStorage.getItem('minimax_api_url')
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (savedKey) setApiKey(savedKey)
+    if (savedUrl) setApiUrl(savedUrl)
+  }, [])
+
   const handleSave = async () => {
-    // Simulate save
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // Save API key and URL to localStorage
+    localStorage.setItem('minimax_api_key', apiKey)
+    localStorage.setItem('minimax_api_url', apiUrl)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }

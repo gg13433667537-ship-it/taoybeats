@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, startTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap, Shield, LogOut, User, ChevronDown, Settings } from "lucide-react"
+import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap, Shield, LogOut, User, ChevronDown, Settings, AlertCircle, X } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 interface Song {
@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState<string>('')
   const [userEmail, setUserEmail] = useState<string>('')
   const [showDropdown, setShowDropdown] = useState(false)
+  const [dashboardError, setDashboardError] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Get user info from session cookie
@@ -100,6 +101,7 @@ export default function DashboardPage() {
         }
       } catch (error) {
         console.error("Error fetching data:", error)
+        setDashboardError("加载数据失败，请刷新页面重试")
       } finally {
         setLoading(false)
       }
@@ -228,6 +230,22 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold text-foreground mb-2">{t('yourMusic')}</h1>
             <p className="text-text-secondary">{t('manageShare')}</p>
           </div>
+
+          {/* Error Banner */}
+          {dashboardError && (
+            <div className="mb-6 p-4 rounded-xl bg-error/10 border border-error/20 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-error" />
+                <span className="text-error text-sm">{dashboardError}</span>
+              </div>
+              <button
+                onClick={() => setDashboardError(null)}
+                className="p-1 rounded hover:bg-error/10 text-error/60 hover:text-error transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Usage Stats */}
           {usage && (
@@ -366,7 +384,9 @@ export default function DashboardPage() {
 
                       {/* Song Info */}
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-foreground truncate">{song.title}</h3>
+                        <Link href={`/song/${song.id}`} className="block hover:underline">
+                          <h3 className="font-medium text-foreground truncate">{song.title}</h3>
+                        </Link>
                         <div className="flex items-center gap-3 text-sm text-text-secondary">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(song.status)}`}>
                             {song.status === 'COMPLETED' ? t('ready') :

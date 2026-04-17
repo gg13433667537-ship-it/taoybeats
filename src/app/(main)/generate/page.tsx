@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Music, Loader2, Download, Share2, Check, AlertCircle, RefreshCw, Shield, Info, Sparkles } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 import AudioPlayer from "@/components/AudioPlayer"
@@ -33,9 +33,11 @@ type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | '
 
 export default function GeneratePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { t } = useI18n()
 
-  // Compute user role from cookie without setState in effect
+  // Handle fork parameter (remix from shared song)
+  const forkedSongId = searchParams.get('songId')
   const userRole = (() => {
     if (typeof document === 'undefined') return 'USER'
     const cookies = document.cookie.split(';')
@@ -81,6 +83,37 @@ export default function GeneratePage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [stageMessage, setStageMessage] = useState<string>('')
+
+  // Load API key from localStorage on mount
+  useEffect(() => {
+    const savedKey = localStorage.getItem('minimax_api_key')
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (savedKey) setApiKey(savedKey)
+  }, [])
+
+  // Load forked song data if fork parameter is present
+  useEffect(() => {
+    if (forkedSongId) {
+      fetch(`/api/songs/${forkedSongId}`)
+        .then(res => res.json())
+        .then(song => {
+          if (song) {
+            setTitle(song.title || '')
+            setLyrics(song.lyrics || '')
+            setSelectedGenres(song.genre || [])
+            setMood(song.mood || '')
+            setSelectedInstruments(song.instruments || [])
+            setReferenceSinger(song.referenceSinger || '')
+            setReferenceSong(song.referenceSong || '')
+            setUserNotes(song.userNotes || '')
+            setIsInstrumental(song.isInstrumental || false)
+          }
+        })
+        .catch(() => {
+          // Forked song not found - silently ignore
+        })
+    }
+  }, [forkedSongId])
 
   // Handle genre toggle
   const toggleGenre = (genre: string) => {
@@ -140,6 +173,8 @@ export default function GeneratePage() {
           referenceSong,
           userNotes,
           isInstrumental,
+          voiceId: selectedVoiceId,
+          referenceAudio,
           apiKey,
           apiUrl: 'https://api.minimaxi.com',
         }),
@@ -156,44 +191,62 @@ export default function GeneratePage() {
       const { id: newSongId } = await createResponse.json()
       setSongId(newSongId)
 
-      // Connect to SSE stream for progress updates
-      const eventSource = new EventSource(`/api/songs/${newSongId}/stream`)
+      // SSE connection state
+      let eventSource: EventSource | null = null
+      let retryCount = 0
+      const maxRetries = 5
+      const baseDelay = 1000
 
-      eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data)
-        setProgress(data.progress || 0)
+      const connectSSE = () => {
+        eventSource = new EventSource(`/api/songs/${newSongId}/stream`)
 
-        if (data.stage) {
-          setStageMessage(data.stage)
+        eventSource.onmessage = (event) => {
+          retryCount = 0 // Reset retry count on successful message
+          const data = JSON.parse(event.data)
+          setProgress(data.progress || 0)
+
+          if (data.stage) {
+            setStageMessage(data.stage)
+          }
+
+          switch (data.status) {
+            case 'PENDING':
+              setGenerationStage('initializing')
+              break
+            case 'GENERATING':
+              setGenerationStage('generating')
+              break
+            case 'COMPLETED':
+              setGenerationStage('completed')
+              if (data.audioUrl) {
+                setAudioUrl(data.audioUrl)
+              }
+              eventSource?.close()
+              break
+            case 'FAILED':
+              setGenerationStage('failed')
+              setError(data.error || 'Generation failed')
+              eventSource?.close()
+              break
+          }
         }
 
-        switch (data.status) {
-          case 'PENDING':
-            setGenerationStage('initializing')
-            break
-          case 'GENERATING':
-            setGenerationStage('generating')
-            break
-          case 'COMPLETED':
-            setGenerationStage('completed')
-            if (data.audioUrl) {
-              setAudioUrl(data.audioUrl)
-            }
-            eventSource.close()
-            break
-          case 'FAILED':
+        eventSource.onerror = () => {
+          eventSource?.close()
+
+          if (retryCount < maxRetries) {
+            const delay = baseDelay * Math.pow(2, retryCount)
+            retryCount++
+            setError(`Connection lost. Reconnecting in ${Math.round(delay/1000)}s... (Attempt ${retryCount}/${maxRetries})`)
+            setTimeout(connectSSE, delay)
+          } else {
             setGenerationStage('failed')
-            setError(data.error || 'Generation failed')
-            eventSource.close()
-            break
+            setError('Connection lost after multiple attempts. Please try again.')
+          }
         }
       }
 
-      eventSource.onerror = () => {
-        setGenerationStage('failed')
-        setError('Connection lost. Please try again.')
-        eventSource.close()
-      }
+      connectSSE()
     } catch (err) {
       setGenerationStage('failed')
       setError(err instanceof Error ? err.message : 'Generation failed')
@@ -267,6 +320,12 @@ export default function GeneratePage() {
               className="text-sm text-text-secondary hover:text-foreground transition-colors"
             >
               {t('dashboard')}
+            </button>
+            <button
+              onClick={() => router.push('/pricing')}
+              className="text-sm text-text-secondary hover:text-foreground transition-colors"
+            >
+              {t('pricing')}
             </button>
             {userRole === 'ADMIN' && (
               <button
@@ -403,7 +462,11 @@ export default function GeneratePage() {
                       disabled={isInstrumental}
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent resize-none font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     />
-                    <p className="mt-1 text-xs text-text-muted">{lyrics.length}/5000 characters</p>
+                    {isInstrumental ? (
+                      <p className="mt-1 text-xs text-accent">Lyrics disabled because Instrumental mode is on</p>
+                    ) : (
+                      <p className="mt-1 text-xs text-text-muted">{lyrics.length}/5000 characters</p>
+                    )}
                   </div>
 
                   {/* Genre */}

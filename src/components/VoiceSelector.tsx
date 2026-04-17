@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { ChevronDown, Plus, Trash2, Volume2, Loader2, AlertCircle } from "lucide-react"
 import CloneVoiceModal from "./CloneVoiceModal"
 
@@ -38,8 +38,12 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
     setIsLoading(true)
     setError(null)
 
+    const abortController = new AbortController()
+
     try {
-      const response = await fetch(`/api/voice/list?voice_type=all&apiKey=${encodeURIComponent(apiKey)}`)
+      const response = await fetch(`/api/voice/list?voice_type=all&apiKey=${encodeURIComponent(apiKey)}`, {
+        signal: abortController.signal,
+      })
       const data = await response.json()
 
       if (!response.ok) {
@@ -59,18 +63,22 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
 
       setVoices(userVoices)
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
       setError(err instanceof Error ? err.message : '获取音色列表失败')
     } finally {
+      if (abortController.signal.aborted) return
       setIsLoading(false)
     }
   }, [apiKey])
 
-  // Watch for isOpen changes
-  useState(() => {
+  // Watch for isOpen changes - intentionally calls loadVoices which triggers setState
+  // This is a standard "load on open" pattern for modals/dropdowns
+  useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadVoices()
     }
-  })
+  }, [isOpen, loadVoices])
 
   const selectedVoice = [...systemVoices, ...voices].find(v => v.voice_id === selectedVoiceId)
   const selectedVoiceName = selectedVoice?.voice_name || selectedVoice?.voice_id || '系统默认'

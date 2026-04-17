@@ -159,6 +159,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -188,9 +189,10 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
+              aria-label={loading ? t("creating") : t("createAccount")}
               className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
               {loading ? t("creating") : t("createAccount")}
             </button>
           </form>
