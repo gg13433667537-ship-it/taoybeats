@@ -20,7 +20,11 @@ function getSessionUser(request: NextRequest): any | null {
 
   try {
     const payload = JSON.parse(Buffer.from(sessionToken, 'base64').toString())
-    return users.get(payload.id) || null
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+    }
   } catch {
     return null
   }

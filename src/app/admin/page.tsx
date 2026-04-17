@@ -167,13 +167,17 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, ...updates }),
       })
+      const data = await res.json()
       if (res.ok) {
         await Promise.all([fetchUsers(userPagination.page, searchQuery), fetchStats()])
         setShowUserModal(false)
         setSelectedUser(null)
+      } else {
+        alert(data.error || "更新失败")
       }
     } catch (error) {
       console.error("Error updating user:", error)
+      alert("更新失败，请稍后重试")
     }
     setActionLoading(false)
   }
@@ -183,12 +187,16 @@ export default function AdminPage() {
     setActionLoading(true)
     try {
       const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" })
+      const data = await res.json()
       if (res.ok) {
         await Promise.all([fetchUsers(userPagination.page, searchQuery), fetchStats()])
         setShowDeleteConfirm({ show: false })
+      } else {
+        alert(data.error || "删除失败")
       }
     } catch (error) {
       console.error("Error deleting user:", error)
+      alert("删除失败，请稍后重试")
     }
     setActionLoading(false)
   }

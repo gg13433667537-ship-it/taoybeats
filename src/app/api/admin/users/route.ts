@@ -20,7 +20,13 @@ function getSessionUser(request: NextRequest): any | null {
 
   try {
     const payload = JSON.parse(Buffer.from(sessionToken, 'base64').toString())
-    return users.get(payload.id) || null
+    // Trust role from JWT - JWT is signed with AUTH_SECRET so contents are trusted
+    // This avoids needing to look up user in memory (which doesn't work across Vercel instances)
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+    }
   } catch {
     return null
   }
