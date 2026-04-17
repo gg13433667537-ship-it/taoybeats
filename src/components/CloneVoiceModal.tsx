@@ -475,8 +475,8 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
               <p className="text-sm text-text-muted">上传音频或录音来克隆音色</p>
             </div>
           </div>
-          <button onClick={handleClose} className="p-2 rounded-lg hover:bg-surface-elevated transition-colors">
-            <X className="w-5 h-5 text-text-muted" />
+          <button onClick={handleClose} aria-label="Close modal" className="p-2 rounded-lg hover:bg-surface-elevated transition-colors">
+            <X className="w-5 h-5 text-text-muted" aria-hidden="true" />
           </button>
         </div>
 
@@ -575,6 +575,7 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
                   <p className="text-2xl font-mono text-foreground mb-4">0:{recordingTime.toString().padStart(2, '0')} / 0:08</p>
                   <button
                     onClick={stopRecording}
+                    aria-label="Stop recording"
                     className="px-6 py-2 rounded-xl bg-error hover:bg-error/90 text-white text-sm font-medium transition-colors"
                   >
                     停止录音
@@ -600,9 +601,10 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess, apiKey }: 
                 <div>
                   <button
                     onClick={startRecording}
+                    aria-label="Start recording"
                     className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 flex items-center justify-center transition-all shadow-lg hover:shadow-xl"
                   >
-                    <Mic className="w-8 h-8 text-white" />
+                    <Mic className="w-8 h-8 text-white" aria-hidden="true" />
                   </button>
                   <p className="text-sm text-foreground">点击开始录音</p>
                   <p className="text-xs text-text-muted mt-1">请用普通话清晰朗读3-8秒</p>

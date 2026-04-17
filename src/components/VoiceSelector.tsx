@@ -126,11 +126,13 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
       <div className="relative">
         <button
           onClick={() => setIsOpen(!isOpen)}
+          aria-label="Select voice"
+          aria-expanded={isOpen}
           className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border hover:border-accent transition-colors"
         >
-          <Volume2 className="w-4 h-4 text-text-muted" />
+          <Volume2 className="w-4 h-4 text-text-muted" aria-hidden="true" />
           <span className="text-sm text-foreground">{selectedVoiceName}</span>
-          <ChevronDown className={`w-4 h-4 text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-4 h-4 text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
         </button>
 
         {isOpen && (
@@ -145,9 +147,10 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
                     setIsCloneModalOpen(true)
                     setIsOpen(false)
                   }}
+                  aria-label="Clone voice"
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-medium transition-colors"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3 h-3" aria-hidden="true" />
                   克隆音色
                 </button>
               </div>
@@ -208,9 +211,10 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
                           e.stopPropagation()
                           handleDeleteVoice(voice.voice_id, voice.type === 'cloning' ? 'voice_cloning' : 'voice_generation')
                         }}
+                        aria-label="Delete voice"
                         className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </button>
                     </div>
                   ))}
