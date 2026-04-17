@@ -361,12 +361,13 @@ export default function SongSharePage() {
               <button
                 onClick={togglePlay}
                 disabled={!song.audioUrl || isGenerating}
+                aria-label={isPlaying ? "Pause" : "Play"}
                 className="w-14 h-14 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPlaying ? (
-                  <Pause className="w-6 h-6" />
+                  <Pause className="w-6 h-6" aria-hidden="true" />
                 ) : (
-                  <Play className="w-6 h-6 ml-1" />
+                  <Play className="w-6 h-6 ml-1" aria-hidden="true" />
                 )}
               </button>
 
@@ -379,6 +380,7 @@ export default function SongSharePage() {
                   value={currentTime}
                   onChange={handleSeek}
                   disabled={!song.audioUrl || isGenerating}
+                  aria-label={`Progress: ${formatTime(currentTime)} of ${formatTime(duration)}`}
                   className="w-full h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent disabled:opacity-50"
                   style={{
                     background: `linear-gradient(to right, #a855f7 ${duration ? (currentTime / duration) * 100 : 0}%, #2a2a2a ${duration ? (currentTime / duration) * 100 : 0}%)`,
@@ -394,12 +396,13 @@ export default function SongSharePage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={toggleMute}
+                  aria-label={isMuted ? "Unmute" : "Mute"}
                   className="text-text-secondary hover:text-foreground transition-colors"
                 >
                   {isMuted || volume === 0 ? (
-                    <VolumeX className="w-5 h-5" />
+                    <VolumeX className="w-5 h-5" aria-hidden="true" />
                   ) : (
-                    <Volume2 className="w-5 h-5" />
+                    <Volume2 className="w-5 h-5" aria-hidden="true" />
                   )}
                 </button>
                 <input
@@ -409,6 +412,7 @@ export default function SongSharePage() {
                   step={0.1}
                   value={isMuted ? 0 : volume}
                   onChange={handleVolumeChange}
+                  aria-label={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
                   className="w-20 h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent"
                 />
               </div>
