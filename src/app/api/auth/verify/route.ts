@@ -72,13 +72,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Code valid - clear verify cookie
-    const response = NextResponse.json({
-      success: true,
-      message: "验证成功",
-    })
-    response.cookies.delete("verify-token")
-    response.cookies.delete("dev-code")
-
     // Get or create user
     let user = users.get(email)
     if (!user) {
@@ -112,6 +105,20 @@ export async function POST(request: NextRequest) {
     // Create session token
     const sessionToken = createSessionToken(user)
 
+    console.log(`[Verify] User ${email} login - role: ${user.role}, users.size: ${users.size}`)
+
+    const response = NextResponse.json({
+      success: true,
+      message: "验证成功",
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+    })
+
+    response.cookies.delete("verify-token")
+    response.cookies.delete("dev-code")
     response.cookies.set("session-token", sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

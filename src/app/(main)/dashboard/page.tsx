@@ -22,14 +22,23 @@ export default function DashboardPage() {
   useEffect(() => {
     const cookies = document.cookie.split(';')
     for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=')
+      const cookiePart = cookie.trim()
+      const equalIndex = cookiePart.indexOf('=')
+      if (equalIndex === -1) continue
+      const name = cookiePart.substring(0, equalIndex)
+      const value = cookiePart.substring(equalIndex + 1)
       if (name === 'session-token') {
         try {
+          console.log("Session token value:", value.substring(0, 50) + "...")
           const payload = JSON.parse(atob(value))
+          console.log("Parsed payload role:", payload.role)
           setUserRole(payload.role || 'USER')
           setUserEmail(payload.email || '')
           setUserName(payload.email?.split('@')[0] || 'User')
-        } catch (e) {}
+        } catch (e) {
+          console.error("Failed to parse session token:", e)
+          console.error("Cookie value that failed:", value)
+        }
         break
       }
     }
