@@ -21,9 +21,6 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
   }
 }
 
-function getDemoUser(): { id: string; email: string; role: string } {
-  return { id: 'demo-user', email: 'demo@taoybeats.com', role: 'USER' }
-}
 
 export type StemType = 'vocals' | 'drums' | 'bass' | 'other'
 
@@ -64,10 +61,9 @@ export async function POST(
   try {
     const { id: songId } = await params
 
-    // Auth check - allow demo user for consistency with /api/songs
-    let user = getSessionUser(request)
+    const user = getSessionUser(request)
     if (!user) {
-      user = getDemoUser()
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Get song

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { Music, User, Key, Bell, Shield, Check } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
-import { decodeSessionToken } from "@/lib/auth-utils"
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -38,26 +37,25 @@ export default function SettingsPage() {
     weeklySummary: false,
   })
 
-  // Fetch user profile and role from session
+  // Fetch user profile and role from API
   useEffect(() => {
-    const cookies = document.cookie.split(';')
-    for (const cookie of cookies) {
-      const [cookieName, cookieValue] = cookie.trim().split('=')
-      if (cookieName === 'session-token') {
-        try {
-          const payload = decodeSessionToken(cookieValue)
-          if (payload) {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch('/api/auth/profile')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.user) {
             startTransition(() => {
-              setUserRole(payload.role || 'USER')
-              setEmail(payload.email || '')
+              setUserRole(data.user.role || 'USER')
+              setEmail(data.user.email || '')
             })
           }
-        } catch {
-          // ignore
         }
-        break
+      } catch {
+        // ignore profile fetch errors
       }
     }
+    fetchProfile()
   }, [])
 
   useEffect(() => {

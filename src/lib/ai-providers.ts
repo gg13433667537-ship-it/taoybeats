@@ -135,6 +135,11 @@ export const miniMaxProvider: AIProvider = {
 
     const data = await response.json()
 
+    // Validate response structure
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response from MiniMax API: response is not an object')
+    }
+
     // Music 2.6 may return audio directly (status=2 means completed)
     // or return a task_id for async polling (status=1 means processing)
     const audioUrl = data.data?.audio
@@ -143,10 +148,16 @@ export const miniMaxProvider: AIProvider = {
 
     if (audioUrl && status === 2) {
       // Synchronous completion - return audio URL prefixed with 'audio:'
+      if (typeof audioUrl !== 'string' || !audioUrl.startsWith('http')) {
+        throw new Error('Invalid audio URL in MiniMax response')
+      }
       return `audio:${audioUrl}`
     }
 
     // Return task_id for async polling
+    if (!taskId && !data.task_id) {
+      throw new Error('No task_id returned from MiniMax API')
+    }
     return taskId || data.task_id
   },
 

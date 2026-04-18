@@ -80,16 +80,50 @@ export function usePresets() {
     }
   }, [loadLocalPresets, saveLocalPresets])
 
-  // Initial load and sync
+  // Initial load and sync - run once on mount
   useEffect(() => {
     isMountedRef.current = true
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    syncWithServer()
+    let cancelled = false
+
+    const doSync = async () => {
+      setIsSyncing(true)
+      try {
+        const localPresets = loadLocalPresets()
+
+        const response = await fetch('/api/presets', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ localPresets }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          saveLocalPresets(data.presets)
+          if (!cancelled && isMountedRef.current) {
+            setPresets(data.presets)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to sync presets:', error)
+        const localPresets = loadLocalPresets()
+        if (!cancelled && isMountedRef.current) {
+          setPresets(localPresets)
+        }
+      } finally {
+        if (!cancelled && isMountedRef.current) {
+          setIsSyncing(false)
+          setIsLoading(false)
+        }
+      }
+    }
+
+    doSync()
 
     return () => {
       isMountedRef.current = false
+      cancelled = true
     }
-  }, [syncWithServer])
+  }, [loadLocalPresets, saveLocalPresets])
 
   // Create preset
   const createPreset = useCallback(async (preset: Omit<Preset, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ success: boolean; error?: string }> => {

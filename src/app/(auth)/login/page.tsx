@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Music, Loader2, Mail, Lock, ArrowLeft, Eye, EyeOff } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
@@ -12,6 +12,7 @@ type Step = "email" | "login"
 export default function LoginPage() {
   const { t } = useI18n()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [step, setStep] = useState<Step>("email")
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("password")
   const [email, setEmail] = useState("")
@@ -25,6 +26,9 @@ export default function LoginPage() {
   const [hasPassword, setHasPassword] = useState(false)
   const [codeSent, setCodeSent] = useState(false)
   const [sendCountdown, setSendCountdown] = useState(0)
+
+  // Get redirect URL from query params (set by middleware)
+  const redirectUrl = searchParams.get("redirect") || "/dashboard"
 
   // Check email when it changes (blur or after some time)
   const checkEmail = async (emailToCheck: string) => {
@@ -124,8 +128,8 @@ export default function LoginPage() {
         throw new Error(data.error || "登录失败")
       }
 
-      // Success - redirect to dashboard
-      router.push("/dashboard")
+      // Success - redirect to original page or dashboard
+      router.push(redirectUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败")
     } finally {
@@ -152,8 +156,8 @@ export default function LoginPage() {
         throw new Error(verifyData.error || "验证码错误")
       }
 
-      // Success - redirect to dashboard
-      router.push("/dashboard")
+      // Success - redirect to original page or dashboard
+      router.push(redirectUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败")
     } finally {

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { GET as getSongs, POST as createSong } from '@/app/api/songs/route'
+import { createSessionToken } from '@/lib/auth-utils'
 
 // Helper to create NextRequest - keeping for potential future use
 function _createMockRequest(body: unknown, options: RequestInit = {}): Request {
@@ -51,6 +52,24 @@ function createMockNextRequest(
   return request
 }
 
+// Create a valid session token for tests
+function createTestSessionToken(userId: string, email: string, role: string = 'USER') {
+  const mockUser = {
+    id: userId,
+    email,
+    name: 'Test User',
+    role,
+    isActive: true,
+    tier: 'FREE',
+    dailyUsage: 0,
+    monthlyUsage: 0,
+    dailyResetAt: new Date().toISOString().split('T')[0],
+    monthlyResetAt: new Date().toISOString().slice(0, 7),
+    createdAt: new Date().toISOString(),
+  }
+  return createSessionToken(mockUser)
+}
+
 describe('Songs API', () => {
   beforeEach(() => {
     // Clear global storage
@@ -64,8 +83,10 @@ describe('Songs API', () => {
 
   describe('GET /api/songs', () => {
     it('should return empty array when no songs exist', async () => {
+      const sessionToken = createTestSessionToken('test-user', 'test@example.com')
       const request = createMockNextRequest('http://localhost:3000/api/songs', null, {
         method: 'GET',
+        cookies: [{ name: 'session-token', value: sessionToken }],
       })
 
       const response = await getSongs(request as any)
@@ -76,12 +97,16 @@ describe('Songs API', () => {
     })
 
     it('should return songs for demo user', async () => {
+      const sessionToken = createTestSessionToken('test-user', 'test@example.com')
+
       // First create a song
       const createRequest = createMockNextRequest('http://localhost:3000/api/songs', {
         title: 'Test Song',
         lyrics: 'Test lyrics',
         genre: ['pop'],
         mood: 'happy',
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
       })
 
       await createSong(createRequest as any)
@@ -89,6 +114,7 @@ describe('Songs API', () => {
       // Then get songs
       const getRequest = createMockNextRequest('http://localhost:3000/api/songs', null, {
         method: 'GET',
+        cookies: [{ name: 'session-token', value: sessionToken }],
       })
 
       const response = await getSongs(getRequest as any)
@@ -101,40 +127,49 @@ describe('Songs API', () => {
 
   describe('POST /api/songs', () => {
     it('should require title, lyrics, genre, and mood', async () => {
+      const sessionToken = createTestSessionToken('test-user', 'test@example.com')
       const request = createMockNextRequest('http://localhost:3000/api/songs', {
         title: '',
         genre: [],
         mood: '',
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
       })
 
       const response = await createSong(request as any)
-      await response.json() // consume body
+      const data = await response.json()
 
       expect(response.status).toBe(400)
-      expect(data.error).toContain('Missing required fields')
+      expect(data.error).toContain('Title')
     })
 
     it('should require genre array to have items', async () => {
+      const sessionToken = createTestSessionToken('test-user', 'test@example.com')
       const request = createMockNextRequest('http://localhost:3000/api/songs', {
         title: 'Test Song',
         lyrics: 'Test lyrics',
         genre: [],
         mood: 'happy',
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
       })
 
       const response = await createSong(request as any)
-      await response.json() // consume body
+      await response.json()
 
       expect(response.status).toBe(400)
     })
 
     it('should create a song successfully with valid data', async () => {
+      const sessionToken = createTestSessionToken('test-user', 'test@example.com')
       const request = createMockNextRequest('http://localhost:3000/api/songs', {
         title: 'My Song',
         lyrics: 'These are my lyrics',
         genre: ['pop', 'rock'],
         mood: 'energetic',
         instruments: ['guitar', 'drums'],
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
       })
 
       const response = await createSong(request as any)
@@ -147,11 +182,14 @@ describe('Songs API', () => {
     })
 
     it('should create instrumental song without lyrics', async () => {
+      const sessionToken = createTestSessionToken('test-user', 'test@example.com')
       const request = createMockNextRequest('http://localhost:3000/api/songs', {
         title: 'Instrumental Song',
         genre: ['classical'],
         mood: 'peaceful',
         isInstrumental: true,
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
       })
 
       const response = await createSong(request as any)
@@ -179,11 +217,14 @@ describe('Songs API', () => {
       global.users!.set('demo-user', demoUser)
       global.users!.set('demo@taoybeats.com', demoUser)
 
+      const sessionToken = createTestSessionToken('demo-user', 'demo@taoybeats.com')
       const request = createMockNextRequest('http://localhost:3000/api/songs', {
         title: 'Test Song',
         lyrics: 'Test lyrics',
         genre: ['pop'],
         mood: 'happy',
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
       })
 
       const response = await createSong(request as any)
@@ -211,11 +252,14 @@ describe('Songs API', () => {
       global.users!.set('demo-user', demoUser)
       global.users!.set('demo@taoybeats.com', demoUser)
 
+      const sessionToken = createTestSessionToken('demo-user', 'demo@taoybeats.com')
       const request = createMockNextRequest('http://localhost:3000/api/songs', {
-        title: 'Test Song',
+        title: 'Monthly Limit Test Song',
         lyrics: 'Test lyrics',
         genre: ['pop'],
         mood: 'happy',
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
       })
 
       const response = await createSong(request as any)

@@ -4,17 +4,22 @@ import type { User } from "./types"
 export function getSecretKey(): string {
   const secret = process.env.AUTH_SECRET
   if (!secret) {
-    throw new Error("AUTH_SECRET environment variable is required. Set it in your .env file.")
+    // In development, return a placeholder that won't match any real tokens
+    if (process.env.NODE_ENV === "development") {
+      return "development-secret-key"
+    }
+    throw new Error("AUTH_SECRET environment variable is required")
   }
-  // Ensure minimum key length for HMAC-SHA256
-  if (secret.length < 32) {
+  // Ensure minimum key length for HMAC-SHA256 in production
+  if (process.env.NODE_ENV !== "development" && secret.length < 32) {
     throw new Error("AUTH_SECRET must be at least 32 characters for adequate security.")
   }
   return secret
 }
 
 function createHmac(data: string): string {
-  return crypto.createHmac("sha256", getSecretKey()).update(data).digest("hex")
+  // Use base64 encoding to be compatible with middleware's Web Crypto API
+  return crypto.createHmac("sha256", getSecretKey()).update(data).digest("base64")
 }
 
 export function createSessionToken(user: User): string {

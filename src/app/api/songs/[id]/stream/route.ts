@@ -15,6 +15,55 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { prisma } from "@/lib/db"
+
+// Initialize global songs map if not exists
+if (typeof global.songs === 'undefined') global.songs = new Map()
+
+// Helper to get song from database or memory cache
+async function getSongById(id: string): Promise<Song | null> {
+  // Try memory cache first
+  const cachedSong = global.songs?.get(id) as Song | undefined
+  if (cachedSong) {
+    return cachedSong
+  }
+
+  // Fall back to database
+  try {
+    const dbSong = await prisma.song.findUnique({
+      where: { id },
+    })
+    if (dbSong) {
+      const song: Song = {
+        id: dbSong.id,
+        title: dbSong.title,
+        lyrics: dbSong.lyrics || undefined,
+        genre: dbSong.genre,
+        mood: dbSong.mood || undefined,
+        instruments: dbSong.instruments,
+        referenceSinger: dbSong.referenceSinger || undefined,
+        referenceSong: dbSong.referenceSong || undefined,
+        userNotes: dbSong.userNotes || undefined,
+        isInstrumental: false,
+        status: dbSong.status as Song['status'],
+        moderationStatus: "APPROVED" as const,
+        audioUrl: dbSong.audioUrl || undefined,
+        coverUrl: dbSong.coverUrl || undefined,
+        shareToken: dbSong.shareToken || undefined,
+        userId: dbSong.userId,
+        createdAt: dbSong.createdAt.toISOString(),
+        updatedAt: dbSong.updatedAt.toISOString(),
+      }
+      // Update cache
+      global.songs?.set(id, song)
+      return song
+    }
+  } catch (dbError) {
+    console.error("Database lookup failed:", dbError)
+  }
+
+  return null
+}
 
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
@@ -49,11 +98,8 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (!global.songs) {
-    return NextResponse.json({ error: "Song not found" }, { status: 404 })
-  }
-
-  const song = global.songs.get(id) as Song | undefined
+  // Look up song from database or memory cache
+  const song = await getSongById(id)
   if (!song) {
     return NextResponse.json({ error: "Song not found" }, { status: 404 })
   }
@@ -90,8 +136,8 @@ export async function GET(
       while (Date.now() - startTime < maxDuration) {
         await new Promise(resolve => setTimeout(resolve, pollInterval))
 
-        // Re-read from global.songs to get latest status
-        const currentSong = global.songs?.get(id) as Song | undefined
+        // Re-read from database or memory cache to get latest status
+        const currentSong = await getSongById(id)
         if (!currentSong) {
           sendEvent({ id, status: 'FAILED', error: 'Song not found', timestamp: new Date().toISOString() })
           break

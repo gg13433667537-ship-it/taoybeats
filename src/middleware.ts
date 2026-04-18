@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 // Routes that require authentication
-const protectedRoutes = ["/dashboard", "/settings"]
+const protectedRoutes = ["/dashboard", "/settings", "/generate"]
 
 // Routes that require admin role
 const adminRoutes = ["/admin"]

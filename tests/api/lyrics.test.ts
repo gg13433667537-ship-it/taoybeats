@@ -98,7 +98,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      await response.json() // consume body
+      const data = await response.json()
 
       expect(response.status).toBe(200)
       expect(data.lyrics).toBeDefined()
@@ -128,7 +128,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      await response.json() // consume body
+      await response.json()
 
       expect(response.status).toBe(200)
     })
@@ -151,7 +151,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      await response.json() // consume body
+      const data = await response.json()
 
       expect(response.status).toBe(400)
       expect(data.code).toBe(1026)
@@ -176,7 +176,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      await response.json() // consume body
+      const data = await response.json()
 
       expect(response.status).toBe(402)
       expect(data.code).toBe(1008)
@@ -201,7 +201,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      await response.json() // consume body
+      const data = await response.json()
 
       expect(response.status).toBe(429)
       expect(data.code).toBe(1002)

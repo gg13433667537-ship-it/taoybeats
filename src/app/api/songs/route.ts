@@ -108,21 +108,20 @@ function checkAndResetUsage(user: User) {
   }
 }
 
-function getSessionUser(request: NextRequest): User {
+function getSessionUser(request: NextRequest): User | null {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
-    const demoUserId = 'demo-user'
-    return getOrCreateUser(demoUserId, 'demo@taoybeats.com')
+    return null
   }
 
   try {
     const payload = verifySessionToken(sessionToken)
     if (!payload) {
-      return getOrCreateUser('demo-user')
+      return null
     }
     return getOrCreateUser(payload.id, payload.email)
   } catch {
-    return getOrCreateUser('demo-user')
+    return null
   }
 }
 
@@ -134,6 +133,9 @@ export async function GET(request: NextRequest) {
   }
 
   const user = getSessionUser(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
   // Try Prisma first, fall back to memory
   let userSongs: Song[] = []
@@ -185,6 +187,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = getSessionUser(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
     const body = await request.json()
     const {
       title,
@@ -425,6 +430,34 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Helper to update song in both memory and Prisma
+async function updateSongStatus(
+  songId: string,
+  updates: Partial<Pick<Song, 'status' | 'audioUrl' | 'videoUrl'>>,
+  currentSong: Song
+): Promise<void> {
+  const songsMap = getSongsMap()
+  const now = new Date().toISOString()
+
+  // Update memory cache
+  songsMap.set(songId, { ...currentSong, ...updates, updatedAt: now })
+
+  // Update Prisma database
+  try {
+    await prisma.song.update({
+      where: { id: songId },
+      data: {
+        status: updates.status,
+        audioUrl: updates.audioUrl,
+        ...(updates.videoUrl && { coverUrl: updates.videoUrl }),
+      },
+    })
+  } catch (dbError) {
+    console.error(`[Generate] Failed to update Prisma for song ${songId}:`, dbError)
+    // Continue with memory update even if DB fails
+  }
+}
+
 async function generateMusic(
   songId: string,
   song: Song,
@@ -435,7 +468,7 @@ async function generateMusic(
 
   try {
     // Update status to GENERATING
-    songsMap.set(songId, { ...song, status: "GENERATING", updatedAt: new Date().toISOString() })
+    await updateSongStatus(songId, { status: "GENERATING" }, song)
 
     // Call MiniMax API
     const taskId = await miniMaxProvider.generate({
@@ -468,44 +501,37 @@ async function generateMusic(
 
       const progress = await miniMaxProvider.getProgress(taskId, apiKey, apiUrl || 'https://api.minimaxi.com')
 
-      // Update song with latest status
+      // Update song with latest status in both memory and DB
       const currentSong = songsMap.get(songId)
       if (!currentSong) break
 
-      songsMap.set(songId, {
-        ...currentSong,
+      await updateSongStatus(songId, {
         status: progress.status,
         audioUrl: progress.audioUrl,
         videoUrl: progress.videoUrl,
-        updatedAt: new Date().toISOString(),
-      })
+      }, currentSong)
 
       if (progress.status === 'COMPLETED') {
         console.log(`[Generate] Song ${songId} completed, audioUrl: ${progress.audioUrl}`)
-        break
+        return // Successful completion
       }
 
       if (progress.status === 'FAILED') {
         console.error(`[Generate] Song ${songId} failed:`, progress.error)
-        break
+        return // Explicit failure
       }
     }
 
-    // Final status check
+    // Timeout or unexpected state - update final status
     const finalSong = songsMap.get(songId)
     if (finalSong && finalSong.status !== 'COMPLETED' && finalSong.status !== 'FAILED') {
-      songsMap.set(songId, {
-        ...finalSong,
-        status: 'FAILED',
-        updatedAt: new Date().toISOString(),
-      })
+      await updateSongStatus(songId, { status: 'FAILED' }, finalSong)
     }
   } catch (error) {
     console.error(`[Generate] Song ${songId} error:`, error)
-    songsMap.set(songId, {
-      ...song,
+    const currentSong = songsMap.get(songId) || song
+    await updateSongStatus(songId, {
       status: 'FAILED',
-      updatedAt: new Date().toISOString(),
-    })
+    }, currentSong)
   }
 }

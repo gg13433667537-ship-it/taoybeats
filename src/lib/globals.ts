@@ -1,12 +1,22 @@
 // Shared global state initialization
 // This module should be imported by all API routes
+// Auto-initializes globals when imported
 
 // Global types are declared in src/types/global.d.ts
 // This file provides initialization and accessor functions
 
 import type { User, Song } from './types'
 
-// Initialize all globals
+// Initialize all globals on module load (auto-initialization for serverless)
+if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
+if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
+if (!global.users) global.users = new Map()
+if (!global.songs) global.songs = new Map()
+if (!global.playlists) global.playlists = new Map()
+if (!global.presets) global.presets = new Map()
+if (!global.adminLogs) global.adminLogs = new Map()
+
+// Export for explicit initialization if needed
 export function initGlobals() {
   if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
   if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'

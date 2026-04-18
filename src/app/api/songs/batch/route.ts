@@ -61,20 +61,20 @@ function checkAndResetUsage(user: User) {
   }
 }
 
-function getSessionUser(request: NextRequest): User {
+function getSessionUser(request: NextRequest): User | null {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
-    return getOrCreateUser('demo-user', 'demo@taoybeats.com')
+    return null
   }
 
   try {
     const payload = verifySessionToken(sessionToken)
     if (!payload) {
-      return getOrCreateUser('demo-user')
+      return null
     }
     return getOrCreateUser(payload.id, payload.email)
   } catch {
-    return getOrCreateUser('demo-user')
+    return null
   }
 }
 
@@ -82,6 +82,10 @@ function getSessionUser(request: NextRequest): User {
 export async function POST(request: NextRequest) {
   try {
     const user = getSessionUser(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await request.json()
     const { songs: songsToCreate } = body
 

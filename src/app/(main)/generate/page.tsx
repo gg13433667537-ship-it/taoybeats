@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Music, Loader2, Download, Share2, AlertCircle, RefreshCw, Shield, Sparkles } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
-import { decodeSessionToken } from "@/lib/auth-utils"
 import AudioPlayer from "@/components/AudioPlayer"
 import LyricsAssistantModal from "@/components/LyricsAssistantModal"
 import LoginGuideModal from "@/components/LoginGuideModal"
@@ -69,22 +68,29 @@ export default function GeneratePage() {
   // fork param = original song ID to pre-fill from
   // songId param = newly created fork ID (not yet generated)
   const forkedSongId = searchParams.get('fork')
-  const userRole = (() => {
-    if (typeof document === 'undefined') return 'USER'
-    const cookies = document.cookie.split(';')
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=')
-      if (name === 'session-token') {
-        try {
-          const payload = decodeSessionToken(value)
-          return payload?.role || 'USER'
-        } catch {
-          return 'USER'
+
+  // User state from profile API
+  const [userRole, setUserRole] = useState<string>('USER')
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  // Fetch user profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch('/api/auth/profile')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.user) {
+            setUserRole(data.user.role || 'USER')
+            setIsLoggedIn(true)
+          }
         }
+      } catch {
+        // ignore profile fetch errors
       }
     }
-    return 'USER'
-  })()
+    fetchProfile()
+  }, [])
 
   // Form state
   const [title, setTitle] = useState("")
@@ -141,24 +147,6 @@ export default function GeneratePage() {
   const [isGenreDrawerOpen, setIsGenreDrawerOpen] = useState(false)
   const [isMoodDrawerOpen, setIsMoodDrawerOpen] = useState(false)
   const [isInstrumentDrawerOpen, setIsInstrumentDrawerOpen] = useState(false)
-
-  // Check if user is logged in
-  const isLoggedIn = (() => {
-    if (typeof document === 'undefined') return false
-    const cookies = document.cookie.split(';')
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=')
-      if (name === 'session-token' && value) {
-        try {
-          const payload = decodeSessionToken(value)
-          return !!payload
-        } catch {
-          return false
-        }
-      }
-    }
-    return false
-  })()
 
   // Cloud sync presets
   const { presets: cloudPresets, createPreset: savePresetToCloud } = usePresets()
@@ -288,14 +276,47 @@ export default function GeneratePage() {
       // SSE connection state
       let eventSource: EventSource | null = null
       let retryCount = 0
+      let connectionTimeout: ReturnType<typeof setTimeout> | null = null
       const maxRetries = 5
       const baseDelay = 1000
+      const connectionTimeoutMs = 30000 // 30 seconds timeout for initial connection
+
+      const clearConnectionTimeout = () => {
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout)
+          connectionTimeout = null
+        }
+      }
+
+      const closeEventSource = () => {
+        clearConnectionTimeout()
+        if (eventSource) {
+          eventSource.close()
+          eventSource = null
+        }
+      }
 
       const connectSSE = () => {
+        // Clean up any existing connection before creating new one
+        if (eventSource) {
+          eventSource.close()
+          eventSource = null
+        }
+
+        // Set connection timeout
+        clearConnectionTimeout()
+        connectionTimeout = setTimeout(() => {
+          closeEventSource()
+          setGenerationStage('failed')
+          setError('Connection timeout. The server took too long to respond. Please try again.')
+        }, connectionTimeoutMs)
+
         eventSource = new EventSource(`/api/songs/${newSongId}/stream`)
 
         eventSource.onmessage = (event) => {
           retryCount = 0 // Reset retry count on successful message
+          clearConnectionTimeout() // Clear timeout on any message received
+
           const data = JSON.parse(event.data)
           setProgress(data.progress || 0)
 
@@ -315,18 +336,26 @@ export default function GeneratePage() {
               if (data.audioUrl) {
                 setAudioUrl(data.audioUrl)
               }
-              eventSource?.close()
+              closeEventSource()
               break
             case 'FAILED':
               setGenerationStage('failed')
               setError(data.error || 'Generation failed')
-              eventSource?.close()
+              closeEventSource()
+              break
+            case 'UNKNOWN':
+              // Handle unknown status - treat as transient error, allow retry
+              console.warn('Received UNKNOWN status from SSE, waiting for next update...')
+              break
+            default:
+              // Log unexpected status for debugging
+              console.warn(`Unexpected SSE status: ${data.status}, waiting for next update...`)
               break
           }
         }
 
         eventSource.onerror = () => {
-          eventSource?.close()
+          closeEventSource()
 
           if (retryCount < maxRetries) {
             const delay = baseDelay * Math.pow(2, retryCount)

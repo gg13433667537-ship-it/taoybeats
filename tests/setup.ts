@@ -15,21 +15,49 @@ if (typeof global.adminLogs === 'undefined') global.adminLogs = new Map()
 global.systemApiKey = process.env.MINIMAX_API_KEY
 global.systemApiUrl = process.env.MINIMAX_API_URL
 
+// In-memory database for Prisma mock
+const mockDb = {
+  users: new Map<string, any>(),
+  songs: new Map<string, any>(),
+  playlists: new Map<string, any>(),
+  presets: new Map<string, any>(),
+  adminLogs: [] as any[],
+}
+
 // Mock Prisma Client with all commonly used methods
 vi.mock('@/lib/db', () => ({
   prisma: {
     user: {
-      findUnique: vi.fn(),
+      findUnique: vi.fn(({ where }: { where: { email?: string; id?: string } }) => {
+        if (where.email) return mockDb.users.get(where.email) || null
+        if (where.id) return mockDb.users.get(where.id) || null
+        return null
+      }),
       findFirst: vi.fn(),
-      findMany: vi.fn(),
-      count: vi.fn().mockResolvedValue(0),
-      create: vi.fn(),
-      update: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(mockDb.users.size),
+      create: vi.fn(({ data }: { data: any }) => {
+        const user = { ...data, createdAt: new Date().toISOString() }
+        mockDb.users.set(data.email, user)
+        mockDb.users.set(data.id, user)
+        return user
+      }),
+      update: vi.fn(({ where, data }: { where: { id: string }; data: any }) => {
+        const user = mockDb.users.get(where.id)
+        if (user) {
+          const updated = { ...user, ...data }
+          mockDb.users.set(where.id, updated)
+          if (user.email) mockDb.users.delete(user.email)
+          if (data.email) mockDb.users.set(data.email, updated)
+          return updated
+        }
+        return null
+      }),
       delete: vi.fn(),
     },
     song: {
       findUnique: vi.fn(),
-      findMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
       update: vi.fn(),
@@ -37,7 +65,7 @@ vi.mock('@/lib/db', () => ({
     },
     playlist: {
       findUnique: vi.fn(),
-      findMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
       update: vi.fn(),
@@ -45,7 +73,7 @@ vi.mock('@/lib/db', () => ({
     },
     preset: {
       findUnique: vi.fn(),
-      findMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
       update: vi.fn(),
@@ -53,7 +81,7 @@ vi.mock('@/lib/db', () => ({
     },
     adminLog: {
       create: vi.fn(),
-      findMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
     },
     usage: {
@@ -65,6 +93,9 @@ vi.mock('@/lib/db', () => ({
     $disconnect: vi.fn(),
   },
 }))
+
+// Export mockDb for test access
+export { mockDb }
 
 // Mock bcryptjs
 vi.mock('bcryptjs', () => ({
@@ -114,6 +145,16 @@ if (!globalThis.crypto?.randomUUID) {
   }
 }
 
+// Mock rate limiting for tests - allow unlimited requests
+vi.mock('@/lib/security', async () => {
+  const actual = await vi.importActual('@/lib/security')
+  return {
+    ...actual,
+    rateLimitMiddleware: vi.fn().mockReturnValue(null), // Disable rate limiting
+    checkRateLimit: vi.fn().mockReturnValue({ allowed: true, remaining: 999, resetAt: Date.now() + 60000 }),
+  }
+})
+
 // Reset global state before each test
 beforeEach(() => {
   // Re-initialize global Maps if they were cleared
@@ -131,6 +172,13 @@ beforeEach(() => {
   ;(global as any).users.clear()
   ;(global as any).songs.clear()
   ;(global as any).adminLogs.clear()
+
+  // Clear mock database
+  mockDb.users.clear()
+  mockDb.songs.clear()
+  mockDb.playlists.clear()
+  mockDb.presets.clear()
+  mockDb.adminLogs = []
 
   // Clear rate limit store
   if ((global as any).rateLimitStore) {

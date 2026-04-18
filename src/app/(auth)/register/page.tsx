@@ -2,13 +2,14 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Music, Loader2, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 export default function RegisterPage() {
   const { t } = useI18n()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -16,6 +17,9 @@ export default function RegisterPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+
+  // Get redirect URL from query params (set by middleware)
+  const redirectUrl = searchParams.get("redirect") || "/dashboard"
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,8 +56,8 @@ export default function RegisterPage() {
         throw new Error(data.error || "注册失败")
       }
 
-      // Success - redirect to dashboard
-      router.push("/dashboard")
+      // Success - redirect to original page or dashboard
+      router.push(redirectUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : "注册失败")
     } finally {

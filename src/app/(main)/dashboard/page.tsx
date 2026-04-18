@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect, useRef, startTransition } from "react"
+import { useState, useEffect, useRef, useCallback, startTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap, Shield, LogOut, User, ChevronDown, Settings, AlertCircle, X, ListMusic, FolderPlus, Trash2, Eye, EyeOff } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
-import { decodeSessionToken } from "@/lib/auth-utils"
 
 interface Song {
   id: string
@@ -82,31 +81,26 @@ export default function DashboardPage() {
     }
   }
 
-  // Get user info from session cookie
+  // Get user info from profile API
   useEffect(() => {
-    const cookies = document.cookie.split(';')
-    for (const cookie of cookies) {
-      const cookiePart = cookie.trim()
-      const equalIndex = cookiePart.indexOf('=')
-      if (equalIndex === -1) continue
-      const name = cookiePart.substring(0, equalIndex)
-      const value = cookiePart.substring(equalIndex + 1)
-      if (name === 'session-token') {
-        try {
-          const payload = decodeSessionToken(value)
-          if (payload) {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch("/api/auth/profile")
+        if (res.ok) {
+          const data = await res.json()
+          if (data.user) {
             startTransition(() => {
-              setUserRole(payload.role || 'USER')
-              setUserEmail(payload.email || '')
-              setUserName(payload.email?.split('@')[0] || 'User')
+              setUserRole(data.user.role || 'USER')
+              setUserEmail(data.user.email || '')
+              setUserName(data.user.name || data.user.email?.split('@')[0] || 'User')
             })
           }
-        } catch {
-          // ignore invalid session
         }
-        break
+      } catch {
+        // ignore profile fetch errors
       }
     }
+    fetchProfile()
   }, [])
 
   // Click outside to close dropdown
@@ -134,7 +128,7 @@ export default function DashboardPage() {
   }
 
   // Fetch playlists
-  const fetchPlaylists = async () => {
+  const fetchPlaylists = useCallback(async () => {
     try {
       const res = await fetch("/api/playlists")
       if (res.ok) {
@@ -144,7 +138,7 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("Error fetching playlists:", error)
     }
-  }
+  }, [])
 
   // Create playlist
   const handleCreatePlaylist = async () => {
@@ -227,7 +221,7 @@ export default function DashboardPage() {
     }
 
     fetchData()
-  }, [lang]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lang, fetchPlaylists])
 
   const getStatusColor = (status: string) => {
     switch (status) {

@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Music, Check, Zap, Loader2 } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
-import { decodeSessionToken } from "@/lib/auth-utils"
 
 export default function PricingPage() {
   const { t } = useI18n()
@@ -25,22 +24,17 @@ export default function PricingPage() {
       return
     }
 
-    // Check if user is logged in
-    const sessionToken = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('session-token='))
-
-    if (!sessionToken) {
-      router.push('/login?plan=pro')
-      return
-    }
-
     setIsCheckingOut(true)
     try {
-      // Decode session token to get user info
-      const token = sessionToken.split('=')[1]
-      const payload = decodeSessionToken(token)
-      if (!payload) {
+      // Fetch profile to check if user is logged in and get user info
+      const profileRes = await fetch('/api/auth/profile')
+      if (!profileRes.ok) {
+        router.push('/login?plan=pro')
+        return
+      }
+
+      const profileData = await profileRes.json()
+      if (!profileData.user) {
         router.push('/login?plan=pro')
         return
       }
@@ -52,8 +46,8 @@ export default function PricingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           priceId,
-          userId: payload.id,
-          email: payload.email,
+          userId: profileData.user.id,
+          email: profileData.user.email,
         }),
       })
 

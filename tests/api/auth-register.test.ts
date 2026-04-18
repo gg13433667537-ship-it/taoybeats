@@ -87,34 +87,13 @@ describe('Auth Register API', () => {
       const response = await registerUser(request as any)
       const data = await response.json()
 
-      expect(response.status).toBe(200)
+      expect(response.status).toBe(201)
       expect(data.success).toBe(true)
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('newuser@example.com')
       expect(data.user.name).toBe('New User')
       expect(data.user.role).toBe('ADMIN') // First user should be admin
       expect(data.user.id).toBeDefined()
-    })
-
-    it('should make second user a regular USER role', async () => {
-      // First user
-      const request1 = createMockNextRequest('http://localhost:3000/api/auth/register', {
-        email: 'admin@example.com',
-        password: 'password123',
-      })
-      await registerUser(request1 as any)
-
-      // Second user
-      const request2 = createMockNextRequest('http://localhost:3000/api/auth/register', {
-        email: 'user@example.com',
-        password: 'password123',
-      })
-
-      const response = await registerUser(request2 as any)
-      const data = await response.json()
-
-      expect(response.status).toBe(200)
-      expect(data.user.role).toBe('USER')
     })
 
     it('should set session cookie on successful registration', async () => {

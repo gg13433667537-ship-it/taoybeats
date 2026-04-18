@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
         name: user.name,
         role: user.role,
       },
-    })
+    }, { status: 201 })
 
     response.cookies.set("session-token", sessionToken, {
       httpOnly: true,
