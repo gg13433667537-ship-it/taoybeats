@@ -7,10 +7,9 @@ import { useRouter } from "next/navigation"
 interface LoginGuideModalProps {
   isOpen: boolean
   onClose: () => void
-  onLoginSuccess?: () => void
 }
 
-export default function LoginGuideModal({ isOpen, onClose, onLoginSuccess }: LoginGuideModalProps) {
+export default function LoginGuideModal({ isOpen, onClose }: LoginGuideModalProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 
@@ -20,11 +19,6 @@ export default function LoginGuideModal({ isOpen, onClose, onLoginSuccess }: Log
     setIsLoading(true)
     // Navigate to login page with return URL
     router.push('/login?returnUrl=' + encodeURIComponent('/generate'))
-  }
-
-  const handleRegister = () => {
-    setIsLoading(true)
-    router.push('/register?returnUrl=' + encodeURIComponent('/generate'))
   }
 
   return (

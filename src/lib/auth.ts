@@ -13,6 +13,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Apple({
       clientId: process.env.AUTH_APPLE_ID,
       clientSecret: process.env.AUTH_APPLE_SECRET,
+      ...(process.env.AUTH_APPLE_SECRET_EXPIRES_AT && {
+        clientSecretExpiresAt: parseInt(process.env.AUTH_APPLE_SECRET_EXPIRES_AT, 10),
+      }),
     }),
     Credentials({
       name: "Email",

@@ -34,6 +34,7 @@ export default function SelectorDrawer({
   const { t } = useI18n()
   const [isVisible, setIsVisible] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [tempSelected, setTempSelected] = useState<string[]>(selectedValues)
   const drawerRef = useRef<HTMLDivElement>(null)
@@ -95,6 +96,7 @@ export default function SelectorDrawer({
     if (window.innerWidth >= 640) return // Only on mobile
     startYRef.current = e.touches[0].clientY
     isDraggingRef.current = true
+    setIsDragging(true)
     setTranslateY(0)
   }, [])
 
@@ -111,6 +113,7 @@ export default function SelectorDrawer({
   const handleTouchEnd = useCallback(() => {
     if (window.innerWidth >= 640) return
     isDraggingRef.current = false
+    setIsDragging(false)
     // If dragged more than 100px, close the drawer
     if (translateY > 100) {
       onClose()
@@ -164,7 +167,7 @@ export default function SelectorDrawer({
         }`}
         style={{
           transform: `translateY(${translateY}px)`,
-          transition: isDraggingRef.current ? "none" : undefined,
+          transition: isDragging ? "none" : undefined,
         }}
       >
         {/* Drag handle for mobile */}

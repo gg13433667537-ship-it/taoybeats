@@ -5,7 +5,6 @@ import { useI18n } from "@/lib/i18n"
 import { Music, Scissors, Layers, Sparkles, Video, Globe, Loader2, ChevronDown, ChevronUp, AlertCircle, CheckCircle } from "lucide-react"
 
 interface AdvancedAudioEditorProps {
-  songId: string
   audioUrl: string
   onProcessed?: (processedUrl: string, type: string) => void
 }
@@ -37,7 +36,7 @@ const QUALITY_OPTIONS = [
   { value: 'lossless', label: '无损' },
 ]
 
-export default function AdvancedAudioEditor({ songId, audioUrl, onProcessed }: AdvancedAudioEditorProps) {
+export default function AdvancedAudioEditor({ audioUrl, onProcessed }: AdvancedAudioEditorProps) {
   const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<EditorTab>('convert')
   const [isExpanded, setIsExpanded] = useState(false)

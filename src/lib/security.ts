@@ -115,14 +115,14 @@ export function rateLimitMiddleware(
 /**
  * Apply rate limit to an API route handler
  */
-type HandlerWithRequest = (request: NextRequest, ...args: any[]) => Promise<NextResponse>
+type HandlerWithRequest = (request: NextRequest, ...args: unknown[]) => Promise<NextResponse>
 
 export function withRateLimit<T extends HandlerWithRequest>(
   handler: T,
   config: RateLimitConfig = DEFAULT_RATE_LIMIT,
   suffix: string = ""
 ): T {
-  return (async (request: NextRequest, ...args: any[]) => {
+  return (async (request: NextRequest, ...args: unknown[]) => {
     const rateLimitResponse = rateLimitMiddleware(request, config, suffix)
     if (rateLimitResponse) {
       return rateLimitResponse

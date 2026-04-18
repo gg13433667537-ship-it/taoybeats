@@ -7,21 +7,16 @@ interface ReferenceAudioUploaderProps {
   onSelect: (audioData: string) => void
   onRemove: () => void
   selectedAudio: string | null
-  selectedUrl?: string
-  onUrlChange?: (url: string) => void
 }
 
 export default function ReferenceAudioUploader({
   onSelect,
   onRemove,
   selectedAudio,
-  selectedUrl,
-  onUrlChange,
 }: ReferenceAudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [urlInput, setUrlInput] = useState(selectedUrl || '')
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

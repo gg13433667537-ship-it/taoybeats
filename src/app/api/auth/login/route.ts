@@ -46,31 +46,27 @@ export async function POST(request: NextRequest) {
 
     // If not in memory, try Prisma (for serverless cold starts)
     if (!user) {
-      try {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: sanitizedEmail },
-        })
-        if (dbUser) {
-          // Rehydrate user into memory
-          user = {
-            id: dbUser.id,
-            email: dbUser.email || sanitizedEmail,
-            name: dbUser.name || undefined,
-            password: dbUser.password || undefined,
-            role: dbUser.role as "USER" | "PRO" | "ADMIN",
-            isActive: dbUser.isActive,
-            tier: dbUser.tier as "FREE" | "PRO",
-            dailyUsage: dbUser.dailyUsage,
-            monthlyUsage: dbUser.monthlyUsage,
-            dailyResetAt: dbUser.dailyResetAt || getDateKey(),
-            monthlyResetAt: dbUser.monthlyResetAt || getMonthKey(),
-            createdAt: dbUser.createdAt.toISOString(),
-          }
-          users.set(sanitizedEmail, user)
-          users.set(user.id, user)
+      const dbUser = await prisma.user.findUnique({
+        where: { email: sanitizedEmail },
+      })
+      if (dbUser) {
+        // Rehydrate user into memory
+        user = {
+          id: dbUser.id,
+          email: dbUser.email || sanitizedEmail,
+          name: dbUser.name || undefined,
+          password: dbUser.password || undefined,
+          role: dbUser.role as "USER" | "PRO" | "ADMIN",
+          isActive: dbUser.isActive,
+          tier: dbUser.tier as "FREE" | "PRO",
+          dailyUsage: dbUser.dailyUsage,
+          monthlyUsage: dbUser.monthlyUsage,
+          dailyResetAt: dbUser.dailyResetAt || getDateKey(),
+          monthlyResetAt: dbUser.monthlyResetAt || getMonthKey(),
+          createdAt: dbUser.createdAt.toISOString(),
         }
-      } catch (prismaError) {
-        console.error("Prisma lookup failed:", prismaError)
+        users.set(sanitizedEmail, user)
+        users.set(user.id, user)
       }
     }
 

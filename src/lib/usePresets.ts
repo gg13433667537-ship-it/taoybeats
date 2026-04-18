@@ -83,6 +83,7 @@ export function usePresets() {
   // Initial load and sync
   useEffect(() => {
     isMountedRef.current = true
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     syncWithServer()
 
     return () => {

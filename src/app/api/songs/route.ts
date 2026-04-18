@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
     const songsMap = global.songs as Map<string, Song>
     songsMap.set(songId, song)
 
-    // Persist to Prisma
+    // Persist to Prisma - if this fails, the song cannot be created
     try {
       await prisma.song.create({
         data: {
@@ -273,7 +273,12 @@ export async function POST(request: NextRequest) {
       })
     } catch (prismaError) {
       console.error("Failed to persist song to Prisma:", prismaError)
-      // Continue anyway - song is in memory
+      // Clean up in-memory song since we couldn't persist
+      songsMap.delete(songId)
+      return NextResponse.json(
+        { error: "Failed to create song. Please try again." },
+        { status: 500 }
+      )
     }
 
     // Start real generation in background

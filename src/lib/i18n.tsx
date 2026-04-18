@@ -199,6 +199,9 @@ const translations = {
     updateFailedRetry: 'Update failed, please try again later',
     deleteFailed: 'Delete failed',
     deleteFailedRetry: 'Delete failed, please try again later',
+    adminUpdatedUser: 'Updated user',
+    adminDeletedUser: 'Deleted user',
+    adminDeletedSong: 'Deleted song',
 
     // Generate
     createNewSongPage: 'Create New Song',
@@ -751,6 +754,9 @@ const translations = {
     updateFailedRetry: '更新失败，请稍后重试',
     deleteFailed: '删除失败',
     deleteFailedRetry: '删除失败，请稍后重试',
+    adminUpdatedUser: '更新了用户',
+    adminDeletedUser: '删除了用户',
+    adminDeletedSong: '删除了歌曲',
 
     // Generate
     createNewSongPage: '创建新歌曲',
@@ -1305,6 +1311,9 @@ const translations = {
     updateFailedRetry: '更新失敗，請稍後重試',
     deleteFailed: '刪除失敗',
     deleteFailedRetry: '刪除失敗，請稍後重試',
+    adminUpdatedUser: '更新了使用者',
+    adminDeletedUser: '刪除了使用者',
+    adminDeletedSong: '刪除了歌曲',
 
     // Generate
     createNewSongPage: '建立新歌曲',
@@ -1842,6 +1851,9 @@ const translations = {
     updateFailedRetry: '更新に失敗しました。後でもう一度お試しください',
     deleteFailed: '削除に失敗しました',
     deleteFailedRetry: '削除に失敗しました。後でもう一度お試しください',
+    adminUpdatedUser: 'ユーザーを更新しました',
+    adminDeletedUser: 'ユーザーを削除しました',
+    adminDeletedSong: '曲を削除しました',
 
     // Generate
     createNewSongPage: '新しい曲を作成',
@@ -2379,6 +2391,9 @@ const translations = {
     updateFailedRetry: '업데이트 실패. 나중에 다시 시도하세요',
     deleteFailed: '삭제 실패',
     deleteFailedRetry: '삭제 실패. 나중에 다시 시도하세요',
+    adminUpdatedUser: '사용자를 업데이트했습니다',
+    adminDeletedUser: '사용자를 삭제했습니다',
+    adminDeletedSong: '노래를 삭제했습니다',
 
     // Generate
     createNewSongPage: '새 노래 만들기',

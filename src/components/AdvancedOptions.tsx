@@ -94,7 +94,6 @@ export default function AdvancedOptions({
   const [mixModeVocalVolume, setMixModeVocalVolume] = useState(audioOptions.mixModeVocalVolume ?? 0.5)
   const [referenceLyrics, setReferenceLyrics] = useState<ReferenceLyrics[]>(audioOptions.referenceLyrics ?? [])
   const [referenceAudioUrl, setReferenceAudioUrl] = useState(audioOptions.referenceAudioUrl ?? '')
-  const [showReferenceLyricsInput, setShowReferenceLyricsInput] = useState(false)
   const [newLyricsText, setNewLyricsText] = useState('')
   const [newLyricsSection, setNewLyricsSection] = useState('')
 

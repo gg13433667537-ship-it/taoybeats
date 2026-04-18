@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { prisma } from "@/lib/db"
 
 
 if (!global.users) global.users = new Map()
@@ -73,6 +74,37 @@ export async function POST(
     }
 
     songsMap.set(songId, forkedSong)
+
+    // Persist to Prisma - if this fails, the forked song cannot be created
+    try {
+      await prisma.song.create({
+        data: {
+          id: songId,
+          title: forkedSong.title,
+          lyrics: forkedSong.lyrics || null,
+          genre: forkedSong.genre,
+          mood: forkedSong.mood || null,
+          instruments: forkedSong.instruments,
+          referenceSinger: forkedSong.referenceSinger || null,
+          referenceSong: forkedSong.referenceSong || null,
+          userNotes: forkedSong.userNotes || null,
+          status: "PENDING",
+          audioUrl: null,
+          coverUrl: null,
+          shareToken: shareToken,
+          userId: user.id,
+          forkedFrom: id, // Track the original song
+        },
+      })
+    } catch (prismaError) {
+      console.error("Failed to persist forked song to Prisma:", prismaError)
+      // Clean up in-memory song since we couldn't persist
+      songsMap.delete(songId)
+      return NextResponse.json(
+        { error: "Failed to fork song. Please try again." },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       id: songId,

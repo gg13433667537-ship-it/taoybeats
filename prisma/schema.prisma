@@ -101,6 +101,7 @@ model Song {
   coverUrl        String?
   shareToken      String?  @unique
   userId          String
+  forkedFrom      String?  // Reference to original song ID if this was forked
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

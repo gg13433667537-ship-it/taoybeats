@@ -118,8 +118,6 @@ export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayer
 
   if (!src) return null
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
-
   return (
     <div className="flex items-center gap-4 p-4 rounded-xl bg-surface border border-border">
       {/* Play/Pause */}

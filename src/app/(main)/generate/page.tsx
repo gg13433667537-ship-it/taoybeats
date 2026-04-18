@@ -174,7 +174,6 @@ export default function GeneratePage() {
   // Load forked song data if fork parameter is present
   useEffect(() => {
     if (forkedSongId) {
-      setForkError(null)
       fetch(`/api/songs/${forkedSongId}`)
         .then(res => {
           if (!res.ok) throw new Error('Forked song not found')

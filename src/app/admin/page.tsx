@@ -257,11 +257,11 @@ export default function AdminPage() {
   const formatAction = (action: string) => {
     switch (action) {
       case "UPDATE_USER":
-        return "Updated user"
+        return t('adminUpdatedUser')
       case "DELETE_USER":
-        return "Deleted user"
+        return t('adminDeletedUser')
       case "DELETE_SONG":
-        return "Deleted song"
+        return t('adminDeletedSong')
       default:
         return action
     }

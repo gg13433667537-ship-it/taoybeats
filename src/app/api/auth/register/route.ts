@@ -54,8 +54,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists
-    if (users.has(sanitizedEmail)) {
+    // Hash password first
+    const hashedPassword = await bcrypt.hash(sanitizedPassword, 10)
+
+    // Check if user already exists in Prisma database
+    const existingUser = await prisma.user.findUnique({
+      where: { email: sanitizedEmail },
+    })
+    if (existingUser) {
       return applySecurityHeaders(
         NextResponse.json(
           { error: "该邮箱已被注册" },
@@ -64,13 +70,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(sanitizedPassword, 10)
-
     // Check if this is the first user (make them ADMIN)
-    const isFirstUser = users.size === 0
+    const userCount = await prisma.user.count()
+    const isFirstUser = userCount === 0
 
-    // Create user
+    // Create user object
     const user: User = {
       id: crypto.randomUUID(),
       email: sanitizedEmail,
@@ -86,31 +90,26 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     }
 
-    // Store by both email and id for easy lookup
+    // Persist to Prisma database FIRST - this must succeed before anything else
+    await prisma.user.create({
+      data: {
+        id: user.id,
+        email: user.email,
+        name: user.name || null,
+        password: user.password,
+        role: user.role as "USER" | "PRO" | "ADMIN",
+        isActive: user.isActive,
+        tier: user.tier,
+        dailyUsage: user.dailyUsage,
+        monthlyUsage: user.monthlyUsage,
+        dailyResetAt: user.dailyResetAt,
+        monthlyResetAt: user.monthlyResetAt,
+      },
+    })
+
+    // Only after Prisma succeeds, store in memory
     users.set(sanitizedEmail, user)
     users.set(user.id, user)
-
-    // Persist to Prisma database
-    try {
-      await prisma.user.create({
-        data: {
-          id: user.id,
-          email: user.email,
-          name: user.name || null,
-          password: user.password,
-          role: user.role as "USER" | "PRO" | "ADMIN",
-          isActive: user.isActive,
-          tier: user.tier,
-          dailyUsage: user.dailyUsage,
-          monthlyUsage: user.monthlyUsage,
-          dailyResetAt: user.dailyResetAt,
-          monthlyResetAt: user.monthlyResetAt,
-        },
-      })
-    } catch (prismaError) {
-      console.error("Failed to persist user to Prisma:", prismaError)
-      // Continue anyway - session is already created in memory
-    }
 
     // Create session token
     const sessionToken = createSessionToken(user)
