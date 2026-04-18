@@ -9,6 +9,7 @@ import { decodeSessionToken } from "@/lib/auth-utils"
 import AudioPlayer from "@/components/AudioPlayer"
 import LyricsAssistantModal from "@/components/LyricsAssistantModal"
 import LoginGuideModal from "@/components/LoginGuideModal"
+import SelectorDrawer, { SelectOption } from "@/components/SelectorDrawer"
 import VoiceSelector from "@/components/VoiceSelector"
 import PersonaSelector from "@/components/PersonaSelector"
 import AdvancedOptions from "@/components/AdvancedOptions"
@@ -41,6 +42,26 @@ const DURATIONS = [
   { label: 'Long (2min)', value: 120, description: 'Extended' },
   { label: 'Full (3min)', value: 180, description: 'Complete song' },
 ]
+
+// Selector drawer options
+const GENRE_OPTIONS: SelectOption[] = GENRES.map(g => ({ value: g, label: g }))
+
+const MOOD_OPTIONS: SelectOption[] = MOODS.map(m => ({ value: m, label: m }))
+
+// Grouped instruments
+const INSTRUMENT_GROUPS: Record<string, string[]> = {
+  '弦乐': ['Guitar', 'Violin', 'Cello', 'Harp', 'Banjo', 'Ukulele', 'Mandolin'],
+  '键盘': ['Piano', 'Organ', 'Accordion'],
+  '打击乐': ['Drum', 'Tabla', 'Steel Drum'],
+  '电子': ['Synth', 'Electric Guitar'],
+  '管乐': ['Saxophone', 'Trumpet', 'Clarinet', 'Flute', 'Bagpipes'],
+  '人声': ['Vocals', 'Choir'],
+  '其他': ['Bass', 'Strings', 'Brass', 'Harmonica', 'Didgeridoo'],
+}
+
+const INSTRUMENT_OPTIONS: SelectOption[] = Object.entries(INSTRUMENT_GROUPS).flatMap(
+  ([group, instruments]) => instruments.map(i => ({ value: i, label: i, group }))
+)
 
 // Quick generate presets
 interface GenerationPreset {
@@ -133,6 +154,11 @@ export default function GeneratePage() {
   // Modal states
   const [isLyricsModalOpen, setIsLyricsModalOpen] = useState(false)
   const [showLoginGuide, setShowLoginGuide] = useState(false)
+
+  // Drawer states for selector components
+  const [isGenreDrawerOpen, setIsGenreDrawerOpen] = useState(false)
+  const [isMoodDrawerOpen, setIsMoodDrawerOpen] = useState(false)
+  const [isInstrumentDrawerOpen, setIsInstrumentDrawerOpen] = useState(false)
 
   // Check if user is logged in
   const isLoggedIn = (() => {
@@ -667,21 +693,15 @@ export default function GeneratePage() {
                     <label className="block text-sm font-medium text-text-secondary mb-2">
                       {t('genre')} <span className="text-error">*</span>
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                      {GENRES.map(genre => (
-                        <button
-                          key={genre}
-                          onClick={() => toggleGenre(genre)}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                            selectedGenres.includes(genre)
-                              ? 'bg-accent text-white'
-                              : 'bg-background border border-border text-text-secondary hover:border-accent'
-                          }`}
-                        >
-                          {genre}
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      onClick={() => setIsGenreDrawerOpen(true)}
+                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground text-left hover:border-accent transition-colors flex items-center justify-between"
+                    >
+                      <span className={selectedGenres.length > 0 ? "text-foreground" : "text-text-muted"}>
+                        {selectedGenres.length > 0 ? selectedGenres.join(', ') : t('selectStyle')}
+                      </span>
+                      <span className="text-sm text-accent">{selectedGenres.length} selected</span>
+                    </button>
                   </div>
 
                   {/* Duration */}
@@ -712,21 +732,15 @@ export default function GeneratePage() {
                     <label className="block text-sm font-medium text-text-secondary mb-2">
                       {t('mood')} <span className="text-error">*</span>
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                      {MOODS.map(m => (
-                        <button
-                          key={m}
-                          onClick={() => setMood(m)}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                            mood === m
-                              ? 'bg-accent text-white'
-                              : 'bg-background border border-border text-text-secondary hover:border-accent'
-                          }`}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      onClick={() => setIsMoodDrawerOpen(true)}
+                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground text-left hover:border-accent transition-colors flex items-center justify-between"
+                    >
+                      <span className={mood ? "text-foreground" : "text-text-muted"}>
+                        {mood || t('selectMood')}
+                      </span>
+                      {mood && <span className="text-sm text-accent">{mood}</span>}
+                    </button>
                   </div>
 
                   {/* Instruments */}
@@ -734,21 +748,15 @@ export default function GeneratePage() {
                     <label className="block text-sm font-medium text-text-secondary mb-2">
                       {t('instruments')}
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                      {INSTRUMENTS.map(instrument => (
-                        <button
-                          key={instrument}
-                          onClick={() => toggleInstrument(instrument)}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                            selectedInstruments.includes(instrument)
-                              ? 'bg-accent text-white'
-                              : 'bg-background border border-border text-text-secondary hover:border-accent'
-                          }`}
-                        >
-                          {instrument}
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      onClick={() => setIsInstrumentDrawerOpen(true)}
+                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground text-left hover:border-accent transition-colors flex items-center justify-between"
+                    >
+                      <span className={selectedInstruments.length > 0 ? "text-foreground" : "text-text-muted"}>
+                        {selectedInstruments.length > 0 ? selectedInstruments.join(', ') : t('selectInstruments')}
+                      </span>
+                      <span className="text-sm text-accent">{selectedInstruments.length} selected</span>
+                    </button>
                   </div>
 
                   {/* Reference */}
@@ -949,6 +957,42 @@ export default function GeneratePage() {
           setShowLoginGuide(false)
           setIsLyricsModalOpen(true)
         }}
+      />
+
+      {/* Genre Selector Drawer */}
+      <SelectorDrawer
+        isOpen={isGenreDrawerOpen}
+        onClose={() => setIsGenreDrawerOpen(false)}
+        title={t('selectStyle')}
+        options={GENRE_OPTIONS}
+        selectedValues={selectedGenres}
+        onConfirm={(values) => setSelectedGenres(values)}
+        multiSelect={true}
+        searchPlaceholder="搜索风格..."
+      />
+
+      {/* Mood Selector Drawer */}
+      <SelectorDrawer
+        isOpen={isMoodDrawerOpen}
+        onClose={() => setIsMoodDrawerOpen(false)}
+        title={t('selectMood')}
+        options={MOOD_OPTIONS}
+        selectedValues={mood ? [mood] : []}
+        onConfirm={(values) => setMood(values[0] || '')}
+        multiSelect={false}
+        searchPlaceholder="搜索情绪..."
+      />
+
+      {/* Instrument Selector Drawer */}
+      <SelectorDrawer
+        isOpen={isInstrumentDrawerOpen}
+        onClose={() => setIsInstrumentDrawerOpen(false)}
+        title={t('selectInstruments')}
+        options={INSTRUMENT_OPTIONS}
+        selectedValues={selectedInstruments}
+        onConfirm={(values) => setSelectedInstruments(values)}
+        multiSelect={true}
+        searchPlaceholder="搜索乐器..."
       />
     </div>
   )
