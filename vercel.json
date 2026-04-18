@@ -3,5 +3,5 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
-  "regions": ["hnd1", "sin1"]
+  "regions": ["hnd1"]
 }
