@@ -166,9 +166,9 @@ function buildPrompt(params: SongParams): string {
     parts.push(params.genre.join(', '))
   }
 
-  // Mood
+  // Mood - make it more descriptive
   if (params.mood) {
-    parts.push(params.mood)
+    parts.push(`Mood: ${params.mood}`)
   }
 
   // Additional context from instruments
@@ -176,12 +176,18 @@ function buildPrompt(params: SongParams): string {
     parts.push(`Instruments: ${params.instruments.join(', ')}`)
   }
 
-  // Reference artist
+  // Reference artist / style reference
   if (params.referenceSinger) {
-    parts.push(`Reference Artist: ${params.referenceSinger}`)
+    parts.push(`Style: ${params.referenceSinger}`)
   }
 
-  return parts.join(', ')
+  // Custom user notes for additional context
+  if (params.userNotes) {
+    parts.push(`Description: ${params.userNotes}`)
+  }
+
+  // Join with proper separators
+  return parts.join('; ')
 }
 
 // MiniMax API Response Types
