@@ -356,10 +356,19 @@ export default function GeneratePage() {
   }
 
   // Handle lyrics confirmed from modal
-  const handleLyricsConfirmed = (confirmedLyrics: string, confirmedTitle?: string) => {
+  const handleLyricsConfirmed = (confirmedLyrics: string, confirmedTitle?: string, styleTags?: string[]) => {
     setLyrics(confirmedLyrics)
     if (confirmedTitle) {
       setTitle(confirmedTitle)
+    }
+    // Auto-fill genre from style tags if available
+    if (styleTags && styleTags.length > 0) {
+      const validGenres = GENRES.filter(g =>
+        styleTags.some(tag => tag.toLowerCase().includes(g.toLowerCase()))
+      )
+      if (validGenres.length > 0) {
+        setSelectedGenres(validGenres.slice(0, 2))
+      }
     }
   }
 

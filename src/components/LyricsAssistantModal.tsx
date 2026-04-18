@@ -6,7 +6,7 @@ import { X, Loader2, Sparkles, RefreshCw, Check, AlertCircle } from "lucide-reac
 interface LyricsAssistantModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (lyrics: string, title?: string) => void
+  onConfirm: (lyrics: string, title?: string, styleTags?: string[]) => void
   initialTitle?: string
   initialMood?: string
 }
@@ -39,6 +39,7 @@ interface ModalState {
   mood: string
   generatedLyrics: string | null
   editedLyrics: string | null
+  generatedStyleTags: string[] | null
   isGenerating: boolean
   isConfirming: boolean
   error: string | null
@@ -52,6 +53,7 @@ const getInitialState = (initialTitle: string, initialMood: string): ModalState 
   mood: initialMood,
   generatedLyrics: null,
   editedLyrics: null,
+  generatedStyleTags: null,
   isGenerating: false,
   isConfirming: false,
   error: null,
@@ -67,7 +69,7 @@ export default function LyricsAssistantModal({
 }: LyricsAssistantModalProps) {
   const [state, setState] = useState<ModalState>(() => getInitialState(initialTitle, initialMood))
 
-  const { title, framework, selectedStyles, mood, generatedLyrics, editedLyrics, isGenerating, isConfirming, error, hasUserModified } = state
+  const { title, framework, selectedStyles, mood, generatedLyrics, editedLyrics, generatedStyleTags, isGenerating, isConfirming, error, hasUserModified } = state
 
   // Load draft from localStorage
   const loadDraft = useCallback(() => {
@@ -167,10 +169,16 @@ export default function LyricsAssistantModal({
         throw new Error(data.error || '生成失败')
       }
 
+      // Parse style_tags from API response
+      const styleTags = data.style_tags
+        ? data.style_tags.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : null
+
       setState(s => ({
         ...s,
         generatedLyrics: data.lyrics,
         editedLyrics: data.lyrics,
+        generatedStyleTags: styleTags,
         hasUserModified: false,
         isGenerating: false,
       }))
@@ -199,7 +207,7 @@ export default function LyricsAssistantModal({
 
     setState(s => ({ ...s, isConfirming: true }))
     localStorage.removeItem(STORAGE_KEY)
-    onConfirm(editedLyrics, title.trim())
+    onConfirm(editedLyrics, title.trim(), generatedStyleTags || undefined)
     setState(s => ({ ...s, isConfirming: false }))
     onClose()
   }
