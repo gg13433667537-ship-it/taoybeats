@@ -12,6 +12,7 @@ export type GenerationProgress = {
   progress: number // 0-100
   stage?: string
   audioUrl?: string
+  videoUrl?: string
   error?: string
 }
 
@@ -225,6 +226,7 @@ function mapMiniMaxStatus(data: MiniMaxStatusResponse): GenerationProgress {
     progress,
     stage: data.stage || data.status,
     audioUrl: data.audio_url || data.audio_download_url,
+    videoUrl: data.video_url,
     error: data.error,
   }
 }

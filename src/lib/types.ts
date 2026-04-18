@@ -44,6 +44,7 @@ export interface Song {
   status: SongStatus
   moderationStatus: ModerationStatus
   audioUrl?: string
+  videoUrl?: string
   coverUrl?: string
   shareToken?: string
   userId: string

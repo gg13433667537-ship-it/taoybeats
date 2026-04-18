@@ -282,6 +282,7 @@ async function generateMusic(
         ...currentSong,
         status: progress.status,
         audioUrl: progress.audioUrl,
+        videoUrl: progress.videoUrl,
         updatedAt: new Date().toISOString(),
       })
 
