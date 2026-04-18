@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { Check, AlertCircle, Loader2 } from "lucide-react"
+import { useI18n } from "@/lib/i18n"
 
 interface GenerationProgressProps {
   stage: 'idle' | 'initializing' | 'generating' | 'finalizing' | 'completed' | 'failed'
@@ -16,6 +17,7 @@ export default function GenerationProgress({
   stageMessage,
   error,
 }: GenerationProgressProps) {
+  const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationRef = useRef<number | undefined>(undefined)
 
@@ -116,23 +118,23 @@ export default function GenerationProgress({
   const getStageLabel = () => {
     switch (stage) {
       case 'initializing':
-        return 'Initializing...'
+        return t('initializing')
       case 'generating':
-        return 'Creating your music...'
+        return t('creatingYourMusic')
       case 'finalizing':
-        return 'Almost done...'
+        return t('almostDone')
       case 'completed':
-        return 'Complete!'
+        return t('complete')
       case 'failed':
-        return 'Generation failed'
+        return t('generationFailed')
       default:
-        return 'Processing...'
+        return t('processing')
     }
   }
 
   return (
     <div className="p-6 rounded-2xl bg-surface border border-border">
-      <h2 className="text-lg font-semibold text-foreground mb-4">Generation Progress</h2>
+      <h2 className="text-lg font-semibold text-foreground mb-4">{t('generationProgress')}</h2>
 
       {/* Progress Bar */}
       <div className="mb-6">
@@ -158,9 +160,9 @@ export default function GenerationProgress({
             className="w-full h-16"
           />
           <p className="text-xs text-text-muted text-center mt-2">
-            {stage === 'initializing' && 'Setting up generation...'}
-            {stage === 'generating' && 'AI is composing your song...'}
-            {stage === 'finalizing' && 'Finalizing audio...'}
+            {stage === 'initializing' && t('initializing')}
+            {stage === 'generating' && t('creatingYourMusic')}
+            {stage === 'finalizing' && t('almostDone')}
           </p>
         </div>
       )}
@@ -170,18 +172,15 @@ export default function GenerationProgress({
         {getStatusIcon()}
         <div>
           <p className="font-medium text-foreground capitalize">
-            {stage === 'completed' ? 'Your song is ready!' :
-             stage === 'failed' ? 'Please try again' :
-             stage === 'initializing' ? 'Initializing...' :
-             stage === 'generating' ? 'Creating music...' :
-             stage === 'finalizing' ? 'Almost done...' :
-             'Processing...'}
+            {stage === 'completed' ? t('yourSongReady') :
+             stage === 'failed' ? t('pleaseTryAgain') :
+             getStageLabel()}
           </p>
           <p className="text-sm text-text-secondary">
-            {stage === 'completed' && 'Click play to preview your creation'}
-            {stage === 'failed' && (error || 'Generation failed - please try again')}
-            {stage === 'generating' && `${progress}% complete`}
-            {(stage === 'initializing' || stage === 'finalizing') && 'Please wait...'}
+            {stage === 'completed' && t('clickPlayToPreview')}
+            {stage === 'failed' && (error || t('generationFailed'))}
+            {stage === 'generating' && `${progress}% ${t('complete').toLowerCase()}`}
+            {(stage === 'initializing' || stage === 'finalizing') && t('pleaseWait')}
           </p>
         </div>
       </div>
