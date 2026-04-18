@@ -1,3 +1,17 @@
+/**
+ * GET /api/songs/[id]/stream
+ * @version v1
+ * @description SSE流式端点，实时推送歌曲生成进度和状态
+ * @param {string} id - 歌曲ID（路径参数）
+ * @returns {text/event-stream} SSE流，持续推送 { id, status, progress, stage, audioUrl, timestamp }
+ * @status PENDING - 任务已排队（progress: 5-10%）
+ * @status GENERATING - 生成中（progress: 50%）
+ * @status COMPLETED - 完成（progress: 100%, 包含audioUrl）
+ * @status FAILED - 失败（包含error字段）
+ * @errors 401 - 未授权 | 403 - 无权访问该歌曲 | 404 - 歌曲不存在 | 500 - 服务器错误
+ * @timeout 10分钟超时，轮询间隔3秒
+ * @note 仅歌曲所有者或ADMIN可访问
+ */
 import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"

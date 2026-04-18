@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { playlistCache } from "@/lib/cache"
+import { sanitizeString, validateOptionalString, MAX_LENGTHS } from "@/lib/security"
 
 
 if (!global.users) global.users = new Map()
@@ -73,11 +74,27 @@ export async function PUT(
   try {
     const { name, description, isPublic } = await request.json()
 
+    // Validate and sanitize name if provided
+    if (name !== undefined) {
+      const nameError = validateOptionalString(name, MAX_LENGTHS.NAME, "Playlist name")
+      if (nameError) {
+        return NextResponse.json({ error: nameError }, { status: 400 })
+      }
+    }
+
+    // Validate and sanitize description if provided
+    if (description !== undefined) {
+      const descError = validateOptionalString(description, MAX_LENGTHS.DESCRIPTION, "Description")
+      if (descError) {
+        return NextResponse.json({ error: descError }, { status: 400 })
+      }
+    }
+
     const updated: Playlist = {
       ...playlist,
-      name: name?.trim() || playlist.name,
-      description: description !== undefined ? description?.trim() || undefined : playlist.description,
-      isPublic: isPublic !== undefined ? isPublic : playlist.isPublic,
+      name: name !== undefined ? sanitizeString(name) : playlist.name,
+      description: description !== undefined ? (description ? sanitizeString(description) : undefined) : playlist.description,
+      isPublic: isPublic !== undefined ? (isPublic === true || isPublic === "true") : playlist.isPublic,
       updatedAt: new Date().toISOString(),
     }
 

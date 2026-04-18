@@ -1,9 +1,43 @@
+/**
+ * @version v1
+ * @description 歌曲管理API：列出用户所有歌曲 / 创建新歌曲生成任务
+ * @request GET /api/songs - 获取当前用户的所有歌曲（按创建时间倒序）
+ * @request POST /api/songs - 创建新的AI歌曲生成任务
+ *
+ * POST /api/songs 请求参数：
+ * @param {string} title - 歌曲标题（必需，最大长度100字符）
+ * @param {string} [lyrics] - 歌词（可选，非 instrumental 时必需）
+ * @param {string[]} genre - 音乐风格数组（必需，至少一个元素）
+ * @param {string} mood - 歌曲情绪/风格（必需）
+ * @param {string[]} [instruments] - 乐器列表（可选，最多20个）
+ * @param {string} [referenceSinger] - 参考歌手（可选）
+ * @param {string} [referenceSong] - 参考歌曲（可选）
+ * @param {string} [userNotes] - 用户备注（可选）
+ * @param {boolean} [isInstrumental] - 是否为纯音乐（默认false）
+ * @param {string} [voiceId] - 声音ID（可选）
+ * @param {string} [model] - 模型版本（默认music-2.6，支持music-2.5, music-2.5-turbo）
+ * @param {string} [outputFormat] - 输出格式（默认mp3，支持mp3/wav/flac）
+ * @param {boolean} [lyricsOptimizer] - 是否优化歌词（默认false）
+ * @param {number} [sampleRate] - 采样率（默认44100，范围8000-192000）
+ * @param {number} [bitrate] - 比特率（默认256000，范围32000-512000）
+ * @param {boolean} [aigcWatermark] - 是否添加AI水印（默认false）
+ *
+ * GET /api/songs 响应：
+ * @returns {object} { songs: Song[] }
+ *
+ * POST /api/songs 响应：
+ * @returns {object} { id, shareToken, status: "PENDING", usage: { daily, monthly } }
+ * @errors 400 - 参数验证失败 | 429 - 超出使用限制（FREE用户每日3次，每月10次）| 500 - 服务器错误
+ * @rateLimit 20 requests per minute per user
+ */
 import { NextRequest, NextResponse } from "next/server"
 import type { User, Song } from "@/lib/types"
 import { miniMaxProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { checkDuplicateGeneration } from "@/lib/cache"
 import { prisma } from "@/lib/db"
+import { rateLimitMiddleware, DEFAULT_RATE_LIMIT, sanitizeString, validateRequiredString, validateOptionalString, validateStringArray, validateNumber, MAX_LENGTHS } from "@/lib/security"
+import crypto from "crypto"
 
 // Shared global storage
 
@@ -82,6 +116,12 @@ function getSessionUser(request: NextRequest): User {
 }
 
 export async function GET(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "songs:get")
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
   const user = getSessionUser(request)
 
   // Try Prisma first, fall back to memory
@@ -128,6 +168,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "songs:post")
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
   try {
     const user = getSessionUser(request)
     const body = await request.json()
@@ -151,12 +197,78 @@ export async function POST(request: NextRequest) {
       aigcWatermark,
     } = body
 
+    // Validation and sanitization
+    const titleError = validateRequiredString(title, MAX_LENGTHS.TITLE, "Title")
+    if (titleError) {
+      return NextResponse.json({ error: titleError }, { status: 400 })
+    }
+
+    const lyricsError = validateOptionalString(lyrics, MAX_LENGTHS.LYRICS, "Lyrics")
+    if (lyricsError) {
+      return NextResponse.json({ error: lyricsError }, { status: 400 })
+    }
+
+    // Validate mood
+    const moodError = validateRequiredString(mood, MAX_LENGTHS.MOOD, "Mood")
+    if (moodError) {
+      return NextResponse.json({ error: moodError }, { status: 400 })
+    }
+
+    // Validate genre array
+    if (!Array.isArray(genre) || genre.length === 0) {
+      return NextResponse.json({ error: "Genre must be a non-empty array" }, { status: 400 })
+    }
+
+    const sanitizedTitle = sanitizeString(title)
+    const sanitizedLyrics = lyrics ? sanitizeString(lyrics) : undefined
+    const sanitizedMood = sanitizeString(mood)
+    const sanitizedGenre = genre.map((g: string) => sanitizeString(g)).filter((g: string) => g.length > 0)
+
+    if (sanitizedGenre.length === 0) {
+      return NextResponse.json({ error: "Genre must have at least one valid value" }, { status: 400 })
+    }
+
     // Validation - lyrics not required if instrumental
-    if (!title || (!isInstrumental && !lyrics) || !genre?.length || !mood) {
+    const instrumental = isInstrumental === true || isInstrumental === "true"
+    if (!instrumental && !sanitizedLyrics) {
       return NextResponse.json(
         { error: "Missing required fields: title, lyrics, genre, mood" },
         { status: 400 }
       )
+    }
+
+    // Validate optional fields
+    const sanitizedInstruments = instruments
+      ? validateStringArray(instruments, MAX_LENGTHS.INSTRUMENT, 20, "Instruments")
+      : []
+    if (instruments && !sanitizedInstruments) {
+      return NextResponse.json({ error: "Invalid instruments format" }, { status: 400 })
+    }
+
+    const sanitizedReferenceSinger = referenceSinger ? sanitizeString(referenceSinger) : undefined
+    const sanitizedReferenceSong = referenceSong ? sanitizeString(referenceSong) : undefined
+    const sanitizedUserNotes = userNotes ? sanitizeString(userNotes) : undefined
+    const sanitizedVoiceId = voiceId ? sanitizeString(voiceId) : undefined
+
+    // Validate numeric fields
+    const validatedSampleRate = sampleRate ? validateNumber(sampleRate, 8000, 192000, "Sample rate") : 44100
+    const validatedBitrate = bitrate ? validateNumber(bitrate, 32000, 512000, "Bitrate") : 256000
+    if ((sampleRate && validatedSampleRate === null) || (bitrate && validatedBitrate === null)) {
+      return NextResponse.json({ error: "Invalid numeric parameter" }, { status: 400 })
+    }
+
+    // Validate model enum
+    const allowedModels = ["music-2.6", "music-2.5-turbo", "music-2.5"]
+    const sanitizedModel = model ? sanitizeString(model) : "music-2.6"
+    if (model && !allowedModels.includes(sanitizedModel)) {
+      return NextResponse.json({ error: "Invalid model. Allowed: " + allowedModels.join(", ") }, { status: 400 })
+    }
+
+    // Validate output format enum
+    const allowedFormats = ["mp3", "wav", "flac"]
+    const sanitizedOutputFormat = outputFormat ? sanitizeString(outputFormat) : "mp3"
+    if (outputFormat && !allowedFormats.includes(sanitizedOutputFormat)) {
+      return NextResponse.json({ error: "Invalid output format. Allowed: " + allowedFormats.join(", ") }, { status: 400 })
     }
 
     // Request deduplication - prevent duplicate generation requests
@@ -216,7 +328,7 @@ export async function POST(request: NextRequest) {
     user.dailyUsage++
     user.monthlyUsage++
 
-    // Create song record
+    // Create song record with sanitized values
     const songId = crypto.randomUUID()
     const now = new Date().toISOString()
     const shareToken = crypto.randomUUID().slice(0, 8)
@@ -224,23 +336,23 @@ export async function POST(request: NextRequest) {
     const song: Song = {
       id: songId,
       userId: user.id,
-      title,
-      lyrics,
-      genre,
-      mood,
-      instruments: instruments || [],
-      referenceSinger,
-      referenceSong,
-      userNotes,
-      isInstrumental: isInstrumental || false,
-      voiceId,
+      title: sanitizedTitle,
+      lyrics: sanitizedLyrics,
+      genre: sanitizedGenre,
+      mood: sanitizedMood,
+      instruments: sanitizedInstruments || [],
+      referenceSinger: sanitizedReferenceSinger,
+      referenceSong: sanitizedReferenceSong,
+      userNotes: sanitizedUserNotes,
+      isInstrumental: instrumental,
+      voiceId: sanitizedVoiceId,
       referenceAudio,
-      model: model || 'music-2.6',
-      outputFormat: outputFormat || 'mp3',
-      lyricsOptimizer: lyricsOptimizer || false,
-      sampleRate: sampleRate || 44100,
-      bitrate: bitrate || 256000,
-      aigcWatermark: aigcWatermark || false,
+      model: sanitizedModel as 'music-2.6' | 'music-cover',
+      outputFormat: sanitizedOutputFormat as 'mp3' | 'wav' | 'pcm',
+      lyricsOptimizer: lyricsOptimizer === true || lyricsOptimizer === "true",
+      sampleRate: (validatedSampleRate || 44100) as 16000 | 24000 | 32000 | 44100,
+      bitrate: (validatedBitrate || 256000) as 32000 | 64000 | 128000 | 256000,
+      aigcWatermark: aigcWatermark === true || aigcWatermark === "true",
       status: "PENDING",
       moderationStatus: "APPROVED", // Auto-approve for MVP
       shareToken,

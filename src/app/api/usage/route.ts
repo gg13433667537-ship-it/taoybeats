@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { rateLimitMiddleware, DEFAULT_RATE_LIMIT } from "@/lib/security"
 
 
 if (!global.users) global.users = new Map()
@@ -37,6 +38,12 @@ function getUserUsage(user: User): { daily: number; monthly: number } {
 }
 
 export async function GET(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "usage")
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
   // Get user ID from session token
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
@@ -101,6 +108,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "usage")
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
   // Get user ID from session token
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {

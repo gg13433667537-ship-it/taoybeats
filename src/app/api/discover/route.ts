@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song, User } from "@/lib/types"
 import { discoverCache } from "@/lib/cache"
+import { applySecurityHeaders } from "@/lib/security"
 
 
 // Build cache key from query params

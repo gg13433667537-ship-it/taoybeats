@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders } from "@/lib/security"
 
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { POST as generateLyrics } from '@/app/api/lyrics/route'
 import { createSessionToken } from '@/lib/auth-utils'

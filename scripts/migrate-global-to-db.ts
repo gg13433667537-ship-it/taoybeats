@@ -14,11 +14,13 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 // Global Map types (must match src/app/api/songs/route.ts)
+/* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
   var users: Map<string, any> | undefined
   var songs: Map<string, any> | undefined
   var adminLogs: Map<string, any> | undefined
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 interface InMemoryUser {
   id: string

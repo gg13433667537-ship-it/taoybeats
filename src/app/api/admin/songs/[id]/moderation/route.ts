@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song, ModerationStatus } from "@/lib/types"
+import { applySecurityHeaders } from "@/lib/security"
 
 export async function PATCH(
   request: NextRequest,
@@ -12,20 +13,20 @@ export async function PATCH(
     const { status } = body as { status: ModerationStatus }
 
     if (!status || !['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: 'Invalid moderation status. Must be PENDING, APPROVED, or REJECTED' },
         { status: 400 }
-      )
+      ))
     }
 
     const songsMap = global.songs as Map<string, Song> | undefined
     if (!songsMap) {
-      return NextResponse.json({ error: "Songs not found" }, { status: 404 })
+      return applySecurityHeaders(NextResponse.json({ error: "Songs not found" }, { status: 404 }))
     }
 
     const song = songsMap.get(id)
     if (!song) {
-      return NextResponse.json({ error: "Song not found" }, { status: 404 })
+      return applySecurityHeaders(NextResponse.json({ error: "Song not found" }, { status: 404 }))
     }
 
     // Update moderation status
@@ -46,9 +47,9 @@ export async function PATCH(
     return NextResponse.json(updatedSong)
   } catch (error) {
     console.error("Moderation error:", error)
-    return NextResponse.json(
+    return applySecurityHeaders(NextResponse.json(
       { error: "Failed to update moderation status" },
       { status: 500 }
-    )
+    ))
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { playlistCache } from "@/lib/cache"
+import { sanitizeString, validateRequiredString, validateOptionalString, MAX_LENGTHS } from "@/lib/security"
 
 
 if (!global.users) global.users = new Map()
@@ -61,17 +62,29 @@ export async function POST(request: NextRequest) {
   try {
     const { name, description, isPublic } = await request.json()
 
-    if (!name || name.trim().length === 0) {
-      return NextResponse.json({ error: "Playlist name is required" }, { status: 400 })
+    // Validate and sanitize name
+    const nameError = validateRequiredString(name, MAX_LENGTHS.NAME, "Playlist name")
+    if (nameError) {
+      return NextResponse.json({ error: nameError }, { status: 400 })
     }
+
+    // Validate and sanitize description
+    const descError = validateOptionalString(description, MAX_LENGTHS.DESCRIPTION, "Description")
+    if (descError) {
+      return NextResponse.json({ error: descError }, { status: 400 })
+    }
+
+    const sanitizedName = sanitizeString(name)
+    const sanitizedDescription = description ? sanitizeString(description) : undefined
+    const publicFlag = isPublic === true || isPublic === "true"
 
     const playlist: Playlist = {
       id: crypto.randomUUID(),
-      name: name.trim(),
-      description: description?.trim() || undefined,
+      name: sanitizedName,
+      description: sanitizedDescription,
       userId: user.id,
       songIds: [],
-      isPublic: isPublic || false,
+      isPublic: publicFlag,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }

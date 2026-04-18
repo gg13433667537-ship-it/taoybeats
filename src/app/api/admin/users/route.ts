@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders } from "@/lib/security"
 
 // In-memory user storage (shared with other routes for demo)
 
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
   const user = getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
   }
 
   const { searchParams } = new URL(request.url)
@@ -117,7 +118,7 @@ export async function PATCH(request: NextRequest) {
   const user = getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
   }
 
   try {
@@ -125,12 +126,12 @@ export async function PATCH(request: NextRequest) {
     const { userId, role, isActive, tier } = body
 
     if (!userId) {
-      return NextResponse.json({ error: "userId required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "userId required" }, { status: 400 }))
     }
 
     const targetUser = users.get(userId)
     if (!targetUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      return applySecurityHeaders(NextResponse.json({ error: "User not found" }, { status: 404 }))
     }
 
     const updates: Record<string, unknown> = {}
@@ -145,6 +146,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true, user: targetUser })
   } catch (error) {
     console.error("Admin update user error:", error)
-    return NextResponse.json({ error: "Failed to update user" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to update user" }, { status: 500 }))
   }
 }

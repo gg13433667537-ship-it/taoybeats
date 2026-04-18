@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders } from "@/lib/security"
 
 
 interface SessionUser {
@@ -80,12 +81,12 @@ export async function GET(
   const { id } = await params
 
   if (!user || !isAdmin(user)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
   }
 
   const targetUser = users.get(id)
   if (!targetUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: "User not found" }, { status: 404 }))
   }
 
   // Get user's songs
@@ -116,16 +117,16 @@ export async function DELETE(
   const { id } = await params
 
   if (!user || !isAdmin(user)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
   }
 
   if (user.id === id) {
-    return NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 })
+    return applySecurityHeaders(NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 }))
   }
 
   const targetUser = users.get(id)
   if (!targetUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: "User not found" }, { status: 404 }))
   }
 
   // Delete user's songs

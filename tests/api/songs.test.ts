@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { POST as registerUser } from '@/app/api/auth/register/route'
 import { POST as loginUser } from '@/app/api/auth/login/route'

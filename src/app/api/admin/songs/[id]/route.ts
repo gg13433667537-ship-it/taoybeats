@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders } from "@/lib/security"
 
 
 interface SessionUser {
@@ -71,12 +72,12 @@ export async function DELETE(
   const { id } = await params
 
   if (!user || !isAdmin(user)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
   }
 
   const song = songs.get(id) as { title?: string } | undefined
   if (!song) {
-    return NextResponse.json({ error: "Song not found" }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: "Song not found" }, { status: 404 }))
   }
 
   songs.delete(id)

@@ -21,9 +21,11 @@ interface TableInfo {
 async function getTableInfo(tableName: string): Promise<TableInfo | null> {
   try {
     // Use raw query to get row count
+    /* eslint-disable @typescript-eslint/no-explicit-any */
     const result = await prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*) as count FROM "${tableName as any}"
     `
+    /* eslint-enable @typescript-eslint/no-explicit-any */
     const count = Number(result[0]?.count || 0)
 
     // Get column count from information_schema
@@ -101,6 +103,7 @@ async function main() {
 
   for (const { table, column } of indexes) {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await prisma.$queryRaw`SELECT 1 FROM "${table as any}" WHERE "${column as any}" IS NOT NULL LIMIT 1`
       console.log(`  [OK] ${table}.${column}`)
     } catch {

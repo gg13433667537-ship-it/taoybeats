@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSessionToken } from "@/lib/auth-utils"
+import {
+  rateLimitMiddleware,
+  applySecurityHeaders,
+  AUTH_RATE_LIMIT,
+} from "@/lib/security"
 
 // Shared global storage
 
@@ -10,6 +15,12 @@ if (!global.adminLogs) global.adminLogs = new Map()
 const users = global.users!
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting for auth endpoints
+  const rateLimitResponse = rateLimitMiddleware(request, AUTH_RATE_LIMIT, "verify")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   try {
     const { email, code } = await request.json()
 
@@ -120,6 +131,7 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
     })
 
     return response

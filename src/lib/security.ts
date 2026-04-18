@@ -228,6 +228,141 @@ export function validateInput(input: unknown, type: "email" | "text" | "uuid" | 
 }
 
 // ============================================================================
+// Input Validation Helpers
+// ============================================================================
+
+/** Maximum lengths for common fields */
+export const MAX_LENGTHS = {
+  TITLE: 200,
+  DESCRIPTION: 1000,
+  NAME: 100,
+  EMAIL: 254,
+  NOTES: 2000,
+  LYRICS: 10000,
+  GENRE: 50,
+  MOOD: 50,
+  INSTRUMENT: 50,
+  PROMPT: 2000,
+}
+
+/** Validate a UUID parameter */
+export function validateUUID(id: unknown, fieldName: string = "ID"): string | null {
+  if (typeof id !== "string") {
+    return `${fieldName} must be a string`
+  }
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!uuidRegex.test(id)) {
+    return `Invalid ${fieldName} format`
+  }
+  return null
+}
+
+/** Validate string length */
+export function validateLength(value: unknown, maxLength: number, fieldName: string): string | null {
+  if (typeof value !== "string") {
+    return `${fieldName} must be a string`
+  }
+  if (value.length > maxLength) {
+    return `${fieldName} must not exceed ${maxLength} characters`
+  }
+  return null
+}
+
+/** Validate required string with sanitization */
+export function validateRequiredString(input: unknown, maxLength: number, fieldName: string): string | null {
+  if (input === undefined || input === null) {
+    return `${fieldName} is required`
+  }
+  if (typeof input !== "string") {
+    return `${fieldName} must be a string`
+  }
+  const sanitized = sanitizeString(input)
+  if (sanitized.length === 0) {
+    return `${fieldName} cannot be empty`
+  }
+  if (sanitized.length > maxLength) {
+    return `${fieldName} must not exceed ${maxLength} characters`
+  }
+  return null
+}
+
+/** Validate optional string with sanitization */
+export function validateOptionalString(input: unknown, maxLength: number, fieldName: string): string | null {
+  if (input === undefined || input === null) {
+    return null
+  }
+  if (typeof input !== "string") {
+    return `${fieldName} must be a string`
+  }
+  const sanitized = sanitizeString(input)
+  if (sanitized.length > maxLength) {
+    return `${fieldName} must not exceed ${maxLength} characters`
+  }
+  return null
+}
+
+/** Validate enum value */
+export function validateEnum(value: unknown, allowedValues: string[], fieldName: string): string | null {
+  if (typeof value !== "string") {
+    return `${fieldName} must be a string`
+  }
+  if (!allowedValues.includes(value)) {
+    return `${fieldName} must be one of: ${allowedValues.join(", ")}`
+  }
+  return null
+}
+
+/** Validate array of strings with sanitization */
+export function validateStringArray(input: unknown, maxLength: number, maxItems: number, fieldName: string): string[] | null {
+  if (!Array.isArray(input)) {
+    return null
+  }
+  if (input.length > maxItems) {
+    return null
+  }
+  const result: string[] = []
+  for (const item of input) {
+    if (typeof item !== "string") {
+      return null
+    }
+    const sanitized = sanitizeString(item)
+    if (sanitized.length > maxLength) {
+      return null
+    }
+    result.push(sanitized)
+  }
+  return result
+}
+
+/** Validate boolean */
+export function validateBoolean(value: unknown, fieldName: string): boolean | null {
+  if (typeof value === "boolean") {
+    return value
+  }
+  if (value === "true" || value === "false") {
+    return value === "true"
+  }
+  return null
+}
+
+/** Validate number within range */
+export function validateNumber(value: unknown, min: number, max: number, fieldName: string): number | null {
+  if (typeof value === "number" && !isNaN(value)) {
+    if (value < min || value > max) {
+      return null
+    }
+    return value
+  }
+  if (typeof value === "string") {
+    const num = parseInt(value, 10)
+    if (!isNaN(num) && num >= min && num <= max) {
+      return num
+    }
+  }
+  return null
+}
+
+// ============================================================================
 // CSRF Protection
 // ============================================================================
 
@@ -318,11 +453,78 @@ export function validateCSRF(request: NextRequest, sessionId: string): boolean {
 }
 
 // ============================================================================
+// Content Security Policy (CSP)
+// ============================================================================
+
+/**
+ * CSP configuration for API routes (JSON responses - no inline scripts/styles needed)
+ *
+ * RESTRICTED CSP - for API routes that return JSON
+ * - No 'unsafe-inline' for scripts (APIs don't serve HTML)
+ * - No 'unsafe-eval' (no dynamic code execution in this codebase)
+ * - No 'unsafe-inline' for styles (APIs don't contain inline styles)
+ */
+const API_CSP = [
+  "default-src 'self'",
+  // No script-src needed for JSON APIs - add specific sources if needed
+  "script-src 'self'",
+  // Styles not needed in JSON responses
+  "style-src 'self'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  // Allow MiniMax API connections
+  "connect-src 'self' https://api.minimaxi.com https://api.minimax.com",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join("; ")
+
+/**
+ * CSP configuration for browser (HTML pages)
+ *
+ * PRODUCTION CSP - designed to work with Tailwind CSS 4
+ * - Uses 'self' for scripts and styles
+ * - Tailwind CSS 4 generates styles at build time, so 'unsafe-inline' not needed in production
+ * - Does NOT include 'unsafe-eval' (no dynamic code evaluation found in codebase)
+ *
+ * NOTE: During development with `npm run dev`, Next.js HMR may inject styles.
+ * If you encounter HMR issues, you may temporarily add 'unsafe-inline' to style-src.
+ * For production, test thoroughly without 'unsafe-inline' as Tailwind 4 extracts all styles.
+ */
+const BROWSER_CSP = [
+  "default-src 'self'",
+  // No unsafe-eval: codebase has no eval(), new Function(), or dynamic code execution
+  "script-src 'self'",
+  // Tailwind CSS 4 with JIT extracts styles at build time
+  // If using CSS-in-JS (styled-components, emotion), add 'unsafe-inline' back
+  "style-src 'self'",
+  "img-src 'self' data: blob: https://*.supabase.co https://*.minimax.io",
+  "font-src 'self' data:",
+  // Allow MiniMax API and Supabase connections
+  "connect-src 'self' https://api.minimaxi.com https://api.minimax.com https://*.supabase.co wss://*.supabase.co",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join("; ")
+
+/**
+ * Get the appropriate CSP based on whether the response is an API route
+ */
+export function getCSP(isApiRoute: boolean = false): string {
+  return isApiRoute ? API_CSP : BROWSER_CSP
+}
+
+// ============================================================================
 // Security Headers
 // ============================================================================
 
 /**
  * Security headers to apply to responses
+ * Note: CSP is now separate and applied via getCSP()
  */
 export const securityHeaders = {
   "X-DNS-Prefetch-Control": "on",
@@ -332,28 +534,20 @@ export const securityHeaders = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-  "Content-Security-Policy": [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "font-src 'self' data:",
-    "connect-src 'self' https://api.minimaxi.com https://api.minimax.com",
-    "frame-src 'none'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'self'",
-  ].join("; "),
 }
 
 /**
  * Apply security headers to a response
+ * @param response - The NextResponse to apply headers to
+ * @param cspType - Set to 'api' for API routes (JSON), 'browser' for HTML pages
+ * @default 'api' - Most callers are API routes returning JSON
  */
-export function applySecurityHeaders(response: NextResponse): NextResponse {
+export function applySecurityHeaders(response: NextResponse, cspType: 'api' | 'browser' = 'api'): NextResponse {
   for (const [key, value] of Object.entries(securityHeaders)) {
     response.headers.set(key, value)
   }
+  // Apply CSP based on route type
+  response.headers.set("Content-Security-Policy", getCSP(cspType === 'api'))
   return response
 }
 
@@ -373,7 +567,7 @@ interface CORSConfig {
 const DEFAULT_CORS: CORSConfig = {
   allowedOrigins: process.env.ALLOWED_ORIGINS?.split(",") || [
     "http://localhost:3000",
-    "https://taoybeats.com",
+    "http://localhost:3001",
   ],
   allowedMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: [

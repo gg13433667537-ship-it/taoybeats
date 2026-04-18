@@ -307,7 +307,7 @@ export default function DiscoverPage() {
                     {/* Cover / Waveform Placeholder */}
                     <div className="h-32 rounded-xl bg-gradient-to-br from-accent/20 to-accent-glow/20 mb-4 flex items-center justify-center overflow-hidden relative group/cover">
                       {song.coverUrl ? (
-                        <Image src={song.coverUrl || ""} alt={song.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                        <Image src={song.coverUrl || ""} alt={song.title} fill className="object-cover" loading="lazy" decoding="async" />
                       ) : (
                         <div className="flex items-center gap-1">
                           {Array.from({ length: 32 }).map((_, i) => (

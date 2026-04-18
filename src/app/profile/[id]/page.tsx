@@ -196,7 +196,7 @@ export default function ProfilePage() {
                     {/* Cover */}
                     <div className="h-32 rounded-xl bg-gradient-to-br from-accent/20 to-accent-glow/20 mb-4 flex items-center justify-center relative">
                       {song.coverUrl ? (
-                        <Image src={song.coverUrl || ""} alt={song.title} className="w-full h-full object-cover rounded-xl" loading="lazy" decoding="async" />
+                        <Image src={song.coverUrl || ""} alt={song.title} fill className="object-cover rounded-xl" loading="lazy" decoding="async" />
                       ) : (
                         <Music className="w-12 h-12 text-accent/40" />
                       )}

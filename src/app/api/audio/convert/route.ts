@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders } from "@/lib/security"
 
 // Initialize global state
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
@@ -46,7 +47,7 @@ export interface ConvertRequest {
 export async function POST(request: NextRequest) {
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   try {
@@ -54,19 +55,19 @@ export async function POST(request: NextRequest) {
     const { audioUrl, outputFormat, quality = 'high', bitrate } = body
 
     if (!audioUrl) {
-      return NextResponse.json({ error: "audioUrl is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "audioUrl is required" }, { status: 400 }))
     }
 
     if (!outputFormat) {
-      return NextResponse.json({ error: "outputFormat is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "outputFormat is required" }, { status: 400 }))
     }
 
     const supportedFormats: AudioFormat[] = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'pcm']
     if (!supportedFormats.includes(outputFormat)) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: `Unsupported format. Supported: ${supportedFormats.join(', ')}` },
         { status: 400 }
-      )
+      ))
     }
 
     // Check user tier for format availability
@@ -76,10 +77,10 @@ export async function POST(request: NextRequest) {
 
     // FLAC is Pro only
     if (outputFormat === 'flac' && !isPro) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: "FLAC format is available for Pro users only" },
         { status: 403 }
-      )
+      ))
     }
 
     // In production, this would:
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Audio convert error:", error)
-    return NextResponse.json({ error: "Failed to convert audio" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to convert audio" }, { status: 500 }))
   }
 }
 

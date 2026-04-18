@@ -1,3 +1,14 @@
+/**
+ * POST /api/auth/register
+ * @version v1
+ * @description 注册新用户，自动创建会话并设置7天有效的session cookie
+ * @param {string} email - 用户邮箱（必需，已消毒处理）
+ * @param {string} password - 密码（最少6字符，已加密存储）
+ * @param {string} [name] - 用户昵称（可选，默认使用邮箱前缀）
+ * @returns {object} { success: true, user: { id, email, name, role } }
+ * @errors 400 - 参数缺失或密码太短 | 409 - 邮箱已被注册 | 500 - 服务器错误
+ * @rateLimit 5 requests per minute per IP
+ */
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"
@@ -11,6 +22,7 @@ import {
   AUTH_RATE_LIMIT,
 } from "@/lib/security"
 import { prisma } from "@/lib/db"
+import { logger } from "@/lib/logger"
 
 
 if (!global.users) global.users = new Map()
@@ -20,9 +32,17 @@ if (!global.adminLogs) global.adminLogs = new Map()
 const users = global.users!
 
 export async function POST(request: NextRequest) {
+  const requestId = crypto.randomUUID()
+  const startTime = Date.now()
+  const endpoint = "/api/auth/register"
+
+  logger.api.request("POST", endpoint, { requestId })
+
   // Apply rate limiting for auth endpoints
   const rateLimitResponse = rateLimitMiddleware(request, AUTH_RATE_LIMIT, "register")
   if (rateLimitResponse) {
+    const duration = Date.now() - startTime
+    logger.api.response("POST", endpoint, 429, duration, { requestId })
     return applySecurityHeaders(rateLimitResponse)
   }
 
@@ -36,6 +56,8 @@ export async function POST(request: NextRequest) {
     const sanitizedName = name ? sanitizeString(name) : undefined
 
     if (!sanitizedEmail || !sanitizedPassword) {
+      const duration = Date.now() - startTime
+      logger.api.response("POST", endpoint, 400, duration, { requestId })
       return applySecurityHeaders(
         NextResponse.json(
           { error: "请提供邮箱和密码" },
@@ -46,6 +68,8 @@ export async function POST(request: NextRequest) {
 
     // Validate password length
     if (sanitizedPassword.length < 6) {
+      const duration = Date.now() - startTime
+      logger.api.response("POST", endpoint, 400, duration, { requestId })
       return applySecurityHeaders(
         NextResponse.json(
           { error: "密码长度至少为6个字符" },
@@ -62,6 +86,8 @@ export async function POST(request: NextRequest) {
       where: { email: sanitizedEmail },
     })
     if (existingUser) {
+      const duration = Date.now() - startTime
+      logger.api.response("POST", endpoint, 409, duration, { requestId, userId: existingUser.id })
       return applySecurityHeaders(
         NextResponse.json(
           { error: "该邮箱已被注册" },
@@ -132,9 +158,13 @@ export async function POST(request: NextRequest) {
       path: "/",
     })
 
+    const duration = Date.now() - startTime
+    logger.api.response("POST", endpoint, 201, duration, { requestId, userId: user.id })
+    logger.auth.login(user.id, true, { requestId })
+
     return applySecurityHeaders(response)
   } catch (error) {
-    console.error("Register error:", error)
+    logger.api.error("POST", endpoint, error, { requestId })
     return applySecurityHeaders(
       NextResponse.json(
         { error: "注册失败，请稍后重试" },

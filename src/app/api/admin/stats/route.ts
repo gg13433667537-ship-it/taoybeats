@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders } from "@/lib/security"
 
 
 interface SessionUser {
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
   const user = getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
   }
 
   const allUsers = Array.from(users.values())

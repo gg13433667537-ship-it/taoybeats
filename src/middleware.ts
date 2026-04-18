@@ -21,6 +21,22 @@ const securityHeaders = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 }
 
+// CSP for browser routes - no unsafe-inline or unsafe-eval needed
+// Tailwind CSS 4 extracts styles at build time
+const browserCSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data: blob: https://*.supabase.co https://*.minimax.io",
+  "font-src 'self' data:",
+  "connect-src 'self' https://api.minimaxi.com https://api.minimax.com https://*.supabase.co wss://*.supabase.co",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join("; ")
+
 // Allowed origins for CORS
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
   "http://localhost:3000",
@@ -100,6 +116,12 @@ export async function middleware(request: NextRequest) {
   const response = NextResponse.next()
   for (const [key, value] of Object.entries(securityHeaders)) {
     response.headers.set(key, value)
+  }
+
+  // Apply CSP - use browser CSP for all routes (middleware serves HTML pages)
+  // API routes get their own CSP via applySecurityHeaders in the API handlers
+  if (!pathname.startsWith("/api/")) {
+    response.headers.set("Content-Security-Policy", browserCSP)
   }
 
   // Handle CORS for API routes
