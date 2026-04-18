@@ -225,7 +225,7 @@ export default function DashboardPage() {
     }
 
     fetchData()
-  }, [lang]) // Only fetch on mount and lang change
+  }, [lang, t]) // Only fetch on mount, lang change, or t change
 
   // Poll for GENERATING songs status updates
   useEffect(() => {
@@ -246,7 +246,7 @@ export default function DashboardPage() {
     }, 5000) // Poll every 5 seconds
 
     return () => clearInterval(pollInterval)
-  }, [songs]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [songs])
   // Intentionally depends on songs to re-check for GENERATING status after songs update
 
   const getStatusColor = (status: string) => {

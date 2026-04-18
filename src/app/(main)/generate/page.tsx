@@ -189,11 +189,13 @@ export default function GeneratePage() {
   // Beat Maker mode effect - enables instrumental and pre-selects beat instruments
   useEffect(() => {
     if (beatMakerMode) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentionally updating form state based on beatMakerMode toggle
+      /* eslint-disable react-hooks/set-state-in-effect */
+      // Intentionally updating form state based on beatMakerMode toggle
       setIsInstrumental(true)
       setSelectedInstruments(['Drum', 'Bass', 'Synth'])
       setSelectedGenres(['Electronic', 'Hip-Hop'])
       setMood('Energetic')
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [beatMakerMode])
 
