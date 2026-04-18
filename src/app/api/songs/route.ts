@@ -3,6 +3,7 @@ import type { User, Song } from "@/lib/types"
 import { miniMaxProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { checkDuplicateGeneration } from "@/lib/cache"
+import { prisma } from "@/lib/db"
 
 // Shared global storage
 
@@ -82,11 +83,47 @@ function getSessionUser(request: NextRequest): User {
 
 export async function GET(request: NextRequest) {
   const user = getSessionUser(request)
-  const songsMap = global.songs as Map<string, Song> | undefined
-  if (!songsMap) {
-    return NextResponse.json({ songs: [] })
+
+  // Try Prisma first, fall back to memory
+  let userSongs: Song[] = []
+
+  try {
+    const dbSongs = await prisma.song.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+    })
+    userSongs = dbSongs.map((s) => ({
+      id: s.id,
+      title: s.title,
+      lyrics: s.lyrics || undefined,
+      genre: s.genre,
+      mood: s.mood || undefined,
+      instruments: s.instruments,
+      referenceSinger: s.referenceSinger || undefined,
+      referenceSong: s.referenceSong || undefined,
+      userNotes: s.userNotes || undefined,
+      isInstrumental: false,
+      status: s.status,
+      moderationStatus: "APPROVED" as const,
+      audioUrl: s.audioUrl || undefined,
+      coverUrl: s.coverUrl || undefined,
+      shareToken: s.shareToken || undefined,
+      userId: s.userId,
+      createdAt: s.createdAt.toISOString(),
+      updatedAt: s.updatedAt.toISOString(),
+    }))
+
+    // Also update in-memory cache
+    const songsMap = global.songs as Map<string, Song>
+    userSongs.forEach((s) => songsMap.set(s.id, s))
+  } catch (prismaError) {
+    console.error("Prisma song lookup failed, falling back to memory:", prismaError)
+    const songsMap = global.songs as Map<string, Song> | undefined
+    if (songsMap) {
+      userSongs = Array.from(songsMap.values()).filter((s) => s.userId === user.id)
+    }
   }
-  const userSongs = Array.from(songsMap.values()).filter(s => s.userId === user.id)
+
   return NextResponse.json({ songs: userSongs })
 }
 
@@ -213,6 +250,31 @@ export async function POST(request: NextRequest) {
 
     const songsMap = global.songs as Map<string, Song>
     songsMap.set(songId, song)
+
+    // Persist to Prisma
+    try {
+      await prisma.song.create({
+        data: {
+          id: songId,
+          title: song.title,
+          lyrics: song.lyrics || null,
+          genre: song.genre,
+          mood: song.mood || null,
+          instruments: song.instruments,
+          referenceSinger: song.referenceSinger || null,
+          referenceSong: song.referenceSong || null,
+          userNotes: song.userNotes || null,
+          status: "PENDING",
+          audioUrl: null,
+          coverUrl: null,
+          shareToken: shareToken,
+          userId: user.id,
+        },
+      })
+    } catch (prismaError) {
+      console.error("Failed to persist song to Prisma:", prismaError)
+      // Continue anyway - song is in memory
+    }
 
     // Start real generation in background
     generateMusic(songId, song, apiKey, apiUrl).catch((err) => {

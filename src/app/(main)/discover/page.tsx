@@ -190,8 +190,8 @@ export default function DiscoverPage() {
         <div className="max-w-6xl mx-auto">
           {/* Page Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-foreground mb-2">Discover</h1>
-            <p className="text-text-secondary">Explore music created by the TaoyBeats community</p>
+            <h1 className="text-3xl font-bold text-foreground mb-2">{t('discover')}</h1>
+            <p className="text-text-secondary">{t('discoverExplore')}</p>
           </div>
 
           {/* Filters */}
@@ -207,7 +207,7 @@ export default function DiscoverPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search songs, artists, genres..."
+                    placeholder={t('discoverSearchPlaceholder')}
                     className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent placeholder:text-text-muted"
                   />
                 </div>
@@ -220,9 +220,9 @@ export default function DiscoverPage() {
                     onChange={(e) => setSortBy(e.target.value)}
                     className="px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent"
                   >
-                    <option value="newest">Newest First</option>
-                    <option value="oldest">Oldest First</option>
-                    <option value="title">By Title</option>
+                    <option value="newest">{t('discoverNewestFirst')}</option>
+                    <option value="oldest">{t('discoverOldestFirst')}</option>
+                    <option value="title">{t('discoverByTitle')}</option>
                   </select>
                 </div>
 
@@ -234,7 +234,7 @@ export default function DiscoverPage() {
                     onChange={(e) => setGenreFilter(e.target.value)}
                     className="px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent"
                   >
-                    <option value="">All Genres</option>
+                    <option value="">{t('discoverAllGenres')}</option>
                     {GENRES.map(g => (
                       <option key={g} value={g}>{g}</option>
                     ))}
@@ -248,7 +248,7 @@ export default function DiscoverPage() {
                     onChange={(e) => setMoodFilter(e.target.value)}
                     className="px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent"
                   >
-                    <option value="">All Moods</option>
+                    <option value="">{t('discoverAllMoods')}</option>
                     {MOODS.map(m => (
                       <option key={m} value={m}>{m}</option>
                     ))}
@@ -258,7 +258,7 @@ export default function DiscoverPage() {
                 {/* Results count */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-text-muted">
-                    {total} {total === 1 ? 'song' : 'songs'} found
+                    {total} {total === 1 ? t('discoverSongFound') : t('discoverSongsFound')}
                   </span>
                 </div>
               </div>
@@ -271,27 +271,27 @@ export default function DiscoverPage() {
           ) : errorState.hasError ? (
             <div className="text-center py-20">
               <AlertTriangle className="w-16 h-16 text-warning mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-foreground mb-2">Something went wrong</h3>
+              <h3 className="text-lg font-medium text-foreground mb-2">{t('discoverSomethingWentWrong')}</h3>
               <p className="text-text-secondary mb-6">{errorState.message}</p>
               <button
                 onClick={() => fetchSongs(1)}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
-                Try Again
+                {t('discoverTryAgain')}
               </button>
             </div>
           ) : songs.length === 0 ? (
             <div className="text-center py-20">
               <Music className="w-16 h-16 text-text-muted mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-foreground mb-2">No songs yet</h3>
-              <p className="text-text-secondary mb-6">Be the first to create and share a song!</p>
+              <h3 className="text-lg font-medium text-foreground mb-2">{t('discoverNoSongsYet')}</h3>
+              <p className="text-text-secondary mb-6">{t('discoverBeFirst')}</p>
               <Link
                 href="/generate"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors"
               >
                 <Music className="w-4 h-4" />
-                Create Your First Song
+                {t('discoverCreateFirstSong')}
               </Link>
             </div>
           ) : (

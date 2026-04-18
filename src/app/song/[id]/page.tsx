@@ -22,7 +22,7 @@ export default function SongSharePage() {
     instruments?: string[]
     audioUrl?: string
     status?: string
-    [key: string]: unknown
+    [key: string]: string | string[] | boolean | number | undefined
   } | null>(null)
   const [loading, setLoading] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -332,8 +332,8 @@ export default function SongSharePage() {
     const targetDuration = prompt('Select extended duration (in seconds):\n- 180 (3 minutes)\n- 300 (5 minutes)', '300')
     if (targetDuration === null) return // User cancelled
 
-    const duration = parseInt(targetDuration, 10)
-    if (isNaN(duration) || duration < 60 || duration > 300) {
+    const extendDuration = parseInt(targetDuration, 10)
+    if (isNaN(extendDuration) || extendDuration < 60 || extendDuration > 300) {
       setSongError('Please enter a valid duration between 60 and 300 seconds')
       return
     }
@@ -343,7 +343,7 @@ export default function SongSharePage() {
       const res = await fetch(`/api/songs/${songId}/extend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetDuration: duration, prompt: t('extendPrompt') }),
+        body: JSON.stringify({ targetDuration: extendDuration, prompt: t('extendPrompt') }),
       })
 
       if (res.ok) {

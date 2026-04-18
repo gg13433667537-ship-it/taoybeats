@@ -8,6 +8,7 @@ import {
   applySecurityHeaders,
   AUTH_RATE_LIMIT,
 } from "@/lib/security"
+import { prisma } from "@/lib/db"
 
 
 if (!global.users) global.users = new Map()
@@ -40,8 +41,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user by email
-    const user = users.get(sanitizedEmail)
+    // Find user by email - first check memory, then fall back to Prisma
+    let user = users.get(sanitizedEmail)
+
+    // If not in memory, try Prisma (for serverless cold starts)
+    if (!user) {
+      try {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: sanitizedEmail },
+        })
+        if (dbUser) {
+          // Rehydrate user into memory
+          user = {
+            id: dbUser.id,
+            email: dbUser.email || sanitizedEmail,
+            name: dbUser.name || undefined,
+            password: dbUser.password || undefined,
+            role: dbUser.role as "USER" | "PRO" | "ADMIN",
+            isActive: dbUser.isActive,
+            tier: dbUser.tier as "FREE" | "PRO",
+            dailyUsage: dbUser.dailyUsage,
+            monthlyUsage: dbUser.monthlyUsage,
+            dailyResetAt: dbUser.dailyResetAt || getDateKey(),
+            monthlyResetAt: dbUser.monthlyResetAt || getMonthKey(),
+            createdAt: dbUser.createdAt.toISOString(),
+          }
+          users.set(sanitizedEmail, user)
+          users.set(user.id, user)
+        }
+      } catch (prismaError) {
+        console.error("Prisma lookup failed:", prismaError)
+      }
+    }
+
     if (!user) {
       return applySecurityHeaders(
         NextResponse.json(
@@ -120,4 +152,12 @@ export async function POST(request: NextRequest) {
       )
     )
   }
+}
+
+function getDateKey(): string {
+  return new Date().toISOString().split("T")[0]
+}
+
+function getMonthKey(): string {
+  return new Date().toISOString().slice(0, 7)
 }

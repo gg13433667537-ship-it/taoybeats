@@ -169,12 +169,17 @@ export default function GeneratePage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [stageMessage, setStageMessage] = useState<string>('')
+  const [forkError, setForkError] = useState<string | null>(null)
 
   // Load forked song data if fork parameter is present
   useEffect(() => {
     if (forkedSongId) {
+      setForkError(null)
       fetch(`/api/songs/${forkedSongId}`)
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) throw new Error('Forked song not found')
+          return res.json()
+        })
         .then(song => {
           if (song) {
             setTitle(song.title || '')
@@ -188,8 +193,8 @@ export default function GeneratePage() {
             setIsInstrumental(song.isInstrumental || false)
           }
         })
-        .catch(() => {
-          // Forked song not found - silently ignore
+        .catch((err) => {
+          setForkError(err.message || 'Failed to load forked song')
         })
     }
   }, [forkedSongId])
@@ -498,6 +503,13 @@ export default function GeneratePage() {
             <div className="mb-6 p-4 rounded-xl bg-error/10 border border-error/20 text-error flex items-center gap-3">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
               {error}
+            </div>
+          )}
+
+          {forkError && (
+            <div className="mb-6 p-4 rounded-xl bg-error/10 border border-error/20 text-error flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              {forkError}
             </div>
           )}
 

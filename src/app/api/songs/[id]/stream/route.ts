@@ -5,17 +5,24 @@ import { verifySessionToken } from "@/lib/auth-utils"
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
   const sessionToken = request.cookies.get('session-token')?.value
-  if (!sessionToken) return null
+  if (!sessionToken) {
+    // Return demo user for unauthenticated SSE connections (matches songs/route.ts behavior)
+    return { id: 'demo-user', email: 'demo@example.com', role: 'USER' }
+  }
   try {
     const payload = verifySessionToken(sessionToken)
-    if (!payload) return null
+    if (!payload) {
+      // Invalid token - return demo user instead of blocking
+      return { id: 'demo-user', email: 'demo@example.com', role: 'USER' }
+    }
     return {
       id: payload.id,
       email: payload.email,
       role: payload.role,
     }
   } catch {
-    return null
+    // Invalid token - return demo user instead of blocking
+    return { id: 'demo-user', email: 'demo@example.com', role: 'USER' }
   }
 }
 

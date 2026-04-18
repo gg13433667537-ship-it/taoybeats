@@ -42,11 +42,34 @@ interface GlobalSong {
   updatedAt: string
 }
 
+interface GlobalPlaylist {
+  id: string
+  userId: string
+  name: string
+  description?: string
+  isPublic: boolean
+  songIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+interface GlobalPreset {
+  id: string
+  userId: string
+  name: string
+  description?: string
+  config: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
 interface GlobalThis {
   systemApiKey?: string
   systemApiUrl?: string
   users?: Map<string, GlobalUser>
   songs?: Map<string, GlobalSong>
+  playlists?: Map<string, GlobalPlaylist>
+  presets?: Map<string, GlobalPreset>
   adminLogs?: Map<string, unknown>
 }
 

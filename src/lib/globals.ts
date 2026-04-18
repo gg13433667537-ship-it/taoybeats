@@ -1,20 +1,10 @@
 // Shared global state initialization
 // This module should be imported by all API routes
 
-import type { User, Song, Playlist, Preset } from './types'
+// Global types are declared in src/types/global.d.ts
+// This file provides initialization and accessor functions
 
-declare global {
-  var systemApiKey: string | undefined
-  var systemApiUrl: string | undefined
-  var users: Map<string, User> | undefined
-  var songs: Map<string, Song> | undefined
-  var playlists: Map<string, Playlist> | undefined
-  var presets: Map<string, Preset> | undefined
-  var adminLogs: Map<string, unknown> | undefined
-}
-
-// Ensure this file is treated as a module
-export {}
+import type { User, Song } from './types'
 
 // Initialize all globals
 export function initGlobals() {

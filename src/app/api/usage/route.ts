@@ -40,17 +40,35 @@ export async function GET(request: NextRequest) {
   // Get user ID from session token
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Return graceful degradation for unauthenticated requests instead of 401
+    return NextResponse.json({
+      userId: null,
+      tier: 'GUEST',
+      daily: { used: 0, limit: 0, remaining: 0 },
+      monthly: { used: 0, limit: 0, remaining: 0 },
+    })
   }
 
   const payload = verifySessionToken(sessionToken)
   if (!payload) {
-    return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+    // Return graceful degradation for invalid session instead of 401
+    return NextResponse.json({
+      userId: null,
+      tier: 'GUEST',
+      daily: { used: 0, limit: 0, remaining: 0 },
+      monthly: { used: 0, limit: 0, remaining: 0 },
+    })
   }
 
   const userId = payload.id || payload.email
   if (!userId) {
-    return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+    // Return graceful degradation for missing user ID instead of 401
+    return NextResponse.json({
+      userId: null,
+      tier: 'GUEST',
+      daily: { used: 0, limit: 0, remaining: 0 },
+      monthly: { used: 0, limit: 0, remaining: 0 },
+    })
   }
 
   const user = users.get(userId)

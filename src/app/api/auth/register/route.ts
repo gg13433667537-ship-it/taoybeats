@@ -10,6 +10,7 @@ import {
   applySecurityHeaders,
   AUTH_RATE_LIMIT,
 } from "@/lib/security"
+import { prisma } from "@/lib/db"
 
 
 if (!global.users) global.users = new Map()
@@ -88,6 +89,28 @@ export async function POST(request: NextRequest) {
     // Store by both email and id for easy lookup
     users.set(sanitizedEmail, user)
     users.set(user.id, user)
+
+    // Persist to Prisma database
+    try {
+      await prisma.user.create({
+        data: {
+          id: user.id,
+          email: user.email,
+          name: user.name || null,
+          password: user.password,
+          role: user.role as "USER" | "PRO" | "ADMIN",
+          isActive: user.isActive,
+          tier: user.tier,
+          dailyUsage: user.dailyUsage,
+          monthlyUsage: user.monthlyUsage,
+          dailyResetAt: user.dailyResetAt,
+          monthlyResetAt: user.monthlyResetAt,
+        },
+      })
+    } catch (prismaError) {
+      console.error("Failed to persist user to Prisma:", prismaError)
+      // Continue anyway - session is already created in memory
+    }
 
     // Create session token
     const sessionToken = createSessionToken(user)

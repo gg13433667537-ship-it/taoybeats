@@ -191,11 +191,7 @@ export default function LoginPage() {
       <main className="flex-1 flex items-center justify-center py-12 px-4">
         <div className="w-full max-w-md">
           <button
-            onClick={() => {
-              setStep("email")
-              setError("")
-              setEmail("")
-            }}
+            onClick={() => router.back()}
             aria-label={t("back")}
             className="flex items-center gap-2 text-sm text-text-secondary hover:text-foreground transition-colors mb-8"
           >

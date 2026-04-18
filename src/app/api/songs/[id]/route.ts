@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { prisma } from "@/lib/db"
 
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {

@@ -540,6 +540,23 @@ const translations = {
 
     // Song extend
     extendPrompt: 'Create an extended version maintaining style and mood',
+
+    // Discover
+    discover: 'Discover',
+    discoverExplore: 'Explore music created by the TaoyBeats community',
+    discoverSearchPlaceholder: 'Search songs, artists, genres...',
+    discoverNewestFirst: 'Newest First',
+    discoverOldestFirst: 'Oldest First',
+    discoverByTitle: 'By Title',
+    discoverAllGenres: 'All Genres',
+    discoverAllMoods: 'All Moods',
+    discoverSongsFound: 'songs found',
+    discoverSongFound: 'song found',
+    discoverSomethingWentWrong: 'Something went wrong',
+    discoverTryAgain: 'Try Again',
+    discoverNoSongsYet: 'No songs yet',
+    discoverBeFirst: 'Be the first to create and share a song!',
+    discoverCreateFirstSong: 'Create Your First Song',
   },
   zh: {
     // Header
@@ -1075,6 +1092,23 @@ const translations = {
 
     // Song extend
     extendPrompt: '创建保持风格和情绪的延长版本',
+
+    // Discover
+    discover: '发现',
+    discoverExplore: '探索 TaoyBeats 社区创作的音乐',
+    discoverSearchPlaceholder: '搜索歌曲、艺术家、风格...',
+    discoverNewestFirst: '最新优先',
+    discoverOldestFirst: '最旧优先',
+    discoverByTitle: '按标题',
+    discoverAllGenres: '所有风格',
+    discoverAllMoods: '所有情绪',
+    discoverSongsFound: '首歌曲已找到',
+    discoverSongFound: '首歌曲已找到',
+    discoverSomethingWentWrong: '出现错误',
+    discoverTryAgain: '重试',
+    discoverNoSongsYet: '暂无歌曲',
+    discoverBeFirst: '成为第一个创作并分享歌曲的人！',
+    discoverCreateFirstSong: '创建你的第一首歌曲',
   },
 
   // Traditional Chinese (zh-TW)

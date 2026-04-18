@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const [showPlaylistDropdown, setShowPlaylistDropdown] = useState<string | null>(null)
   const [newPlaylistName, setNewPlaylistName] = useState('')
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('')
+  const [addingToPlaylist, setAddingToPlaylist] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const playlistDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -167,6 +168,7 @@ export default function DashboardPage() {
 
   // Add song to playlist
   const handleAddToPlaylist = async (playlistId: string, songId: string) => {
+    setAddingToPlaylist(true)
     try {
       const res = await fetch(`/api/playlists/${playlistId}/songs`, {
         method: "POST",
@@ -179,6 +181,8 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error("Error adding song to playlist:", error)
+    } finally {
+      setAddingToPlaylist(false)
     }
   }
 
@@ -560,11 +564,16 @@ export default function DashboardPage() {
                                 onClick={() => {
                                   setShowPlaylistDropdown(showPlaylistDropdown === song.id ? null : song.id)
                                 }}
+                                disabled={addingToPlaylist}
                                 aria-label="Add to playlist"
                                 aria-expanded={showPlaylistDropdown === song.id}
-                                className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors"
+                                className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <ListMusic className="w-4 h-4" aria-hidden="true" />
+                                {addingToPlaylist ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                                ) : (
+                                  <ListMusic className="w-4 h-4" aria-hidden="true" />
+                                )}
                               </button>
                               {showPlaylistDropdown === song.id && (
                                 <div className="absolute right-0 top-full mt-1 w-56 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
