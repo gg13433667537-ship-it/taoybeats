@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
+import { verifySessionToken, createSessionToken } from "@/lib/auth-utils"
 
 declare global {
   var users: Map<string, User> | undefined
@@ -20,8 +21,8 @@ export async function PATCH(
       return NextResponse.json({ error: "未登录" }, { status: 401 })
     }
 
-    const session = JSON.parse(atob(sessionToken))
-    if (session.role !== "ADMIN") {
+    const session = verifySessionToken(sessionToken)
+    if (!session || session.role !== "ADMIN") {
       return NextResponse.json({ error: "需要管理员权限" }, { status: 403 })
     }
 
@@ -41,12 +42,15 @@ export async function PATCH(
     users.set(id, user)
 
     // Update session if changing own role
-    if (session.email === id) {
-      const newSession = { ...session, role }
+    if (session.id === id || session.email === id) {
+      const newToken = createSessionToken({
+        ...user,
+        password: undefined,
+      } as User)
       const response = NextResponse.json({ success: true, user })
       response.cookies.set(
         "session-token",
-        btoa(JSON.stringify(newSession)),
+        newToken,
         {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",

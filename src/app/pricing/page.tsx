@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Music, Check, Zap, Loader2 } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
+import { decodeSessionToken } from "@/lib/auth-utils"
 
 export default function PricingPage() {
   const { t } = useI18n()
@@ -36,10 +37,13 @@ export default function PricingPage() {
 
     setIsCheckingOut(true)
     try {
-      // Parse session token to get user info
+      // Decode session token to get user info
       const token = sessionToken.split('=')[1]
-      const payload = JSON.parse(Buffer.from(token, 'base64').toString())
-      const email = payload.email
+      const payload = decodeSessionToken(token)
+      if (!payload) {
+        router.push('/login?plan=pro')
+        return
+      }
 
       // Create Stripe checkout session
       const priceId = annual ? STRIPE_PRICE_IDS.pro_annual : STRIPE_PRICE_IDS.pro_monthly
@@ -49,7 +53,7 @@ export default function PricingPage() {
         body: JSON.stringify({
           priceId,
           userId: payload.id,
-          email,
+          email: payload.email,
         }),
       })
 
@@ -229,7 +233,7 @@ export default function PricingPage() {
                 {isCheckingOut ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Processing...
+                    {t('processing')}
                   </span>
                 ) : plan.id === 'free' ? t('pricingGetStarted') : t('upgradeToPro')}
               </button>

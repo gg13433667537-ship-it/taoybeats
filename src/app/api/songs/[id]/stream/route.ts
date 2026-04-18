@@ -1,5 +1,26 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Song } from "@/lib/types"
+import type { Song, User } from "@/lib/types"
+import { verifySessionToken } from "@/lib/auth-utils"
+
+declare global {
+  var users: Map<string, User> | undefined
+}
+
+function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
+  const sessionToken = request.cookies.get('session-token')?.value
+  if (!sessionToken) return null
+  try {
+    const payload = verifySessionToken(sessionToken)
+    if (!payload) return null
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+    }
+  } catch {
+    return null
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -7,14 +28,24 @@ export async function GET(
 ) {
   const { id } = await params
 
-  const songsMap = global.songs as Map<string, Song> | undefined
-  if (!songsMap) {
+  // Auth check - user must be authenticated
+  const user = getSessionUser(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!global.songs) {
     return NextResponse.json({ error: "Song not found" }, { status: 404 })
   }
 
-  const song = songsMap.get(id)
+  const song = global.songs.get(id) as Song | undefined
   if (!song) {
     return NextResponse.json({ error: "Song not found" }, { status: 404 })
+  }
+
+  // Only allow owner or admin to stream
+  if (song.userId !== user.id && user.role !== 'ADMIN') {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   // Create SSE stream that polls for song status
@@ -31,6 +62,11 @@ export async function GET(
       const startTime = Date.now()
 
       // Send initial status
+      if (!song) {
+        sendEvent({ id, status: 'FAILED', error: 'Song not found', timestamp: new Date().toISOString() })
+        controller.close()
+        return
+      }
       sendEvent({
         id,
         status: song.status,
@@ -43,7 +79,8 @@ export async function GET(
       while (Date.now() - startTime < maxDuration) {
         await new Promise(resolve => setTimeout(resolve, pollInterval))
 
-        const currentSong = songsMap.get(id)
+        // Re-read from global.songs to get latest status
+        const currentSong = global.songs?.get(id) as Song | undefined
         if (!currentSong) {
           sendEvent({ id, status: 'FAILED', error: 'Song not found', timestamp: new Date().toISOString() })
           break

@@ -3,7 +3,9 @@
 import { useState, useEffect, startTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Music, User, Key, Bell, Shield, Check } from "lucide-react"
+import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
+import { decodeSessionToken } from "@/lib/auth-utils"
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -12,16 +14,44 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false)
   const [userRole, setUserRole] = useState<string>('USER')
 
+  // Profile state
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+
+  // API state
+  const [apiProvider, setApiProvider] = useState('minimax')
+  const [apiUrl, setApiUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [modelId, setModelId] = useState('')
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState('')
+
+  // Notification toggles state
+  const [notifications, setNotifications] = useState({
+    generationComplete: true,
+    generationFailed: true,
+    weeklySummary: false,
+  })
+
+  // Fetch user profile and role from session
   useEffect(() => {
     const cookies = document.cookie.split(';')
     for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=')
-      if (name === 'session-token') {
+      const [cookieName, cookieValue] = cookie.trim().split('=')
+      if (cookieName === 'session-token') {
         try {
-          const payload = JSON.parse(atob(value))
-          startTransition(() => {
-            setUserRole(payload.role || 'USER')
-          })
+          const payload = decodeSessionToken(cookieValue)
+          if (payload) {
+            startTransition(() => {
+              setUserRole(payload.role || 'USER')
+              setEmail(payload.email || '')
+            })
+          }
         } catch {
           // ignore
         }
@@ -30,22 +60,32 @@ export default function SettingsPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch('/api/auth/profile')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.user) {
+            startTransition(() => {
+              setName(data.user.name || '')
+              setEmail(data.user.email || '')
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile:', error)
+      }
+    }
+    fetchProfile()
+  }, [])
+
   const TABS = [
     { id: 'profile', label: t('profile'), icon: User },
     { id: 'api', label: t('apiConfiguration'), icon: Key },
     { id: 'notifications', label: t('notifications'), icon: Bell },
     { id: 'security', label: t('security'), icon: Shield },
   ]
-
-  // Profile state
-  const [name, setName] = useState('Demo User')
-  const [email, setEmail] = useState('demo@taoybeats.com')
-
-  // API state
-  const [apiProvider, setApiProvider] = useState('minimax')
-  const [apiUrl, setApiUrl] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [modelId, setModelId] = useState('')
 
   // Load API key from localStorage on mount
   useEffect(() => {
@@ -60,8 +100,77 @@ export default function SettingsPage() {
     // Save API key and URL to localStorage
     localStorage.setItem('minimax_api_key', apiKey)
     localStorage.setItem('minimax_api_url', apiUrl)
+
+    // Save profile to API
+    try {
+      const res = await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email }),
+      })
+      if (!res.ok) {
+        console.error('Failed to update profile')
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error)
+    }
+
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
+  }
+
+  const handlePasswordChange = async () => {
+    setPasswordError('')
+    setPasswordSuccess('')
+
+    if (!currentPassword) {
+      setPasswordError('Current password is required')
+      return
+    }
+
+    if (!newPassword) {
+      setPasswordError('New password is required')
+      return
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters')
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match')
+      return
+    }
+
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      })
+
+      if (res.ok) {
+        setPasswordSuccess('Password changed successfully')
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+      } else {
+        const data = await res.json()
+        setPasswordError(data.error || 'Failed to change password')
+      }
+    } catch {
+      setPasswordError('Failed to change password')
+    }
+  }
+
+  const handleSignOutAllDevices = async () => {
+    try {
+      await fetch('/api/auth/logout-all', { method: 'POST' })
+      router.push('/')
+    } catch (error) {
+      console.error('Error signing out all devices:', error)
+    }
   }
 
   return (
@@ -90,6 +199,7 @@ export default function SettingsPage() {
               <span className="text-sm font-medium">{t('admin')}</span>
             </button>
           )}
+          <ThemeToggle />
         </div>
       </header>
 
@@ -142,7 +252,7 @@ export default function SettingsPage() {
 
                     {/* Name */}
                     <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">Name</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">{t('settingsName')}</label>
                       <input
                         type="text"
                         value={name}
@@ -153,7 +263,7 @@ export default function SettingsPage() {
 
                     {/* Email */}
                     <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">Email</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">{t('settingsEmail')}</label>
                       <input
                         type="email"
                         value={email}
@@ -184,7 +294,7 @@ export default function SettingsPage() {
                   <div className="space-y-6">
                     {/* Provider */}
                     <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">Provider</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">{t('settingsProvider')}</label>
                       <select
                         value={apiProvider}
                         onChange={(e) => setApiProvider(e.target.value)}
@@ -199,7 +309,7 @@ export default function SettingsPage() {
 
                     {/* API URL */}
                     <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">API URL</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">{t('settingsApiUrl')}</label>
                       <input
                         type="url"
                         value={apiUrl}
@@ -211,7 +321,7 @@ export default function SettingsPage() {
 
                     {/* API Key */}
                     <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">API Key</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">{t('settingsApiKey')}</label>
                       <input
                         type="password"
                         value={apiKey}
@@ -223,7 +333,7 @@ export default function SettingsPage() {
 
                     {/* Model ID */}
                     <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">Model ID <span className="text-text-muted">(optional)</span></label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">{t('settingsModelId')} <span className="text-text-muted">{t('settingsModelIdOptional')}</span></label>
                       <input
                         type="text"
                         value={modelId}
@@ -251,17 +361,22 @@ export default function SettingsPage() {
 
                   <div className="space-y-4">
                     {[
-                      { label: t('generationComplete'), description: 'Get notified when your song is ready' },
-                      { label: t('generationFailed'), description: 'Get notified if generation fails' },
-                      { label: t('weeklySummary'), description: 'Receive a weekly summary of your creations' },
-                    ].map((item, i) => (
-                      <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-background border border-border">
+                      { key: 'generationComplete', label: t('generationComplete'), description: 'Get notified when your song is ready' },
+                      { key: 'generationFailed', label: t('generationFailed'), description: 'Get notified if generation fails' },
+                      { key: 'weeklySummary', label: t('weeklySummary'), description: 'Receive a weekly summary of your creations' },
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center justify-between p-4 rounded-xl bg-background border border-border">
                         <div>
                           <p className="font-medium text-foreground">{item.label}</p>
                           <p className="text-sm text-text-secondary">{item.description}</p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
-                          <input type="checkbox" defaultChecked={i === 0} className="sr-only peer" />
+                          <input
+                            type="checkbox"
+                            checked={notifications[item.key as keyof typeof notifications]}
+                            onChange={(e) => setNotifications(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                            className="sr-only peer"
+                          />
                           <div className="w-11 h-6 rounded-full bg-border peer peer-checked:bg-accent transition-colors after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
                         </label>
                       </div>
@@ -280,30 +395,44 @@ export default function SettingsPage() {
                       <div className="space-y-4">
                         <input
                           type="password"
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
                           placeholder={t('currentPassword')}
                           className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                         />
                         <input
                           type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
                           placeholder={t('newPassword')}
                           className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                         />
                         <input
                           type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
                           placeholder={t('confirmPassword')}
                           className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                         />
                       </div>
+                      {passwordError && <p className="mt-2 text-sm text-error">{passwordError}</p>}
+                      {passwordSuccess && <p className="mt-2 text-sm text-success">{passwordSuccess}</p>}
                     </div>
 
-                    <button className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors">
+                    <button
+                      onClick={handlePasswordChange}
+                      className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors"
+                    >
                       {t('updatePassword')}
                     </button>
 
                     <div className="pt-6 border-t border-border">
                       <h3 className="font-medium text-foreground mb-4">{t('sessions')}</h3>
                       <p className="text-sm text-text-secondary mb-4">{t('manageSessions')}</p>
-                      <button className="px-4 py-2 rounded-lg border border-error text-error text-sm font-medium hover:bg-error/10 transition-colors">
+                      <button
+                        onClick={handleSignOutAllDevices}
+                        className="px-4 py-2 rounded-lg border border-error text-error text-sm font-medium hover:bg-error/10 transition-colors"
+                      >
                         {t('signOutAllDevices')}
                       </button>
                     </div>

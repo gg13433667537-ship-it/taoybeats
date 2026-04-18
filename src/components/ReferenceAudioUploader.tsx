@@ -41,9 +41,8 @@ export default function ReferenceAudioUploader({
       return
     }
 
-    // Validate duration (6 seconds to 6 minutes)
-    // We can't easily check duration client-side without loading the whole file
-    // So we'll let the server validate
+    // Validate duration (10 seconds to 10 minutes) - matching Suno's 30min capability
+    // For longer audio, we could add server-side validation if needed
 
     try {
       const reader = new FileReader()
@@ -139,7 +138,7 @@ export default function ReferenceAudioUploader({
         <div className="text-center">
           <Upload className="w-10 h-10 text-text-muted mx-auto mb-3" />
           <p className="text-sm text-foreground">点击或拖拽上传参考音频</p>
-          <p className="text-xs text-text-muted mt-1">支持 mp3, wav, m4a 格式，时长6秒-6分钟</p>
+          <p className="text-xs text-text-muted mt-1">支持 mp3, wav, m4a 格式，时长10秒-10分钟</p>
         </div>
       </div>
 

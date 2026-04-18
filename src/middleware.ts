@@ -10,10 +10,15 @@ const adminRoutes = ["/admin"]
 // Routes that redirect to dashboard if authenticated
 const authRoutes = ["/login", "/register"]
 
+// Lightweight role extraction for middleware (Edge Runtime compatible)
+// Note: This only decodes the token without verifying the signature.
+// Actual signature verification happens in API routes.
 function getUserRole(token: string): string {
   try {
-    const payload = JSON.parse(Buffer.from(token, "base64").toString())
-    return payload.role || 'USER'
+    const [payloadBase64] = token.split(".")
+    if (!payloadBase64) return 'USER'
+    const payload = JSON.parse(atob(payloadBase64))
+    return payload?.role || 'USER'
   } catch {
     return 'USER'
   }

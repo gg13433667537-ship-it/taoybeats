@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Song } from "@/lib/types"
+import type { Song, User } from "@/lib/types"
 import { miniMaxProvider } from "@/lib/ai-providers"
+import { verifySessionToken } from "@/lib/auth-utils"
+
+declare global {
+  var users: Map<string, User> | undefined
+  var systemApiKey: string | undefined
+  var systemApiUrl: string | undefined
+}
+
+if (!global.users) global.users = new Map()
+if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
+if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
+
+function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
+  const sessionToken = request.cookies.get('session-token')?.value
+  if (!sessionToken) return null
+  try {
+    const payload = verifySessionToken(sessionToken)
+    if (!payload) return null
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+    }
+  } catch {
+    return null
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -8,16 +35,15 @@ export async function POST(
 ) {
   const { id } = await params
 
+  // Auth check
+  const user = getSessionUser(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   try {
     const body = await request.json()
-    const { apiKey, apiUrl, modifications } = body
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "API key is required" },
-        { status: 400 }
-      )
-    }
+    const { modifications } = body
 
     const songsMap = global.songs as Map<string, Song> | undefined
     if (!songsMap) {
@@ -28,6 +54,15 @@ export async function POST(
     if (!existingSong) {
       return NextResponse.json({ error: "Song not found" }, { status: 404 })
     }
+
+    // Only allow owner or admin to regenerate
+    if (existingSong.userId !== user.id && user.role !== 'ADMIN') {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    // Use system API key - not from request body
+    const apiKey = global.systemApiKey
+    const apiUrl = global.systemApiUrl || 'https://api.minimaxi.com'
 
     // Apply modifications or keep existing
     const updatedSong: Song = {
@@ -40,9 +75,16 @@ export async function POST(
 
     songsMap.set(id, updatedSong)
 
+    // Validate API key is configured
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "API key not configured. Please set MINIMAX_API_KEY environment variable." },
+        { status: 500 }
+      )
+    }
+
     // Start generation in background
-    const baseUrl = apiUrl || 'https://api.minimaxi.com'
-    generateMusic(id, updatedSong, apiKey, baseUrl).catch((err) => {
+    generateMusic(id, updatedSong, apiKey, apiUrl).catch((err) => {
       console.error(`[Regenerate] Song ${id} background generation failed:`, err)
     })
 

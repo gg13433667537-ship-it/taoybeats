@@ -4,6 +4,7 @@ import Link from "next/link"
 import { Music, Zap, Share2, Download } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 import LanguageSwitcher from "@/components/LanguageSwitcher"
+import { ThemeToggle } from "@/components/ThemeToggle"
 
 export default function HomePage() {
   const { t } = useI18n()
@@ -21,6 +22,7 @@ export default function HomePage() {
           </div>
           <nav className="flex items-center gap-4">
             <LanguageSwitcher />
+            <ThemeToggle />
             <Link href="/generate" className="text-sm text-text-secondary hover:text-foreground transition-colors">
               {t('generate')}
             </Link>

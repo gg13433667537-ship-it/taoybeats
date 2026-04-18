@@ -34,7 +34,11 @@ export async function POST(request: NextRequest) {
 
         if (userId && session.subscription) {
           // Verify subscription exists and is active
-          const _subscription = await stripe.subscriptions.retrieve(session.subscription as string)
+          const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
+          if (subscription.status !== 'active') {
+            console.log(`Subscription ${session.subscription} is not active, skipping PRO upgrade`)
+            break
+          }
 
           // Update user tier to PRO
           const usersMap = global.users as Map<string, User> | undefined

@@ -35,6 +35,12 @@ export interface Song {
   isInstrumental?: boolean
   voiceId?: string
   referenceAudio?: string
+  model?: 'music-2.6' | 'music-cover'
+  outputFormat?: 'mp3' | 'wav' | 'pcm'
+  lyricsOptimizer?: boolean
+  sampleRate?: 16000 | 24000 | 32000 | 44100
+  bitrate?: 32000 | 64000 | 128000 | 256000
+  aigcWatermark?: boolean
   status: SongStatus
   moderationStatus: ModerationStatus
   audioUrl?: string
@@ -52,4 +58,15 @@ export interface SessionPayload {
   role: UserRole
   tier: UserTier
   exp: number
+}
+
+export interface Playlist {
+  id: string
+  name: string
+  description?: string
+  userId: string
+  songIds: string[]
+  isPublic: boolean
+  createdAt: string
+  updatedAt: string
 }

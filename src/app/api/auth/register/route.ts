@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
+import crypto from "crypto"
 import type { User } from "@/lib/types"
+import { createSessionToken } from "@/lib/auth-utils"
 
 declare global {
   var users: Map<string, User> | undefined
@@ -96,16 +98,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-function createSessionToken(user: User): string {
-  const payload = {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
-  }
-  return Buffer.from(JSON.stringify(payload)).toString("base64")
 }
 
 function getDateKey(): string {

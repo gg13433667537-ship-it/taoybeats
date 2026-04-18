@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { Music, Play, Pause, Download, Share2, Check, Loader2, Volume2, VolumeX, RefreshCw, AlertCircle, X } from "lucide-react"
+import { Music, Play, Pause, Download, Share2, Check, Loader2, Volume2, VolumeX, RefreshCw, AlertCircle, X, Layers, Plus } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
+import { ThemeToggle } from "@/components/ThemeToggle"
+import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/useKeyboardShortcuts"
 
 export default function SongSharePage() {
   const { t } = useI18n()
@@ -30,10 +32,27 @@ export default function SongSharePage() {
   const [isMuted, setIsMuted] = useState(false)
   const [waveformData, setWaveformData] = useState<number[]>([])
   const [isRemixing, setIsRemixing] = useState(false)
+  const [isSplitting, setIsSplitting] = useState(false)
+  const [stemsResult, setStemsResult] = useState<{
+    stems: Array<{ stem_type: string; label: string; audioUrl: string }>
+  } | null>(null)
+  const [showStemsModal, setShowStemsModal] = useState(false)
+  const [showShareMenu, setShowShareMenu] = useState(false)
   const [songError, setSongError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const animationRef = useRef<number | null>(null)
+
+  // Helper to update meta tags
+  const updateMetaTag = (property: string, content: string) => {
+    let meta = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement | null
+    if (!meta) {
+      meta = document.createElement('meta')
+      meta.setAttribute('property', property)
+      document.head.appendChild(meta)
+    }
+    meta.content = content
+  }
 
   // Fetch song data
   useEffect(() => {
@@ -58,14 +77,35 @@ export default function SongSharePage() {
         }
       } catch (error) {
         console.error("Error fetching song:", error)
-        setSongError("加载歌曲失败，请刷新页面重试")
+        setSongError(t('songLoadFailed'))
       } finally {
         setLoading(false)
       }
     }
 
     fetchSong()
-  }, [songId])
+  }, [songId, t])
+
+  // Update OG meta tags when song data changes
+  useEffect(() => {
+    if (song?.title) {
+      const title = `${song.title} - TaoyBeats`
+      const description = `Listen to "${song.title}"${song.genre?.length ? ` - ${song.genre.join(', ')}` : ''} created with AI on TaoyBeats`
+      const imageUrl = (song.coverUrl as string | undefined) || `https://api.dicebear.com/7.x/identicon/svg?seed=${song.id}`
+
+      document.title = title
+      updateMetaTag('og:title', title)
+      updateMetaTag('og:description', description)
+      updateMetaTag('og:image', imageUrl)
+      updateMetaTag('og:type', 'music.song')
+      updateMetaTag('twitter:card', 'summary_large_image')
+      updateMetaTag('twitter:title', title)
+      updateMetaTag('twitter:description', description)
+      updateMetaTag('twitter:image', imageUrl)
+    }
+  }, [song])
+
+  // Keyboard shortcuts
 
   // Audio controls
   const togglePlay = useCallback(() => {
@@ -183,10 +223,13 @@ export default function SongSharePage() {
     const shareUrl = shareToken
       ? `${window.location.origin}/song/${shareToken}`
       : window.location.href
+    const shareTitle = song?.title || "TaoyBeats Song"
+    const shareText = `Check out "${shareTitle}" on TaoyBeats!`
+
     if (navigator.share) {
       await navigator.share({
-        title: song?.title || "TaoyBeats Song",
-        text: `Check out my song on TaoyBeats!`,
+        title: shareTitle,
+        text: shareText,
         url: shareUrl,
       })
     } else {
@@ -194,6 +237,26 @@ export default function SongSharePage() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }
+    setShowShareMenu(false)
+  }
+
+  const shareToTwitter = () => {
+    const shareToken = (song as { shareToken?: string })?.shareToken
+    const shareUrl = shareToken
+      ? `${window.location.origin}/song/${shareToken}`
+      : window.location.href
+    const shareTitle = encodeURIComponent(song?.title || "TaoyBeats Song")
+    window.open(`https://twitter.com/intent/tweet?text=${shareTitle}&url=${encodeURIComponent(shareUrl)}`, '_blank')
+    setShowShareMenu(false)
+  }
+
+  const shareToFacebook = () => {
+    const shareToken = (song as { shareToken?: string })?.shareToken
+    const shareUrl = shareToken
+      ? `${window.location.origin}/song/${shareToken}`
+      : window.location.href
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`, '_blank')
+    setShowShareMenu(false)
   }
 
   const handleDownload = () => {
@@ -218,13 +281,69 @@ export default function SongSharePage() {
         // Redirect to generate page with fork parameters
         window.location.href = `/generate?fork=${songId}&songId=${data.id}`
       } else {
-        setSongError('Remix失败，请重试')
+        setSongError(t('remixFailed'))
       }
     } catch (error) {
       console.error('Remix error:', error)
-      setSongError('Remix失败，请重试')
+      setSongError(t('remixFailed'))
     } finally {
       setIsRemixing(false)
+    }
+  }
+
+  const handleContinue = async () => {
+    if (!song) return
+
+    const customPrompt = prompt('Enter a prompt for the continuation (optional):')
+    if (customPrompt === null) return // User cancelled
+
+    setIsRemixing(true)
+    try {
+      const res = await fetch(`/api/songs/${songId}/continue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: customPrompt || undefined }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        // Redirect to the new continued song
+        window.location.href = data.redirectUrl || `/song/${data.id}`
+      } else {
+        const error = await res.json()
+        setSongError(error.error || t('continueFailed'))
+      }
+    } catch (error) {
+      console.error('Continue error:', error)
+      setSongError(t('continueFailed'))
+    } finally {
+      setIsRemixing(false)
+    }
+  }
+
+  const handleSplitStems = async () => {
+    if (!song) return
+
+    setIsSplitting(true)
+    try {
+      const res = await fetch(`/api/songs/${songId}/stems`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setStemsResult(data)
+        setShowStemsModal(true)
+      } else {
+        const error = await res.json()
+        setSongError(error.error || t('stemSplitFailed'))
+      }
+    } catch (error) {
+      console.error('Stem split error:', error)
+      setSongError(t('stemSplitFailed'))
+    } finally {
+      setIsSplitting(false)
     }
   }
 
@@ -257,6 +376,18 @@ export default function SongSharePage() {
   }
 
   const isGenerating = song.status === 'GENERATING' || song.status === 'PENDING'
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    SHORTCUTS.PLAY_PAUSE(togglePlay),
+    SHORTCUTS.SHARE(() => setShowShareMenu(true)),
+    SHORTCUTS.DOWNLOAD(handleDownload),
+    SHORTCUTS.MUTE(() => setIsMuted(!isMuted)),
+    SHORTCUTS.CLOSE_MODAL(() => {
+      setShowShareMenu(false)
+      setShowStemsModal(false)
+    }),
+  ])
 
   return (
     <div className="min-h-screen bg-background">
@@ -302,6 +433,7 @@ export default function SongSharePage() {
           >
             {t('createYourOwn')}
           </Link>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -351,7 +483,7 @@ export default function SongSharePage() {
                 />
               ) : (
                 <div className="flex items-center gap-2 text-text-muted">
-                  <span>Audio not available</span>
+                  <span>{t('audioNotAvailable')}</span>
                 </div>
               )}
             </div>
@@ -361,7 +493,7 @@ export default function SongSharePage() {
               <button
                 onClick={togglePlay}
                 disabled={!song.audioUrl || isGenerating}
-                aria-label={isPlaying ? "Pause" : "Play"}
+                aria-label={isPlaying ? t('pause') : t('play')}
                 className="w-14 h-14 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPlaying ? (
@@ -396,7 +528,7 @@ export default function SongSharePage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={toggleMute}
-                  aria-label={isMuted ? "Unmute" : "Mute"}
+                  aria-label={isMuted ? t('unmute') : t('mute')}
                   className="text-text-secondary hover:text-foreground transition-colors"
                 >
                   {isMuted || volume === 0 ? (
@@ -421,7 +553,7 @@ export default function SongSharePage() {
             {/* Lyrics */}
             {song.lyrics && (
               <div className="mb-6 p-4 rounded-xl bg-background border border-border">
-                <h3 className="text-sm font-medium text-text-secondary mb-2">Lyrics</h3>
+                <h3 className="text-sm font-medium text-text-secondary mb-2">{t('lyrics')}</h3>
                 <p className="text-foreground whitespace-pre-wrap text-sm leading-relaxed">
                   {song.lyrics}
                 </p>
@@ -433,16 +565,16 @@ export default function SongSharePage() {
               <button
                 onClick={handleDownload}
                 disabled={!song.audioUrl || isGenerating}
-                aria-label="Download song"
+                aria-label={t('download')}
                 className="flex-1 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="w-4 h-4" aria-hidden="true" />
-                Download
+                {t('download')}
               </button>
               <button
                 onClick={handleRemix}
                 disabled={isGenerating || isRemixing}
-                aria-label={isRemixing ? "Remixing..." : "Remix this song"}
+                aria-label={isRemixing ? t('remixing') : t('remix')}
                 className="flex-1 py-3 rounded-xl bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-400 font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isRemixing ? (
@@ -450,16 +582,75 @@ export default function SongSharePage() {
                 ) : (
                   <RefreshCw className="w-4 h-4" aria-hidden="true" />
                 )}
-                {isRemixing ? "Remixing..." : "Remix"}
+                {isRemixing ? t('remixing') : t('remix')}
               </button>
               <button
-                onClick={handleShare}
-                aria-label={copied ? "Link copied!" : "Share song"}
-                className="py-3 px-4 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
+                onClick={handleContinue}
+                disabled={isGenerating || isRemixing || !song.audioUrl}
+                aria-label={isRemixing ? t('continuing') : t('continue')}
+                className="flex-1 py-3 rounded-xl bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 text-green-400 font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={t('continueDesc')}
               >
-                {copied ? <Check className="w-4 h-4" aria-hidden="true" /> : <Share2 className="w-4 h-4" aria-hidden="true" />}
-                {copied ? "Copied!" : "Share"}
+                <Plus className="w-4 h-4" aria-hidden="true" />
+                {isRemixing ? t('continuing') : t('continue')}
               </button>
+              <button
+                onClick={handleSplitStems}
+                disabled={isGenerating || isSplitting || !song.audioUrl}
+                aria-label={isSplitting ? t('splittingStems') : t('splitStems')}
+                className="flex-1 py-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 text-cyan-400 font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={t('splitStemsDesc')}
+              >
+                {isSplitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Layers className="w-4 h-4" aria-hidden="true" />
+                )}
+                {isSplitting ? t('splittingStems') : t('splitStems')}
+              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowShareMenu(!showShareMenu)}
+                  aria-label={t('share')}
+                  aria-expanded={showShareMenu}
+                  className="py-3 px-4 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <Share2 className="w-4 h-4" aria-hidden="true" />
+                  {t('share')}
+                </button>
+                {showShareMenu && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
+                    <button
+                      onClick={shareToTwitter}
+                      className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-surface-elevated transition-colors flex items-center gap-3"
+                    >
+                      <Share2 className="w-4 h-4" aria-hidden="true" />
+                      Share on Twitter
+                    </button>
+                    <button
+                      onClick={shareToFacebook}
+                      className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-surface-elevated transition-colors flex items-center gap-3"
+                    >
+                      <Share2 className="w-4 h-4" aria-hidden="true" />
+                      Share on Facebook
+                    </button>
+                    <div className="border-t border-border" />
+                    <button
+                      onClick={handleShare}
+                      className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-surface-elevated transition-colors flex items-center gap-3"
+                    >
+                      {copied ? <Check className="w-4 h-4" aria-hidden="true" /> : <Share2 className="w-4 h-4" aria-hidden="true" />}
+                      {copied ? t('copied') : 'Copy Link'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {showShareMenu && (
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowShareMenu(false)}
+                />
+              )}
             </div>
 
             {/* Footer */}
@@ -474,6 +665,54 @@ export default function SongSharePage() {
           </div>
         </div>
       </main>
+
+      {/* Stems Modal */}
+      {showStemsModal && stemsResult && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-surface border border-border rounded-2xl max-w-lg w-full max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-foreground">{t('stemsModalTitle')}</h2>
+                  <p className="text-sm text-text-secondary mt-1">{t('stemsModalDesc')}</p>
+                </div>
+                <button
+                  onClick={() => setShowStemsModal(false)}
+                  className="p-2 rounded-lg hover:bg-surface-elevated text-text-secondary hover:text-foreground transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-3 overflow-y-auto max-h-[60vh]">
+              {stemsResult.stems.map((stem) => (
+                <div
+                  key={stem.stem_type}
+                  className="p-4 rounded-xl bg-surface-elevated border border-border flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                      <Layers className="w-5 h-5 text-cyan-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{stem.label}</p>
+                      <p className="text-xs text-text-muted capitalize">{stem.stem_type}</p>
+                    </div>
+                  </div>
+                  <a
+                    href={stem.audioUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-sm font-medium transition-colors"
+                  >
+                    {t('download')}
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

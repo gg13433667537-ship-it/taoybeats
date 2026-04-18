@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User, Song } from "@/lib/types"
 import { miniMaxProvider } from "@/lib/ai-providers"
+import { verifySessionToken } from "@/lib/auth-utils"
 
 // Shared global storage
 declare global {
@@ -14,7 +15,7 @@ declare global {
 if (!global.users) global.users = new Map()
 if (!global.songs) global.songs = new Map()
 if (!global.adminLogs) global.adminLogs = new Map()
-if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY || 'sk-cp-IM9XKrS2pUcf2w_ybwstx2D3n4YcYGroc6DSF8UHQowdvqsiBRkdPDGQ-qAGvIAqwL0j-HVHhKzpcg5m5QG2oX-HrfVniF_xbKCTFsnBEusnFFD-69nrWEU'
+if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
 if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
 
 const users = global.users!
@@ -75,7 +76,10 @@ function getSessionUser(request: NextRequest): User {
   }
 
   try {
-    const payload = JSON.parse(Buffer.from(sessionToken, 'base64').toString())
+    const payload = verifySessionToken(sessionToken)
+    if (!payload) {
+      return getOrCreateUser('demo-user')
+    }
     return getOrCreateUser(payload.id, payload.email)
   } catch {
     return getOrCreateUser('demo-user')
@@ -108,6 +112,12 @@ export async function POST(request: NextRequest) {
       isInstrumental,
       voiceId,
       referenceAudio,
+      model,
+      outputFormat,
+      lyricsOptimizer,
+      sampleRate,
+      bitrate,
+      aigcWatermark,
     } = body
 
     // Validation - lyrics not required if instrumental
@@ -119,8 +129,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Use system API key - no client-side API key required
-    const apiKey = global.systemApiKey!
-    const apiUrl = global.systemApiUrl!
+    const apiKey = global.systemApiKey
+    const apiUrl = global.systemApiUrl || 'https://api.minimaxi.com'
+
+    // Validate API key is configured
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "API key not configured. Please set MINIMAX_API_KEY environment variable." },
+        { status: 500 }
+      )
+    }
 
     // Check usage limits
     checkAndResetUsage(user)
@@ -174,6 +192,12 @@ export async function POST(request: NextRequest) {
       isInstrumental: isInstrumental || false,
       voiceId,
       referenceAudio,
+      model: model || 'music-2.6',
+      outputFormat: outputFormat || 'mp3',
+      lyricsOptimizer: lyricsOptimizer || false,
+      sampleRate: sampleRate || 44100,
+      bitrate: bitrate || 256000,
+      aigcWatermark: aigcWatermark || false,
       status: "PENDING",
       moderationStatus: "APPROVED", // Auto-approve for MVP
       shareToken,
@@ -232,6 +256,12 @@ async function generateMusic(
       isInstrumental: song.isInstrumental,
       voiceId: song.voiceId,
       referenceAudio: song.referenceAudio,
+      model: song.model,
+      outputFormat: song.outputFormat,
+      lyricsOptimizer: song.lyricsOptimizer,
+      sampleRate: song.sampleRate,
+      bitrate: song.bitrate,
+      aigcWatermark: song.aigcWatermark,
     }, apiKey, apiUrl || 'https://api.minimaxi.com')
 
     // Poll for progress

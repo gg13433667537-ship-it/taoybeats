@@ -20,15 +20,17 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  // Read language from cookie on server side
+  // Read language and theme from cookie on server side
   const cookieStore = await cookies()
   const langCookie = cookieStore.get("taoybeats-lang")
+  const themeCookie = cookieStore.get("taoybeats-theme")
   const initialLang = (langCookie?.value as "en" | "zh") || "en"
+  const initialTheme = (themeCookie?.value as "dark" | "light") || "dark"
 
   return (
-    <html lang={initialLang} className="dark" suppressHydrationWarning>
+    <html lang={initialLang} className={initialTheme} suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased font-sans">
-        <Providers initialLang={initialLang}>{children}</Providers>
+        <Providers initialLang={initialLang} initialTheme={initialTheme}>{children}</Providers>
       </body>
     </html>
   )

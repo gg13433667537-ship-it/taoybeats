@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User, UserRole } from "@/lib/types"
+import { verifySessionToken } from "@/lib/auth-utils"
 
 // In-memory user storage (shared with other routes for demo)
 declare global {
@@ -37,13 +38,12 @@ function getSessionUser(request: NextRequest): SessionUser | null {
   if (!sessionToken) return null
 
   try {
-    const payload = JSON.parse(Buffer.from(sessionToken, 'base64').toString())
-    // Trust role from JWT - JWT is signed with AUTH_SECRET so contents are trusted
-    // This avoids needing to look up user in memory (which doesn't work across Vercel instances)
+    const payload = verifySessionToken(sessionToken)
+    if (!payload) return null
     return {
       id: payload.id,
       email: payload.email,
-      role: payload.role,
+      role: payload.role as UserRole,
     }
   } catch {
     return null

@@ -27,6 +27,12 @@ export type SongParams = {
   isInstrumental?: boolean
   voiceId?: string
   referenceAudio?: string
+  model?: 'music-2.6' | 'music-cover'
+  outputFormat?: 'mp3' | 'wav' | 'pcm'
+  lyricsOptimizer?: boolean
+  sampleRate?: 16000 | 24000 | 32000 | 44100
+  bitrate?: 32000 | 64000 | 128000 | 256000
+  aigcWatermark?: boolean
 }
 
 export type AIProvider = {
@@ -37,20 +43,23 @@ export type AIProvider = {
 }
 
 // MiniMax Provider - Official API Implementation
-// API Docs: https://api.minimaxi.com/v1/music_generation
-// Model: music-2.6 (hardcoded)
+// API Docs: https://platform.minimaxi.com/docs/api-reference/music-generation
+// Model: music-2.6, music-cover
 export const miniMaxProvider: AIProvider = {
   name: 'MiniMax',
 
   async generate(params, apiKey, apiUrl) {
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
-    const model = 'music-2.6' // Hardcoded as per user requirement
+    const model = params.model || 'music-2.6'
 
     // Build prompt from song params
     const prompt = buildPrompt(params)
 
     // Check if instrumental - explicit flag or no lyrics
     const isInstrumental = params.isInstrumental || !params.lyrics || params.lyrics.trim() === ''
+
+    // Determine output format
+    const outputFormat = params.outputFormat || 'mp3'
 
     const response = await fetch(`${baseUrl}/v1/music_generation`, {
       method: 'POST',
@@ -66,13 +75,14 @@ export const miniMaxProvider: AIProvider = {
         stream: false,
         output_format: 'url',
         audio_setting: {
-          sample_rate: 44100,
-          bitrate: 256000,
-          format: 'mp3'
+          sample_rate: params.sampleRate || 44100,
+          bitrate: params.bitrate || 256000,
+          format: outputFormat
         },
-        aigc_watermark: false,
+        aigc_watermark: params.aigcWatermark || false,
         voice_id: params.voiceId,
         reference_audio: params.referenceAudio,
+        lyrics_optimizer: params.lyricsOptimizer,
       }),
     })
 

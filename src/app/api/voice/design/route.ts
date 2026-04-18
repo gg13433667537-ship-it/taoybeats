@@ -1,15 +1,40 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { User } from "@/lib/types"
+import { verifySessionToken } from "@/lib/auth-utils"
 
-// Use system API key - hardcoded for all users
 declare global {
   var systemApiKey: string | undefined
   var systemApiUrl: string | undefined
+  var users: Map<string, User> | undefined
 }
 
-if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY || 'sk-cp-IM9XKrS2pUcf2w_ybwstx2D3n4YcYGroc6DSF8UHQowdvqsiBRkdPDGQ-qAGvIAqwL0j-HVHhKzpcg5m5QG2oX-HrfVniF_xbKCTFsnBEusnFFD-69nrWEU'
+if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
 if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
+if (!global.users) global.users = new Map()
+
+function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
+  const sessionToken = request.cookies.get('session-token')?.value
+  if (!sessionToken) return null
+  try {
+    const payload = verifySessionToken(sessionToken)
+    if (!payload) return null
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+    }
+  } catch {
+    return null
+  }
+}
 
 export async function POST(request: NextRequest) {
+  // Auth check
+  const user = getSessionUser(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   try {
     const body = await request.json()
     const { prompt, preview_text, voice_id, aigc_watermark } = body

@@ -610,8 +610,8 @@ export default function AdminPage() {
                 </div>
                 <div className="flex items-center gap-4 text-sm">
                   <span className="text-success">{stats.users.active} {t('active')}</span>
-                  <span className="text-purple-400">{stats.users.admins} admins</span>
-                  <span className="text-accent">{stats.users.pro} pro</span>
+                  <span className="text-purple-400">{stats.users.admins} {t('admin')}</span>
+                  <span className="text-accent">{stats.users.pro} PRO</span>
                 </div>
               </div>
 

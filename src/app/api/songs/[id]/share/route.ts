@@ -1,11 +1,38 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Song } from "@/lib/types"
+import type { Song, User } from "@/lib/types"
+import { verifySessionToken } from "@/lib/auth-utils"
+
+declare global {
+  var users: Map<string, User> | undefined
+}
+
+function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
+  const sessionToken = request.cookies.get('session-token')?.value
+  if (!sessionToken) return null
+  try {
+    const payload = verifySessionToken(sessionToken)
+    if (!payload) return null
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+    }
+  } catch {
+    return null
+  }
+}
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  // Auth check
+  const user = getSessionUser(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
   try {
     // Find the song
@@ -17,6 +44,11 @@ export async function POST(
     const song = songsMap.get(id)
     if (!song) {
       return NextResponse.json({ error: "Song not found" }, { status: 404 })
+    }
+
+    // Only allow owner or admin to create share link
+    if (song.userId !== user.id && user.role !== 'ADMIN') {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
     // If song already has a shareToken, return it

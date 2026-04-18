@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { User } from "@/lib/types"
+import { verifySessionToken } from "@/lib/auth-utils"
 
-// In-memory usage tracking (replace with Redis/DB in production)
-const dailyUsage: Map<string, number> = new Map()
-const monthlyUsage: Map<string, number> = new Map()
-const lastReset: Map<string, string> = new Map()
+declare global {
+  var users: Map<string, User> | undefined
+}
+
+if (!global.users) global.users = new Map()
+
+const users = global.users!
 
 function getDateKey(): string {
   return new Date().toISOString().split('T')[0] // YYYY-MM-DD
@@ -13,38 +18,51 @@ function getMonthKey(): string {
   return new Date().toISOString().slice(0, 7) // YYYY-MM
 }
 
-function checkAndReset(userId: string): { daily: number; monthly: number } {
-  const dateKey = getDateKey()
-  const monthKey = getMonthKey()
+function getUserUsage(user: User): { daily: number; monthly: number } {
+  const today = getDateKey()
+  const thisMonth = getMonthKey()
 
-  const lastDateKey = lastReset.get(`daily:${userId}`)
-  const lastMonthKey = lastReset.get(`monthly:${userId}`)
-
-  // Reset daily if new day
-  if (lastDateKey !== dateKey) {
-    dailyUsage.set(userId, 0)
-    lastReset.set(`daily:${userId}`, dateKey)
+  // Reset if needed
+  if (user.dailyResetAt !== today) {
+    user.dailyUsage = 0
+    user.dailyResetAt = today
   }
 
-  // Reset monthly if new month
-  if (lastMonthKey !== monthKey) {
-    monthlyUsage.set(userId, 0)
-    lastReset.set(`monthly:${userId}`, monthKey)
+  if (user.monthlyResetAt !== thisMonth) {
+    user.monthlyUsage = 0
+    user.monthlyResetAt = thisMonth
   }
 
   return {
-    daily: dailyUsage.get(userId) || 0,
-    monthly: monthlyUsage.get(userId) || 0,
+    daily: user.dailyUsage,
+    monthly: user.monthlyUsage,
   }
 }
 
 export async function GET(request: NextRequest) {
-  // For demo, use a fixed user ID
-  // In production, get from session/JWT
-  const userId = request.cookies.get('user-id')?.value || 'demo-user'
-  const tier = (request.nextUrl.searchParams.get('tier') as 'FREE' | 'PRO') || 'FREE'
+  // Get user ID from session token
+  const sessionToken = request.cookies.get('session-token')?.value
+  if (!sessionToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-  const { daily, monthly } = checkAndReset(userId)
+  const payload = verifySessionToken(sessionToken)
+  if (!payload) {
+    return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+  }
+
+  const userId = payload.id || payload.email
+  if (!userId) {
+    return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+  }
+
+  const user = users.get(userId)
+  if (!user) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  }
+
+  const tier = user.tier || 'FREE'
+  const { daily, monthly } = getUserUsage(user)
 
   // Calculate limits based on tier
   const limits = tier === 'PRO'
@@ -68,13 +86,31 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // Increment usage
-  const userId = request.cookies.get('user-id')?.value || 'demo-user'
+  // Get user ID from session token
+  const sessionToken = request.cookies.get('session-token')?.value
+  if (!sessionToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-  const { daily, monthly } = checkAndReset(userId)
+  const payload = verifySessionToken(sessionToken)
+  if (!payload) {
+    return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+  }
 
-  // Check limits
-  const tier = (await request.clone().json()).tier as 'FREE' | 'PRO' || 'FREE'
+  const userId = payload.id || payload.email
+  if (!userId) {
+    return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+  }
+
+  const user = users.get(userId)
+  if (!user) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  }
+
+  const tier = user.tier || 'FREE'
+  const { daily, monthly } = getUserUsage(user)
+
+  // Calculate limits based on tier
   const limits = tier === 'PRO'
     ? { dailyLimit: 50, monthlyLimit: -1 }
     : { dailyLimit: 3, monthlyLimit: 10 }
@@ -93,13 +129,14 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Increment
-  dailyUsage.set(userId, daily + 1)
-  monthlyUsage.set(userId, monthly + 1)
+  // Increment using global.users (synchronized with songs route)
+  user.dailyUsage++
+  user.monthlyUsage++
+  users.set(userId, user)
 
   return NextResponse.json({
     success: true,
-    daily: dailyUsage.get(userId),
-    monthly: monthlyUsage.get(userId),
+    daily: user.dailyUsage,
+    monthly: user.monthlyUsage,
   })
 }

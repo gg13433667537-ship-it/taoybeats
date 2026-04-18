@@ -1,9 +1,39 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
+import type { User } from "@/lib/types"
+import { verifySessionToken } from "@/lib/auth-utils"
+
+declare global {
+  var users: Map<string, User> | undefined
+}
+
+if (!global.users) global.users = new Map()
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder")
 
+function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
+  const sessionToken = request.cookies.get('session-token')?.value
+  if (!sessionToken) return null
+  try {
+    const payload = verifySessionToken(sessionToken)
+    if (!payload) return null
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function POST(request: NextRequest) {
+  // Auth check
+  const user = getSessionUser(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   try {
     const body = await request.json()
     const { customerId } = body

@@ -4,7 +4,7 @@ import assert from "node:assert/strict"
 import {
   createUserEditFormState,
   createUserUpdatePayload,
-} from "./user-edit-modal-state.ts"
+} from "./user-edit-modal-state"
 
 test("createUserEditFormState seeds controlled modal fields from the selected user", () => {
   assert.deepEqual(
