@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { playlistCache } from "@/lib/cache"
-import { sanitizeString, validateOptionalString, MAX_LENGTHS } from "@/lib/security"
+import { sanitizeString, validateOptionalString, MAX_LENGTHS, applySecurityHeaders } from "@/lib/security"
 
 
 if (!global.users) global.users = new Map()
@@ -31,22 +31,22 @@ export async function GET(
 ) {
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   const { id } = await params
   const playlist = global.playlists?.get(id) as Playlist | undefined
 
   if (!playlist) {
-    return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: "Playlist not found" }, { status: 404 }))
   }
 
   // Check access - owner or admin or public playlist
   if (playlist.userId !== user.id && user.role !== 'ADMIN' && !playlist.isPublic) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Forbidden" }, { status: 403 }))
   }
 
-  return NextResponse.json({ playlist })
+  return applySecurityHeaders(NextResponse.json({ playlist }))
 }
 
 // PUT /api/playlists/[id] - Update a playlist
@@ -56,19 +56,19 @@ export async function PUT(
 ) {
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   const { id } = await params
   const playlist = global.playlists?.get(id) as Playlist | undefined
 
   if (!playlist) {
-    return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: "Playlist not found" }, { status: 404 }))
   }
 
   // Check ownership
   if (playlist.userId !== user.id && user.role !== 'ADMIN') {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Forbidden" }, { status: 403 }))
   }
 
   try {
@@ -78,7 +78,7 @@ export async function PUT(
     if (name !== undefined) {
       const nameError = validateOptionalString(name, MAX_LENGTHS.NAME, "Playlist name")
       if (nameError) {
-        return NextResponse.json({ error: nameError }, { status: 400 })
+        return applySecurityHeaders(NextResponse.json({ error: nameError }, { status: 400 }))
       }
     }
 
@@ -86,7 +86,7 @@ export async function PUT(
     if (description !== undefined) {
       const descError = validateOptionalString(description, MAX_LENGTHS.DESCRIPTION, "Description")
       if (descError) {
-        return NextResponse.json({ error: descError }, { status: 400 })
+        return applySecurityHeaders(NextResponse.json({ error: descError }, { status: 400 }))
       }
     }
 
@@ -103,10 +103,10 @@ export async function PUT(
     // Invalidate playlist cache for owner
     playlistCache.delete(`playlists:${playlist.userId}`)
 
-    return NextResponse.json({ playlist: updated })
+    return applySecurityHeaders(NextResponse.json({ playlist: updated }))
   } catch (error) {
     console.error("Update playlist error:", error)
-    return NextResponse.json({ error: "Failed to update playlist" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to update playlist" }, { status: 500 }))
   }
 }
 
@@ -117,19 +117,19 @@ export async function DELETE(
 ) {
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   const { id } = await params
   const playlist = global.playlists?.get(id) as Playlist | undefined
 
   if (!playlist) {
-    return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: "Playlist not found" }, { status: 404 }))
   }
 
   // Check ownership
   if (playlist.userId !== user.id && user.role !== 'ADMIN') {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Forbidden" }, { status: 403 }))
   }
 
   global.playlists?.delete(id)
@@ -137,5 +137,5 @@ export async function DELETE(
   // Invalidate playlist cache for owner
   playlistCache.delete(`playlists:${playlist.userId}`)
 
-  return NextResponse.json({ success: true })
+  return applySecurityHeaders(NextResponse.json({ success: true }))
 }

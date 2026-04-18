@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Preset } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { sanitizeString, applySecurityHeaders } from "@/lib/security"
 
 
 const presets = global.presets!
@@ -29,27 +30,27 @@ export async function POST(
   const { shareToken } = await params
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   // Find preset by share token
   const sharedPreset = Array.from(presets.values()).find(p => p.shareToken === shareToken)
   if (!sharedPreset) {
-    return NextResponse.json({ error: "Shared preset not found" }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: "Shared preset not found" }, { status: 404 }))
   }
 
   // Can't import own preset
   if (sharedPreset.userId === user.id) {
-    return NextResponse.json({ error: "Cannot import your own preset" }, { status: 400 })
+    return applySecurityHeaders(NextResponse.json({ error: "Cannot import your own preset" }, { status: 400 }))
   }
 
   // Check preset limit
   const userPresets = Array.from(presets.values()).filter(p => p.userId === user.id)
   if (userPresets.length >= 10) {
-    return NextResponse.json(
+    return applySecurityHeaders(NextResponse.json(
       { error: "Maximum of 10 presets reached. Please delete some presets first." },
       { status: 400 }
-    )
+    ))
   }
 
   // Create a copy for the current user
@@ -57,10 +58,10 @@ export async function POST(
   const newPreset: Preset = {
     id: crypto.randomUUID(),
     userId: user.id,
-    name: sharedPreset.name,
-    genre: [...sharedPreset.genre],
-    mood: sharedPreset.mood,
-    instruments: [...sharedPreset.instruments],
+    name: sanitizeString(sharedPreset.name),
+    genre: sharedPreset.genre.map((g: string) => sanitizeString(g)),
+    mood: sharedPreset.mood ? sanitizeString(sharedPreset.mood) : '',
+    instruments: sharedPreset.instruments.map((i: string) => sanitizeString(i)),
     isInstrumental: sharedPreset.isInstrumental,
     duration: sharedPreset.duration,
     shareToken: undefined, // Don't inherit share token
@@ -70,5 +71,5 @@ export async function POST(
 
   presets.set(newPreset.id, newPreset)
 
-  return NextResponse.json({ preset: newPreset }, { status: 201 })
+  return applySecurityHeaders(NextResponse.json({ preset: newPreset }, { status: 201 }))
 }

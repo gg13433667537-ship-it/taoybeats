@@ -18,6 +18,7 @@ export interface User {
   dailyResetAt: string
   monthlyResetAt: string
   createdAt: string
+  sessionsRevokedAt?: string | null  // Timestamp when all sessions were revoked (for logout-all)
   stripeCustomerId?: string
   stripeSubscriptionId?: string
 }
@@ -55,6 +56,7 @@ export interface Song {
   shareToken?: string
   userId: string
   forkedFrom?: string
+  originalOwnerId?: string  // Original song owner's ID for attribution
   createdAt: string
   updatedAt: string
 }

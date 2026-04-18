@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { miniMaxProvider } from "@/lib/ai-providers"

@@ -11,19 +11,32 @@ function createMockNextRequest(
     method?: string
     cookies?: { name: string; value: string }[]
   } = {}
-): Request {
+): Request & { cookies: { get: (name: string) => { value: string } | undefined } } {
   const cookieHeader = options.cookies
     ? options.cookies.map(c => `${c.name}=${c.value}`).join('; ')
     : ''
 
-  return new Request(url, {
+  const request = new Request(url, {
     method: options.method || 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(cookieHeader ? { Cookie: cookieHeader } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
-  }) as unknown as Request
+  }) as Request & { cookies: { get: (name: string) => { value: string } | undefined } }
+
+  // Add cookies property for NextRequest compatibility
+  const cookiesMap = new Map<string, string>()
+  options.cookies?.forEach(c => cookiesMap.set(c.name, c.value))
+
+  request.cookies = {
+    get: (name: string) => {
+      const value = cookiesMap.get(name)
+      return value ? { value } : undefined
+    },
+  }
+
+  return request
 }
 
 describe('Lyrics API', () => {
@@ -57,7 +70,7 @@ describe('Lyrics API', () => {
       })
 
       const response = await generateLyrics(request as any)
-      const data = await response.json()
+      await response.json() // consume body
 
       expect(response.status).toBe(401)
     })
@@ -85,7 +98,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      const data = await response.json()
+      await response.json() // consume body
 
       expect(response.status).toBe(200)
       expect(data.lyrics).toBeDefined()
@@ -115,7 +128,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      const data = await response.json()
+      await response.json() // consume body
 
       expect(response.status).toBe(200)
     })
@@ -138,7 +151,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      const data = await response.json()
+      await response.json() // consume body
 
       expect(response.status).toBe(400)
       expect(data.code).toBe(1026)
@@ -163,7 +176,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      const data = await response.json()
+      await response.json() // consume body
 
       expect(response.status).toBe(402)
       expect(data.code).toBe(1008)
@@ -188,7 +201,7 @@ describe('Lyrics API', () => {
       }) as any
 
       const response = await generateLyrics(request as any)
-      const data = await response.json()
+      await response.json() // consume body
 
       expect(response.status).toBe(429)
       expect(data.code).toBe(1002)

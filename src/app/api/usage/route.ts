@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { rateLimitMiddleware, DEFAULT_RATE_LIMIT } from "@/lib/security"
+import { applySecurityHeaders, rateLimitMiddleware, DEFAULT_RATE_LIMIT } from "@/lib/security"
 
 
 if (!global.users) global.users = new Map()
@@ -48,39 +48,39 @@ export async function GET(request: NextRequest) {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
     // Return graceful degradation for unauthenticated requests instead of 401
-    return NextResponse.json({
+    return applySecurityHeaders(NextResponse.json({
       userId: null,
       tier: 'GUEST',
       daily: { used: 0, limit: 0, remaining: 0 },
       monthly: { used: 0, limit: 0, remaining: 0 },
-    })
+    }))
   }
 
   const payload = verifySessionToken(sessionToken)
   if (!payload) {
     // Return graceful degradation for invalid session instead of 401
-    return NextResponse.json({
+    return applySecurityHeaders(NextResponse.json({
       userId: null,
       tier: 'GUEST',
       daily: { used: 0, limit: 0, remaining: 0 },
       monthly: { used: 0, limit: 0, remaining: 0 },
-    })
+    }))
   }
 
   const userId = payload.id || payload.email
   if (!userId) {
     // Return graceful degradation for missing user ID instead of 401
-    return NextResponse.json({
+    return applySecurityHeaders(NextResponse.json({
       userId: null,
       tier: 'GUEST',
       daily: { used: 0, limit: 0, remaining: 0 },
       monthly: { used: 0, limit: 0, remaining: 0 },
-    })
+    }))
   }
 
   const user = users.get(userId)
   if (!user) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: 'User not found' }, { status: 404 }))
   }
 
   const tier = user.tier || 'FREE'
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     ? { dailyLimit: 50, monthlyLimit: -1 }
     : { dailyLimit: 3, monthlyLimit: 10 }
 
-  return NextResponse.json({
+  return applySecurityHeaders(NextResponse.json({
     userId,
     tier,
     daily: {
@@ -104,35 +104,35 @@ export async function GET(request: NextRequest) {
       limit: limits.monthlyLimit,
       remaining: limits.monthlyLimit === -1 ? -1 : Math.max(0, limits.monthlyLimit - monthly),
     },
-  })
+  }))
 }
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting
   const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "usage")
   if (rateLimitResponse) {
-    return rateLimitResponse
+    return applySecurityHeaders(rateLimitResponse)
   }
 
   // Get user ID from session token
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
   }
 
   const payload = verifySessionToken(sessionToken)
   if (!payload) {
-    return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: 'Invalid session' }, { status: 401 }))
   }
 
   const userId = payload.id || payload.email
   if (!userId) {
-    return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: 'Invalid session' }, { status: 401 }))
   }
 
   const user = users.get(userId)
   if (!user) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: 'User not found' }, { status: 404 }))
   }
 
   const tier = user.tier || 'FREE'
@@ -144,17 +144,17 @@ export async function POST(request: NextRequest) {
     : { dailyLimit: 3, monthlyLimit: 10 }
 
   if (daily >= limits.dailyLimit) {
-    return NextResponse.json(
+    return applySecurityHeaders(NextResponse.json(
       { error: 'Daily limit reached', daily, monthly, limit: limits.dailyLimit },
       { status: 429 }
-    )
+    ))
   }
 
   if (limits.monthlyLimit !== -1 && monthly >= limits.monthlyLimit) {
-    return NextResponse.json(
+    return applySecurityHeaders(NextResponse.json(
       { error: 'Monthly limit reached', daily, monthly, limit: limits.monthlyLimit },
       { status: 429 }
-    )
+    ))
   }
 
   // Increment using global.users (synchronized with songs route)
@@ -162,9 +162,9 @@ export async function POST(request: NextRequest) {
   user.monthlyUsage++
   users.set(userId, user)
 
-  return NextResponse.json({
+  return applySecurityHeaders(NextResponse.json({
     success: true,
     daily: user.dailyUsage,
     monthly: user.monthlyUsage,
-  })
+  }))
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { applySecurityHeaders } from "@/lib/security"
+import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware, validateUUID } from "@/lib/security"
 
 
 interface SessionUser {
@@ -77,11 +77,23 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Rate limiting for admin endpoint
+  const rateLimitResponse = rateLimitMiddleware(request, STRICT_RATE_LIMIT, ":admin:users:detail")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
   const { id } = await params
 
   if (!user || !isAdmin(user)) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
+  }
+
+  // Validate UUID format
+  const uuidError = validateUUID(id, "User ID")
+  if (uuidError) {
+    return applySecurityHeaders(NextResponse.json({ error: uuidError }, { status: 400 }))
   }
 
   const targetUser = users.get(id)
@@ -92,7 +104,7 @@ export async function GET(
   // Get user's songs
   const userSongs = Array.from(songs.values()).filter(s => s.userId === id)
 
-  return NextResponse.json({
+  return applySecurityHeaders(NextResponse.json({
     user: {
       id: targetUser.id,
       email: targetUser.email,
@@ -105,7 +117,7 @@ export async function GET(
       createdAt: targetUser.createdAt,
     },
     songs: userSongs,
-  })
+  }))
 }
 
 // DELETE /api/admin/users/[id] - Delete user
@@ -113,11 +125,23 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Rate limiting for admin endpoint
+  const rateLimitResponse = rateLimitMiddleware(request, STRICT_RATE_LIMIT, ":admin:users:delete")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
   const { id } = await params
 
   if (!user || !isAdmin(user)) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
+  }
+
+  // Validate UUID format
+  const uuidError = validateUUID(id, "User ID")
+  if (uuidError) {
+    return applySecurityHeaders(NextResponse.json({ error: uuidError }, { status: 400 }))
   }
 
   if (user.id === id) {
@@ -138,5 +162,5 @@ export async function DELETE(
 
   logAdminAction(user.id, user.email, 'DELETE_USER', id, 'USER', { deletedEmail: targetUser.email })
 
-  return NextResponse.json({ success: true })
+  return applySecurityHeaders(NextResponse.json({ success: true }))
 }

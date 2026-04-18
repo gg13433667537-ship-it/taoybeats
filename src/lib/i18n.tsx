@@ -2792,7 +2792,8 @@ export function I18nProvider({ children, lang = 'en' }: { children: React.ReactN
   }
 
   const t = (key: TranslationKey): string => {
-    return translations[currentLang][key] || translations.en[key] || key
+    const langTranslations = translations[currentLang] as typeof translations.en
+    return langTranslations[key] || translations.en[key] || key
   }
 
   return (

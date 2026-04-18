@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { applySecurityHeaders } from "@/lib/security"
+import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
+import { sanitizeString, validateEnum } from "@/lib/security"
 
 // In-memory user storage (shared with other routes for demo)
 
@@ -66,55 +67,75 @@ function logAdminAction(adminId: string, adminEmail: string, action: string, tar
 
 // GET /api/admin/users - List users with pagination
 export async function GET(request: NextRequest) {
+  // Rate limiting for admin endpoint
+  const rateLimitResponse = rateLimitMiddleware(request, STRICT_RATE_LIMIT, ":admin:users:list")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
   }
 
-  const { searchParams } = new URL(request.url)
-  const page = parseInt(searchParams.get('page') || '1')
-  const limit = parseInt(searchParams.get('limit') || '20')
-  const search = searchParams.get('search') || ''
-  const offset = (page - 1) * limit
+  try {
+    const { searchParams } = new URL(request.url)
+    // Validate pagination params
+    const rawPage = searchParams.get('page')
+    const rawLimit = searchParams.get('limit')
+    const page = rawPage ? Math.max(1, parseInt(rawPage, 10) || 1) : 1
+    const limit = rawLimit ? Math.min(100, Math.max(1, parseInt(rawLimit, 10) || 20)) : 20
+    const search = searchParams.get('search') || ''
+    const offset = (page - 1) * limit
 
-  let allUsers = Array.from(users.values())
+    let allUsers = Array.from(users.values())
 
-  // Filter by search
-  if (search) {
-    const searchLower = search.toLowerCase()
-    allUsers = allUsers.filter(u =>
-      u.email?.toLowerCase().includes(searchLower) ||
-      u.name?.toLowerCase().includes(searchLower)
-    )
+    // Filter by search
+    if (search) {
+      const searchLower = search.toLowerCase()
+      allUsers = allUsers.filter(u =>
+        u.email?.toLowerCase().includes(searchLower) ||
+        u.name?.toLowerCase().includes(searchLower)
+      )
+    }
+
+    const total = allUsers.length
+    const paginatedUsers = allUsers.slice(offset, offset + limit).map(u => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      isActive: u.isActive,
+      tier: u.tier,
+      dailyUsage: u.dailyUsage,
+      monthlyUsage: u.monthlyUsage,
+      createdAt: u.createdAt,
+    }))
+
+    return NextResponse.json({
+      users: paginatedUsers,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    })
+  } catch (error) {
+    console.error("Admin list users error:", error)
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to retrieve users" }, { status: 500 }))
   }
-
-  const total = allUsers.length
-  const paginatedUsers = allUsers.slice(offset, offset + limit).map(u => ({
-    id: u.id,
-    email: u.email,
-    name: u.name,
-    role: u.role,
-    isActive: u.isActive,
-    tier: u.tier,
-    dailyUsage: u.dailyUsage,
-    monthlyUsage: u.monthlyUsage,
-    createdAt: u.createdAt,
-  }))
-
-  return NextResponse.json({
-    users: paginatedUsers,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  })
 }
 
 // PATCH /api/admin/users - Update user role/status
 export async function PATCH(request: NextRequest) {
+  // Rate limiting for admin endpoint
+  const rateLimitResponse = rateLimitMiddleware(request, STRICT_RATE_LIMIT, ":admin:users:update")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
@@ -125,11 +146,38 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json()
     const { userId, role, isActive, tier } = body
 
+    // Validate userId format
     if (!userId) {
-      return applySecurityHeaders(NextResponse.json({ error: "userId required" }, { status: 400 }))
+      return applySecurityHeaders(NextResponse.json({ error: "userId is required" }, { status: 400 }))
+    }
+    // userId should be UUID or string identifier, just sanitize it
+    const sanitizedUserId = sanitizeString(String(userId))
+    if (sanitizedUserId.length === 0) {
+      return applySecurityHeaders(NextResponse.json({ error: "Invalid userId" }, { status: 400 }))
     }
 
-    const targetUser = users.get(userId)
+    // Validate role enum if provided
+    if (role !== undefined) {
+      const roleError = validateEnum(role, ["USER", "PRO", "ADMIN"], "Role")
+      if (roleError) {
+        return applySecurityHeaders(NextResponse.json({ error: roleError }, { status: 400 }))
+      }
+    }
+
+    // Validate tier enum if provided
+    if (tier !== undefined) {
+      const tierError = validateEnum(tier, ["FREE", "PRO"], "Tier")
+      if (tierError) {
+        return applySecurityHeaders(NextResponse.json({ error: tierError }, { status: 400 }))
+      }
+    }
+
+    // Validate isActive boolean if provided
+    if (isActive !== undefined && typeof isActive !== "boolean") {
+      return applySecurityHeaders(NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 }))
+    }
+
+    const targetUser = users.get(sanitizedUserId)
     if (!targetUser) {
       return applySecurityHeaders(NextResponse.json({ error: "User not found" }, { status: 404 }))
     }
@@ -141,7 +189,7 @@ export async function PATCH(request: NextRequest) {
 
     Object.assign(targetUser, updates)
 
-    logAdminAction(user.id, user.email, 'UPDATE_USER', userId, 'USER', updates)
+    logAdminAction(user.id, user.email, 'UPDATE_USER', sanitizedUserId, 'USER', updates)
 
     return NextResponse.json({ success: true, user: targetUser })
   } catch (error) {

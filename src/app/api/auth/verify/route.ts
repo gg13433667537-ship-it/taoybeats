@@ -1,10 +1,39 @@
 import { NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
 import { createSessionToken } from "@/lib/auth-utils"
 import {
   rateLimitMiddleware,
   applySecurityHeaders,
   AUTH_RATE_LIMIT,
 } from "@/lib/security"
+
+function verifyTokenSignature(token: string): { email: string; code: string; exp: number } | null {
+  const csrfSecret = process.env.CSRF_SECRET || process.env.AUTH_SECRET
+  if (!csrfSecret) {
+    console.error("CSRF_SECRET or AUTH_SECRET environment variable is required")
+    return null
+  }
+
+  const parts = token.split(".")
+  if (parts.length !== 2) {
+    return null
+  }
+
+  const [payloadBase64, signature] = parts
+
+  // Verify signature
+  const expectedSignature = crypto.createHmac("sha256", csrfSecret).update(payloadBase64).digest("hex")
+  if (signature !== expectedSignature) {
+    return null
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(payloadBase64, "base64").toString())
+    return payload
+  } catch {
+    return null
+  }
+}
 
 // Shared global storage
 
@@ -42,11 +71,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Decode token
-    let payload: { email: string; code: string; exp: number }
-    try {
-      payload = JSON.parse(Buffer.from(token, "base64url").toString())
-    } catch {
+    // Decode and verify token signature
+    const payload = verifyTokenSignature(token)
+    if (!payload) {
       return NextResponse.json(
         { error: "验证码无效" },
         { status: 400 }
@@ -124,8 +151,20 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    response.cookies.delete("verify-token")
-    response.cookies.delete("dev-code")
+    response.cookies.set("verify-token", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    })
+    response.cookies.set("dev-code", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    })
     response.cookies.set("session-token", sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -134,12 +173,14 @@ export async function POST(request: NextRequest) {
       path: "/",
     })
 
-    return response
+    return applySecurityHeaders(response)
   } catch (error) {
     console.error("Verify error:", error)
-    return NextResponse.json(
-      { error: "验证失败，请稍后重试" },
-      { status: 500 }
+    return applySecurityHeaders(
+      NextResponse.json(
+        { error: "验证失败，请稍后重试" },
+        { status: 500 }
+      )
     )
   }
 }

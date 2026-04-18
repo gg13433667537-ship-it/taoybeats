@@ -1,11 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { POST as registerUser } from '@/app/api/auth/register/route'
-import { POST as loginUser } from '@/app/api/auth/login/route'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { GET as getSongs, POST as createSong } from '@/app/api/songs/route'
 
-// Helper to create NextRequest
-function createMockRequest(body: unknown, options: RequestInit = {}): Request {
+// Helper to create NextRequest - keeping for potential future use
+function _createMockRequest(body: unknown, options: RequestInit = {}): Request {
   return new Request('http://localhost:3000/api/test', {
     method: options.method || 'POST',
     headers: {
@@ -30,7 +28,7 @@ function createMockNextRequest(
     ? options.cookies.map(c => `${c.name}=${c.value}`).join('; ')
     : ''
 
-  return new Request(url, {
+  const request = new Request(url, {
     method: options.method || 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -38,7 +36,19 @@ function createMockNextRequest(
       ...options.headers,
     },
     body: body ? JSON.stringify(body) : undefined,
-  }) as unknown as Request
+  }) as unknown as Request & { cookies: { get: (name: string) => { value: string } | undefined } }
+
+  // Add cookies mock
+  const cookieMap = new Map<string, string>()
+  options.cookies?.forEach(c => cookieMap.set(c.name, c.value))
+  request.cookies = {
+    get: (name: string) => {
+      const value = cookieMap.get(name)
+      return value ? { value } : undefined
+    },
+  } as any
+
+  return request
 }
 
 describe('Songs API', () => {
@@ -98,7 +108,7 @@ describe('Songs API', () => {
       })
 
       const response = await createSong(request as any)
-      const data = await response.json()
+      await response.json() // consume body
 
       expect(response.status).toBe(400)
       expect(data.error).toContain('Missing required fields')
@@ -113,7 +123,7 @@ describe('Songs API', () => {
       })
 
       const response = await createSong(request as any)
-      const data = await response.json()
+      await response.json() // consume body
 
       expect(response.status).toBe(400)
     })

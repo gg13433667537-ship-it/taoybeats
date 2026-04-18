@@ -20,14 +20,12 @@ import { verifySessionToken } from "@/lib/auth-utils"
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
-    // Return demo user for unauthenticated SSE connections (matches songs/route.ts behavior)
-    return { id: 'demo-user', email: 'demo@example.com', role: 'USER' }
+    return null
   }
   try {
     const payload = verifySessionToken(sessionToken)
     if (!payload) {
-      // Invalid token - return demo user instead of blocking
-      return { id: 'demo-user', email: 'demo@example.com', role: 'USER' }
+      return null
     }
     return {
       id: payload.id,
@@ -35,8 +33,7 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
       role: payload.role,
     }
   } catch {
-    // Invalid token - return demo user instead of blocking
-    return { id: 'demo-user', email: 'demo@example.com', role: 'USER' }
+    return null
   }
 }
 
@@ -79,16 +76,12 @@ export async function GET(
       const pollInterval = 3000 // 3 seconds
       const startTime = Date.now()
 
-      // Send initial status
-      if (!song) {
-        sendEvent({ id, status: 'FAILED', error: 'Song not found', timestamp: new Date().toISOString() })
-        controller.close()
-        return
-      }
+      // Send initial status (song is guaranteed to exist here)
       sendEvent({
         id,
         status: song.status,
         progress: song.status === 'PENDING' ? 5 : song.status === 'GENERATING' ? 50 : song.status === 'COMPLETED' ? 100 : 0,
+        stage: song.status === 'PENDING' ? 'Queued...' : song.status === 'GENERATING' ? 'Creating your music...' : song.status === 'COMPLETED' ? 'Complete!' : 'Unknown',
         audioUrl: song.audioUrl,
         timestamp: new Date().toISOString(),
       })
@@ -105,7 +98,7 @@ export async function GET(
         }
 
         let progress = 50
-        let stage = 'Generating music...'
+        let stage = 'Creating your music...'
 
         switch (currentSong.status) {
           case 'PENDING':
@@ -130,12 +123,14 @@ export async function GET(
             controller.close()
             return
           case 'FAILED':
+            // Use a dedicated error message - audioUrl is not an error field
+            const errorMessage = (currentSong as Song & { error?: string }).error || currentSong.audioUrl || 'Generation failed'
             sendEvent({
               id,
               status: 'FAILED',
               progress: 0,
               stage: 'Generation failed',
-              error: currentSong.audioUrl || 'Unknown error',
+              error: errorMessage,
               timestamp: new Date().toISOString(),
             })
             controller.close()
@@ -170,6 +165,8 @@ export async function GET(
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+      "Retry": "3000",
     },
   })
 }

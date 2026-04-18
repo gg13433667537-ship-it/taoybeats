@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { applySecurityHeaders } from "@/lib/security"
+import { applySecurityHeaders, rateLimitMiddleware, DEFAULT_RATE_LIMIT } from "@/lib/security"
 
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
@@ -51,9 +51,15 @@ export interface MixRequest {
  *   Cloudflare Stream, AWS Elemental MediaConvert, or similar
  */
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "audio-mix")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   try {
@@ -61,23 +67,34 @@ export async function POST(request: NextRequest) {
     const { tracks, outputFormat = 'mp3', sampleRate = 44100, bitrate = 256000, normalize = true } = body
 
     if (!tracks || tracks.length === 0) {
-      return NextResponse.json({ error: "At least one track is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "At least one track is required" }, { status: 400 }))
     }
 
     if (tracks.length > 10) {
-      return NextResponse.json({ error: "Maximum 10 tracks allowed per mix" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "Maximum 10 tracks allowed per mix" }, { status: 400 }))
     }
 
     // Validate each track
     for (const track of tracks) {
       if (!track.audioUrl) {
-        return NextResponse.json({ error: "Each track must have an audioUrl" }, { status: 400 })
+        return applySecurityHeaders(NextResponse.json({ error: "Each track must have an audioUrl" }, { status: 400 }))
       }
+
+      // Validate track URL and protocol
+      try {
+        const parsedUrl = new URL(track.audioUrl)
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+          return applySecurityHeaders(NextResponse.json({ error: "Track audioUrl must use HTTP or HTTPS protocol" }, { status: 400 }))
+        }
+      } catch {
+        return applySecurityHeaders(NextResponse.json({ error: "Track audioUrl must be a valid URL" }, { status: 400 }))
+      }
+
       if (track.volume < 0 || track.volume > 1) {
-        return NextResponse.json({ error: "Track volume must be between 0 and 1" }, { status: 400 })
+        return applySecurityHeaders(NextResponse.json({ error: "Track volume must be between 0 and 1" }, { status: 400 }))
       }
-      if (track.startTime < 0) {
-        return NextResponse.json({ error: "Track startTime must be >= 0" }, { status: 400 })
+      if (track.startTime < 0 || !Number.isFinite(track.startTime)) {
+        return applySecurityHeaders(NextResponse.json({ error: "Track startTime must be a non-negative number" }, { status: 400 }))
       }
     }
 
@@ -87,10 +104,10 @@ export async function POST(request: NextRequest) {
     const isPro = userData?.tier === 'PRO' || user.role === 'ADMIN'
 
     if (tracks.length > 3 && !isPro) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: "Free users can mix up to 3 tracks. Upgrade to Pro for up to 10 tracks." },
         { status: 403 }
-      )
+      ))
     }
 
     // In production, this would:
@@ -119,6 +136,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Audio mix error:", error)
-    return NextResponse.json({ error: "Failed to mix audio" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to mix audio" }, { status: 500 }))
   }
 }

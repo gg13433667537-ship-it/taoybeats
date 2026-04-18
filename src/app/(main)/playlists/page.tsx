@@ -163,6 +163,12 @@ export default function PlaylistsPage() {
               {t('dashboard')}
             </button>
             <button
+              onClick={() => router.push('/settings')}
+              className="text-sm text-text-secondary hover:text-foreground transition-colors"
+            >
+              {t('settings')}
+            </button>
+            <button
               onClick={() => setShowCreateModal(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
             >

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders, rateLimitMiddleware, DEFAULT_RATE_LIMIT, MAX_LENGTHS } from "@/lib/security"
 
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
@@ -23,10 +24,16 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "voice-clone")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   // Auth check
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   try {
@@ -34,17 +41,40 @@ export async function POST(request: NextRequest) {
     const { file_id, voice_id, clone_prompt, text, model, language_boost, need_noise_reduction, need_volume_normalization, aigc_watermark } = body
 
     if (!file_id) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: "file_id is required" },
         { status: 400 }
-      )
+      ))
     }
 
     if (!voice_id) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: "voice_id is required" },
         { status: 400 }
-      )
+      ))
+    }
+
+    // Validate optional string fields with length limits
+    if (clone_prompt !== undefined && typeof clone_prompt === 'string' && clone_prompt.length > MAX_LENGTHS.PROMPT) {
+      return applySecurityHeaders(NextResponse.json(
+        { error: `clone_prompt must not exceed ${MAX_LENGTHS.PROMPT} characters` },
+        { status: 400 }
+      ))
+    }
+
+    if (text !== undefined && typeof text === 'string' && text.length > MAX_LENGTHS.LYRICS) {
+      return applySecurityHeaders(NextResponse.json(
+        { error: `text must not exceed ${MAX_LENGTHS.LYRICS} characters` },
+        { status: 400 }
+      ))
+    }
+
+    // Validate model if provided
+    if (model !== undefined && model !== 'melotron' && model !== 'e2') {
+      return applySecurityHeaders(NextResponse.json(
+        { error: "Invalid model. Must be 'melotron' or 'e2'" },
+        { status: 400 }
+      ))
     }
 
     // Use system API key for all requests
@@ -81,42 +111,42 @@ export async function POST(request: NextRequest) {
 
       // Handle specific error codes
       if (response.status === 2038) {
-        return NextResponse.json(
+        return applySecurityHeaders(NextResponse.json(
           { error: "无克隆权限，请检查账号认证", code: 2038 },
           { status: 403 }
-        )
+        ))
       }
       if (response.status === 1008) {
-        return NextResponse.json(
+        return applySecurityHeaders(NextResponse.json(
           { error: "余额不足，请充值后重试", code: 1008 },
           { status: 402 }
-        )
+        ))
       }
       if (response.status === 1002) {
-        return NextResponse.json(
+        return applySecurityHeaders(NextResponse.json(
           { error: "请求过于频繁，请稍后再试", code: 1002 },
           { status: 429 }
-        )
+        ))
       }
 
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: `MiniMax API error: ${errorMessage}` },
         { status: response.status }
-      )
+      ))
     }
 
     const data = await response.json()
 
-    return NextResponse.json({
+    return applySecurityHeaders(NextResponse.json({
       voice_id: data.voice_id,
       demo_audio: data.demo_audio,
       base_resp: data.base_resp,
-    })
+    }))
   } catch (error) {
     console.error("Voice clone error:", error)
-    return NextResponse.json(
+    return applySecurityHeaders(NextResponse.json(
       { error: "Failed to clone voice" },
       { status: 500 }
-    )
+    ))
   }
 }

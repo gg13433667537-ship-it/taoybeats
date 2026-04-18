@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { randomBytes } from "crypto"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
@@ -17,6 +18,11 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
   } catch {
     return null
   }
+}
+
+function generateShareToken(): string {
+  // Generate a cryptographically secure 32-character token using crypto.randomBytes
+  return randomBytes(24).toString("base64url")
 }
 
 export async function POST(
@@ -81,14 +87,4 @@ export async function POST(
       { status: 500 }
     )
   }
-}
-
-function generateShareToken(): string {
-  // Generate a random 8-character token
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-  let token = ""
-  for (let i = 0; i < 8; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return token
 }

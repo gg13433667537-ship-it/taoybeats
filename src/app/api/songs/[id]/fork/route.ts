@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { prisma } from "@/lib/db"
@@ -49,6 +50,23 @@ export async function POST(
       return NextResponse.json({ error: "Song not found" }, { status: 404 })
     }
 
+    // Check ownership - only owner or admin can fork
+    if (originalSong.userId !== user.id && user.role !== 'ADMIN') {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    // Validate modifications object if provided
+    const allowedModifications = ['title', 'lyrics', 'genre', 'mood', 'instruments', 'referenceSinger', 'referenceSong', 'userNotes']
+    if (modifications && typeof modifications === 'object') {
+      const invalidKeys = Object.keys(modifications).filter(key => !allowedModifications.includes(key))
+      if (invalidKeys.length > 0) {
+        return NextResponse.json(
+          { error: "Invalid modification fields", details: `Forbidden fields: ${invalidKeys.join(', ')}` },
+          { status: 400 }
+        )
+      }
+    }
+
     // Create forked song with same parameters (optionally modified)
     const songId = crypto.randomUUID()
     const now = new Date().toISOString()
@@ -71,6 +89,7 @@ export async function POST(
       createdAt: now,
       updatedAt: now,
       forkedFrom: id, // Track the original song
+      originalOwnerId: originalSong.userId, // Track original owner for attribution
     }
 
     songsMap.set(songId, forkedSong)
@@ -94,6 +113,7 @@ export async function POST(
           shareToken: shareToken,
           userId: user.id,
           forkedFrom: id, // Track the original song
+          originalOwnerId: originalSong.userId, // Track original owner for attribution
         },
       })
     } catch (prismaError) {
@@ -109,6 +129,7 @@ export async function POST(
     return NextResponse.json({
       id: songId,
       originalId: id,
+      originalOwnerId: originalSong.userId, // Include for attribution display
       shareToken,
       status: "PENDING",
       forkedParams: {

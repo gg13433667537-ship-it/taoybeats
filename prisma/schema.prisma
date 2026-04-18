@@ -24,6 +24,7 @@ model User {
   monthlyUsage  Int       @default(0)
   dailyResetAt  String?
   monthlyResetAt String?
+  sessionsRevokedAt DateTime? // Timestamp when all sessions were revoked (for logout-all)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -102,6 +103,7 @@ model Song {
   shareToken      String?  @unique
   userId          String
   forkedFrom      String?  // Reference to original song ID if this was forked
+  originalOwnerId String?  // Reference to original song owner's ID for attribution
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

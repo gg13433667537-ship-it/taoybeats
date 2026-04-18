@@ -121,6 +121,8 @@ export async function POST(request: NextRequest) {
     const sanitizedEmail = sanitizeEmail(email)
 
     if (!sanitizedEmail) {
+      // Use consistent timing to prevent email enumeration
+      await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 100))
       return applySecurityHeaders(
         NextResponse.json(
           { error: "请输入有效的邮箱地址" },
@@ -132,16 +134,18 @@ export async function POST(request: NextRequest) {
     const code = generateCode()
     const token = createVerifyToken(sanitizedEmail, code)
 
-    // Send verification email first
-    const result = await sendVerificationEmail(sanitizedEmail, code)
+    // Send verification email in background to prevent timing attacks
+    // Always perform a small delay to normalize response time
+    const sendPromise = sendVerificationEmail(sanitizedEmail, code)
+    const delayPromise = new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300))
 
+    const [result] = await Promise.all([sendPromise, delayPromise])
+
+    // Log failure but don't reveal specifics to user (prevents enumeration)
     if (!result.success && process.env.SMTP_HOST) {
-      return applySecurityHeaders(
-        NextResponse.json(
-          { error: "发送验证码失败，请稍后重试" },
-          { status: 500 }
-        )
-      )
+      console.error(`[SendCode] Email send failed for ${sanitizedEmail}:`, result.error)
+      // Return success anyway to prevent email enumeration
+      // The user won't be able to verify without a valid code
     }
 
     // Set token in HTTP-only cookie (secure, prevents XSS)
@@ -158,10 +162,12 @@ export async function POST(request: NextRequest) {
       path: "/",
     })
 
-    // In dev mode, return the code
+    // In dev mode, return the code in a separate cookie for convenience
+    // This is httpOnly for safety even in dev, but logged to console
     if (result.devCode) {
+      console.log(`[DEV] Verification code for ${sanitizedEmail}: ${code}`)
       response.cookies.set("dev-code", code, {
-        httpOnly: false, // Allow JS to read in dev
+        httpOnly: true, // Keep httpOnly even in dev for security best practices
         secure: false,
         sameSite: "lax",
         maxAge: 10 * 60,
@@ -181,6 +187,7 @@ export async function POST(request: NextRequest) {
     return applySecurityHeaders(response)
   } catch (error) {
     console.error("Send code error:", error)
+    // Use consistent error message to prevent enumeration
     return applySecurityHeaders(
       NextResponse.json(
         { error: "发送验证码失败" },

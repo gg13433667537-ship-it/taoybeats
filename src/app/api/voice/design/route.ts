@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders, DEFAULT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
@@ -23,28 +24,50 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "voice-design")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   // Auth check
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   try {
     const body = await request.json()
     const { prompt, preview_text, voice_id, aigc_watermark } = body
 
-    if (!prompt) {
-      return NextResponse.json(
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+      return applySecurityHeaders(NextResponse.json(
         { error: "prompt (音色描述) is required" },
         { status: 400 }
-      )
+      ))
     }
 
-    if (!preview_text) {
-      return NextResponse.json(
+    // Validate prompt length
+    if (prompt.length > 1000) {
+      return applySecurityHeaders(NextResponse.json(
+        { error: "prompt must not exceed 1000 characters" },
+        { status: 400 }
+      ))
+    }
+
+    if (!preview_text || typeof preview_text !== 'string' || preview_text.trim().length === 0) {
+      return applySecurityHeaders(NextResponse.json(
         { error: "preview_text (试听文本) is required" },
         { status: 400 }
-      )
+      ))
+    }
+
+    // Validate preview_text length
+    if (preview_text.length > 1000) {
+      return applySecurityHeaders(NextResponse.json(
+        { error: "preview_text must not exceed 1000 characters" },
+        { status: 400 }
+      ))
     }
 
     // Use system API key for all requests
@@ -76,36 +99,36 @@ export async function POST(request: NextRequest) {
 
       // Handle specific error codes
       if (response.status === 1008) {
-        return NextResponse.json(
+        return applySecurityHeaders(NextResponse.json(
           { error: "余额不足，请充值后重试", code: 1008 },
           { status: 402 }
-        )
+        ))
       }
       if (response.status === 1002) {
-        return NextResponse.json(
+        return applySecurityHeaders(NextResponse.json(
           { error: "请求过于频繁，请稍后再试", code: 1002 },
           { status: 429 }
-        )
+        ))
       }
 
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: `MiniMax API error: ${errorMessage}` },
         { status: response.status }
-      )
+      ))
     }
 
     const data = await response.json()
 
-    return NextResponse.json({
+    return applySecurityHeaders(NextResponse.json({
       voice_id: data.voice_id,
       trial_audio: data.trial_audio,
       base_resp: data.base_resp,
-    })
+    }))
   } catch (error) {
     console.error("Voice design error:", error)
-    return NextResponse.json(
+    return applySecurityHeaders(NextResponse.json(
       { error: "Failed to design voice" },
       { status: 500 }
-    )
+    ))
   }
 }

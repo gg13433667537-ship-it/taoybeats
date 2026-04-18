@@ -18,11 +18,13 @@ function createHmac(data: string): string {
 }
 
 export function createSessionToken(user: User): string {
-  const exp = Date.now() + 7 * 24 * 60 * 60 * 1000
+  const iat = Date.now()
+  const exp = iat + 7 * 24 * 60 * 60 * 1000
   const payload = {
     id: user.id,
     email: user.email,
     role: user.role,
+    iat,
     exp,
   }
   const payloadStr = JSON.stringify(payload)
@@ -35,10 +37,14 @@ export interface SessionPayload {
   id: string
   email: string
   role: string
+  iat: number
   exp: number
 }
 
-export function verifySessionToken(token: string): SessionPayload | null {
+export function verifySessionToken(
+  token: string,
+  options?: { sessionsRevokedAt?: number | null }
+): SessionPayload | null {
   try {
     const [payloadBase64, signature] = token.split(".")
     if (!payloadBase64 || !signature) return null
@@ -53,6 +59,12 @@ export function verifySessionToken(token: string): SessionPayload | null {
 
     if (payload.exp < Date.now()) {
       console.error("Session token expired")
+      return null
+    }
+
+    // Check if all sessions were revoked after this token was issued
+    if (options?.sessionsRevokedAt && payload.iat * 1000 < options.sessionsRevokedAt) {
+      console.error("Session token revoked by logout-all")
       return null
     }
 

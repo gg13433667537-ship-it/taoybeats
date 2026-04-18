@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { sanitizeString, validateOptionalString, applySecurityHeaders, MAX_LENGTHS } from "@/lib/security"
+import { logger } from "@/lib/logger"
+import crypto from "crypto"
 
 
 if (!global.users) global.users = new Map()
@@ -16,20 +19,33 @@ async function getCurrentUser(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const requestId = crypto.randomUUID()
+  const startTime = Date.now()
+  const endpoint = "/api/auth/profile"
+
+  logger.api.request("GET", endpoint, { requestId })
+
   try {
     const user = await getCurrentUser(request)
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      const duration = Date.now() - startTime
+      logger.api.response("GET", endpoint, 401, duration, { requestId })
+      return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
 
     // Get full user from global store
     const usersMap = global.users!
     const existingUser = usersMap.get(user.id)
     if (!existingUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      const duration = Date.now() - startTime
+      logger.api.response("GET", endpoint, 404, duration, { requestId })
+      return applySecurityHeaders(NextResponse.json({ error: "User not found" }, { status: 404 }))
     }
 
-    return NextResponse.json({
+    const duration = Date.now() - startTime
+    logger.api.response("GET", endpoint, 200, duration, { requestId, userId: user.id })
+
+    return applySecurityHeaders(NextResponse.json({
       success: true,
       user: {
         id: existingUser.id,
@@ -38,68 +54,135 @@ export async function GET(request: NextRequest) {
         role: existingUser.role,
         tier: existingUser.tier,
       },
-    })
+    }))
   } catch (error) {
-    console.error("Profile error:", error)
-    return NextResponse.json(
-      { error: "Failed to get profile" },
-      { status: 500 }
+    logger.api.error("GET", endpoint, error, { requestId })
+    return applySecurityHeaders(
+      NextResponse.json(
+        { error: "Failed to get profile" },
+        { status: 500 }
+      )
     )
   }
 }
 
 export async function PUT(request: NextRequest) {
+  const requestId = crypto.randomUUID()
+  const startTime = Date.now()
+  const endpoint = "/api/auth/profile"
+
+  logger.api.request("PUT", endpoint, { requestId })
+
   try {
     const user = await getCurrentUser(request)
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      const duration = Date.now() - startTime
+      logger.api.response("PUT", endpoint, 401, duration, { requestId })
+      return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
 
     const { name } = await request.json()
 
+    // Validate and sanitize name if provided
+    if (name !== undefined) {
+      const nameError = validateOptionalString(name, MAX_LENGTHS.NAME, "Name")
+      if (nameError) {
+        const duration = Date.now() - startTime
+        logger.api.response("PUT", endpoint, 400, duration, { requestId, userId: user.id })
+        return applySecurityHeaders(NextResponse.json({ error: nameError }, { status: 400 }))
+      }
+    }
+
     // Update user in global store
     const usersMap = global.users!
     const existingUser = usersMap.get(user.id)
+    const sanitizedName = name ? sanitizeString(name) : existingUser?.name
     if (existingUser) {
-      existingUser.name = name
+      existingUser.name = sanitizedName
       usersMap.set(user.id, existingUser)
     }
 
-    return NextResponse.json({
+    const duration = Date.now() - startTime
+    logger.api.response("PUT", endpoint, 200, duration, { requestId, userId: user.id })
+
+    return applySecurityHeaders(NextResponse.json({
       success: true,
       user: {
         id: user.id,
         email: user.email,
-        name,
+        name: sanitizedName,
+        role: user.role,
       },
-    })
+    }))
   } catch (error) {
-    console.error("Profile error:", error)
-    return NextResponse.json(
-      { error: "Failed to save profile" },
-      { status: 500 }
+    logger.api.error("PUT", endpoint, error, { requestId })
+    return applySecurityHeaders(
+      NextResponse.json(
+        { error: "Failed to save profile" },
+        { status: 500 }
+      )
     )
   }
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = crypto.randomUUID()
+  const startTime = Date.now()
+  const endpoint = "/api/auth/profile"
+
+  logger.api.request("POST", endpoint, { requestId })
+
+  // POST to profile requires authentication - add auth check
+  const user = await getCurrentUser(request)
+  if (!user) {
+    const duration = Date.now() - startTime
+    logger.api.response("POST", endpoint, 401, duration, { requestId })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
+  }
+
   try {
     const { email, name } = await request.json()
 
+    // Validate and sanitize email if provided
+    if (email !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      const sanitizedEmail = typeof email === "string" ? email.trim() : ""
+      if (!emailRegex.test(sanitizedEmail)) {
+        const duration = Date.now() - startTime
+        logger.api.response("POST", endpoint, 400, duration, { requestId, userId: user.id })
+        return applySecurityHeaders(NextResponse.json({ error: "Invalid email format" }, { status: 400 }))
+      }
+    }
+
+    // Validate and sanitize name if provided
+    if (name !== undefined) {
+      const nameError = validateOptionalString(name, MAX_LENGTHS.NAME, "Name")
+      if (nameError) {
+        const duration = Date.now() - startTime
+        logger.api.response("POST", endpoint, 400, duration, { requestId, userId: user.id })
+        return applySecurityHeaders(NextResponse.json({ error: nameError }, { status: 400 }))
+      }
+    }
+
     // In production, update user in database
     // For demo, just return success
-    return NextResponse.json({
+    const duration = Date.now() - startTime
+    logger.api.response("POST", endpoint, 200, duration, { requestId, userId: user.id })
+
+    return applySecurityHeaders(NextResponse.json({
       success: true,
       user: {
-        email,
-        name,
+        email: typeof email === "string" ? sanitizeString(email) : email,
+        name: name ? sanitizeString(name) : name,
       },
-    })
+    }))
   } catch (error) {
-    console.error("Profile error:", error)
-    return NextResponse.json(
-      { error: "Failed to save profile" },
-      { status: 500 }
+    logger.api.error("POST", endpoint, error, { requestId })
+    return applySecurityHeaders(
+      NextResponse.json(
+        { error: "Failed to save profile" },
+        { status: 500 }
+      )
     )
   }
 }

@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders, rateLimitMiddleware, STRICT_RATE_LIMIT } from "@/lib/security"
 
 
 if (!global.users) global.users = new Map()
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder")
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY
+if (!stripeSecretKey) {
+  console.error("STRIPE_SECRET_KEY environment variable is not set")
+}
+
+const stripe = new Stripe(stripeSecretKey || "sk_test_placeholder")
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
   const sessionToken = request.cookies.get('session-token')?.value
@@ -23,19 +29,35 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
   }
 }
 
+// Validate Stripe price ID format (starts with 'price_')
+function isValidPriceId(priceId: unknown): priceId is string {
+  return typeof priceId === 'string' && /^price_[a-zA-Z0-9]{24,}$/.test(priceId)
+}
+
 export async function POST(request: NextRequest) {
+  // Rate limiting - strict limit for payment operations
+  const rateLimitResponse = rateLimitMiddleware(request, STRICT_RATE_LIMIT, "stripe-checkout")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   // Auth check
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   try {
     const body = await request.json()
     const { priceId } = body
 
+    // Validate priceId is present and properly formatted
     if (!priceId) {
-      return NextResponse.json({ error: "Price ID is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "Price ID is required" }, { status: 400 }))
+    }
+
+    if (!isValidPriceId(priceId)) {
+      return applySecurityHeaders(NextResponse.json({ error: "Invalid Price ID format" }, { status: 400 }))
     }
 
     // Create Stripe Checkout Session
@@ -61,12 +83,12 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ url: session.url })
+    return applySecurityHeaders(NextResponse.json({ url: session.url }))
   } catch (error) {
     console.error("Stripe checkout error:", error)
-    return NextResponse.json(
+    return applySecurityHeaders(NextResponse.json(
       { error: "Failed to create checkout session" },
       { status: 500 }
-    )
+    ))
   }
 }

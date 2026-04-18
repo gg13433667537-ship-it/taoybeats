@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song, User } from "@/lib/types"
 import { discoverCache } from "@/lib/cache"
-import { applySecurityHeaders } from "@/lib/security"
+import { applySecurityHeaders, DEFAULT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 
 
 // Build cache key from query params
@@ -10,30 +10,40 @@ function buildDiscoverCacheKey(page: number, limit: number, genre: string | null
 }
 
 export async function GET(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "discover")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   try {
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
+
+    // Parse and validate pagination params
+    const rawPage = searchParams.get('page')
+    const rawLimit = searchParams.get('limit')
+    const page = Math.max(1, parseInt(rawPage || '1') || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(rawLimit || '20') || 20))
     const genre = searchParams.get('genre')
     const mood = searchParams.get('mood')
     const search = searchParams.get('search')
-    const sort = searchParams.get('sort') || 'newest'
+    const sort = ['newest', 'oldest', 'title'].includes(searchParams.get('sort') || '') ? searchParams.get('sort')! : 'newest'
 
-    // Check cache first (only for first page without filters)
+    // Check cache first (only for first page without filters and with default sort)
     const cacheKey = buildDiscoverCacheKey(page, limit, genre, mood, search, sort)
-    if (page === 1 && !genre && !mood && !search && discoverCache.has(cacheKey)) {
-      return NextResponse.json(discoverCache.get(cacheKey))
+    if (page === 1 && !genre && !mood && !search && sort === 'newest' && discoverCache.has(cacheKey)) {
+      return applySecurityHeaders(NextResponse.json(discoverCache.get(cacheKey)))
     }
 
     const songsMap = global.songs as Map<string, Song> | undefined
     if (!songsMap || songsMap.size === 0) {
-      return NextResponse.json({
+      return applySecurityHeaders(NextResponse.json({
         songs: [],
         page,
         limit,
         total: 0,
         totalPages: 0,
-      })
+      }))
     }
 
     // Get all completed public songs with user info
@@ -131,12 +141,12 @@ export async function GET(request: NextRequest) {
       discoverCache.set(cacheKey, response, 10000)
     }
 
-    return NextResponse.json(response)
+    return applySecurityHeaders(NextResponse.json(response))
   } catch (error) {
     console.error("Discover error:", error)
-    return NextResponse.json(
+    return applySecurityHeaders(NextResponse.json(
       { error: "Failed to fetch discover songs" },
       { status: 500 }
-    )
+    ))
   }
 }

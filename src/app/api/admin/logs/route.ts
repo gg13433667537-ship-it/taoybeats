@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { applySecurityHeaders } from "@/lib/security"
+import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 
 
 interface SessionUser {
@@ -50,6 +50,12 @@ function isAdmin(user: SessionUser | null): boolean {
 
 // GET /api/admin/logs - Get admin action logs
 export async function GET(request: NextRequest) {
+  // Rate limiting for admin endpoint
+  const rateLimitResponse = rateLimitMiddleware(request, STRICT_RATE_LIMIT, ":admin:logs:list")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
@@ -57,8 +63,11 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url)
-  const page = parseInt(searchParams.get('page') || '1')
-  const limit = parseInt(searchParams.get('limit') || '50')
+  // Validate and sanitize pagination params
+  const rawPage = searchParams.get('page')
+  const rawLimit = searchParams.get('limit')
+  const page = rawPage ? Math.max(1, parseInt(rawPage, 10) || 1) : 1
+  const limit = rawLimit ? Math.min(100, Math.max(1, parseInt(rawLimit, 10) || 50)) : 50
   const offset = (page - 1) * limit
 
   const allLogs = Array.from(adminLogs.values())

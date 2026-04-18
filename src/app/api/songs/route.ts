@@ -39,15 +39,26 @@ import { prisma } from "@/lib/db"
 import { rateLimitMiddleware, DEFAULT_RATE_LIMIT, sanitizeString, validateRequiredString, validateOptionalString, validateStringArray, validateNumber, MAX_LENGTHS } from "@/lib/security"
 import crypto from "crypto"
 
-// Shared global storage
-
-if (!global.users) global.users = new Map()
-if (!global.songs) global.songs = new Map()
-if (!global.adminLogs) global.adminLogs = new Map()
+// Shared global storage - ensure initialized
+if (typeof global.users === 'undefined') global.users = new Map()
+if (typeof global.songs === 'undefined') global.songs = new Map()
+if (typeof global.adminLogs === 'undefined') global.adminLogs = new Map()
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
 if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
 
-const users = global.users!
+// Helper to get or initialize users map
+function getUsersMap(): Map<string, User> {
+  if (!global.users) global.users = new Map()
+  return global.users
+}
+
+// Helper to get or initialize songs map
+function getSongsMap(): Map<string, Song> {
+  if (!global.songs) global.songs = new Map()
+  return global.songs
+}
+
+const users = getUsersMap()
 
 // Free tier limits
 const FREE_DAILY_LIMIT = 3
@@ -154,14 +165,12 @@ export async function GET(request: NextRequest) {
     }))
 
     // Also update in-memory cache
-    const songsMap = global.songs as Map<string, Song>
+    const songsMap = getSongsMap()
     userSongs.forEach((s) => songsMap.set(s.id, s))
   } catch (prismaError) {
     console.error("Prisma song lookup failed, falling back to memory:", prismaError)
-    const songsMap = global.songs as Map<string, Song> | undefined
-    if (songsMap) {
-      userSongs = Array.from(songsMap.values()).filter((s) => s.userId === user.id)
-    }
+    const songsMap = getSongsMap()
+    userSongs = Array.from(songsMap.values()).filter((s) => s.userId === user.id)
   }
 
   return NextResponse.json({ songs: userSongs })
@@ -360,7 +369,7 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     }
 
-    const songsMap = global.songs as Map<string, Song>
+    const songsMap = getSongsMap()
     songsMap.set(songId, song)
 
     // Persist to Prisma - if this fails, the song cannot be created
@@ -422,7 +431,7 @@ async function generateMusic(
   apiKey: string,
   apiUrl?: string
 ) {
-  const songsMap = global.songs as Map<string, Song>
+  const songsMap = getSongsMap()
 
   try {
     // Update status to GENERATING

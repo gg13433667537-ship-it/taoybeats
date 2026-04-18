@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { applySecurityHeaders } from "@/lib/security"
+import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 
 
 interface SessionUser {
@@ -59,6 +59,12 @@ function isAdmin(user: SessionUser | null): boolean {
 
 // GET /api/admin/stats - Get system statistics
 export async function GET(request: NextRequest) {
+  // Rate limiting for admin endpoint
+  const rateLimitResponse = rateLimitMiddleware(request, STRICT_RATE_LIMIT, ":admin:stats")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
@@ -93,7 +99,7 @@ export async function GET(request: NextRequest) {
   const totalDailyUsage = allUsers.reduce((sum, u) => sum + (u.dailyUsage || 0), 0)
   const totalMonthlyUsage = allUsers.reduce((sum, u) => sum + (u.monthlyUsage || 0), 0)
 
-  return NextResponse.json({
+  return applySecurityHeaders(NextResponse.json({
     users: {
       total: totalUsers,
       active: activeUsers,
@@ -109,5 +115,5 @@ export async function GET(request: NextRequest) {
       monthly: totalMonthlyUsage,
     },
     logs: recentLogs,
-  })
+  }))
 }

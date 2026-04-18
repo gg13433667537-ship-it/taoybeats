@@ -261,26 +261,33 @@ export const miniMaxProvider: AIProvider = {
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
     const model = params.model || 'music-2.6'
 
+    // Build request body with all parameters
+    const requestBody: Record<string, unknown> = {
+      model,
+      prompt: params.prompt || 'Continue the song naturally',
+      stream: false,
+      output_format: 'url',
+      reference_audio: params.originalAudioUrl,
+      audio_setting: {
+        sample_rate: 44100,
+        bitrate: 256000,
+        format: 'mp3'
+      },
+      aigc_watermark: false,
+    }
+
+    // Add duration if provided (MiniMax may use this as guidance)
+    if (params.duration) {
+      requestBody.duration = params.duration
+    }
+
     const response = await fetch(`${baseUrl}/v1/music_generation`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        prompt: params.prompt || 'Continue the song naturally',
-        is_instrumental: false,
-        stream: false,
-        output_format: 'url',
-        reference_audio: params.originalAudioUrl,
-        audio_setting: {
-          sample_rate: 44100,
-          bitrate: 256000,
-          format: 'mp3'
-        },
-        aigc_watermark: false,
-      }),
+      body: JSON.stringify(requestBody),
     })
 
     if (!response.ok) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { applySecurityHeaders } from "@/lib/security"
+import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware, validateUUID } from "@/lib/security"
 
 
 interface SessionUser {
@@ -68,11 +68,23 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Rate limiting for admin endpoint
+  const rateLimitResponse = rateLimitMiddleware(request, STRICT_RATE_LIMIT, ":admin:songs:delete")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
   const { id } = await params
 
   if (!user || !isAdmin(user)) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
+  }
+
+  // Validate UUID format
+  const uuidError = validateUUID(id, "Song ID")
+  if (uuidError) {
+    return applySecurityHeaders(NextResponse.json({ error: uuidError }, { status: 400 }))
   }
 
   const song = songs.get(id) as { title?: string } | undefined
@@ -84,5 +96,5 @@ export async function DELETE(
 
   logAdminAction(user.id, user.email, 'DELETE_SONG', id, 'SONG', { title: song.title })
 
-  return NextResponse.json({ success: true })
+  return applySecurityHeaders(NextResponse.json({ success: true }))
 }

@@ -174,8 +174,10 @@ export function sanitizeEmail(email: unknown): string | null {
     .replace(/[<>(){}[\]\\]/g, "")
     .slice(0, 254) // Max email length
 
-  // Simple email regex validation
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  // RFC 5322-compliant email regex validation (simplified but robust)
+  // Allows: user@domain.com, user.name@domain.co.uk, user+tag@domain.org
+  // Rejects: test@.com, test@@com, @domain.com, user@
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
   if (!emailRegex.test(sanitized)) {
     return null
   }
@@ -313,7 +315,7 @@ export function validateEnum(value: unknown, allowedValues: string[], fieldName:
 }
 
 /** Validate array of strings with sanitization */
-export function validateStringArray(input: unknown, maxLength: number, maxItems: number, fieldName: string): string[] | null {
+export function validateStringArray(input: unknown, maxLength: number, maxItems: number, _fieldName: string): string[] | null {
   if (!Array.isArray(input)) {
     return null
   }
@@ -335,7 +337,7 @@ export function validateStringArray(input: unknown, maxLength: number, maxItems:
 }
 
 /** Validate boolean */
-export function validateBoolean(value: unknown, fieldName: string): boolean | null {
+export function validateBoolean(value: unknown, _fieldName: string): boolean | null {
   if (typeof value === "boolean") {
     return value
   }
@@ -346,7 +348,7 @@ export function validateBoolean(value: unknown, fieldName: string): boolean | nu
 }
 
 /** Validate number within range */
-export function validateNumber(value: unknown, min: number, max: number, fieldName: string): number | null {
+export function validateNumber(value: unknown, min: number, max: number, _fieldName: string): number | null {
   if (typeof value === "number" && !isNaN(value)) {
     if (value < min || value > max) {
       return null

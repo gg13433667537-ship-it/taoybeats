@@ -14,19 +14,23 @@ const stripe = new Stripe(stripeSecretKey || "sk_test_placeholder")
 // Raw body needed for Stripe signature verification
 export async function POST(request: NextRequest) {
   const body = await request.text()
-  const sig = request.headers.get("stripe-signature") || ""
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ""
+  const sig = request.headers.get("stripe-signature")
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+
+  // Reject requests without required signature in production
+  if (!webhookSecret || !sig) {
+    console.error("Webhook missing signature or secret")
+    return applySecurityHeaders(NextResponse.json(
+      { error: "Webhook configuration error" },
+      { status: 500 }
+    ))
+  }
 
   let event
 
   try {
-    // Verify webhook signature
-    if (webhookSecret && sig) {
-      event = stripe.webhooks.constructEvent(body, sig, webhookSecret)
-    } else {
-      // If no webhook secret configured, parse directly (for development)
-      event = JSON.parse(body)
-    }
+    // Verify webhook signature - ALWAYS verify in production
+    event = stripe.webhooks.constructEvent(body, sig, webhookSecret)
   } catch (err) {
     console.error("Webhook signature verification failed:", err)
     return applySecurityHeaders(NextResponse.json({ error: "Invalid signature" }, { status: 400 }))
@@ -84,9 +88,9 @@ export async function POST(request: NextRequest) {
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object
+        const invoice = event.data.object as { subscription?: string }
         const subscriptionId = invoice.subscription
-        console.log(`Payment failed for subscription ${subscriptionId}`)
+        console.log(`Payment failed for subscription ${subscriptionId || 'unknown'}`)
         // Could send email notification here
         break
       }

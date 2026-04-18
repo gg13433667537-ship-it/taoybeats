@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { playlistCache } from "@/lib/cache"
+import { validateUUID, applySecurityHeaders } from "@/lib/security"
 
 
 if (!global.users) global.users = new Map()
@@ -29,36 +31,42 @@ export async function POST(
 ) {
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   const { id } = await params
   const playlist = global.playlists?.get(id) as Playlist | undefined
 
   if (!playlist) {
-    return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: "Playlist not found" }, { status: 404 }))
   }
 
   // Check ownership
   if (playlist.userId !== user.id && user.role !== 'ADMIN') {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Forbidden" }, { status: 403 }))
   }
 
   try {
     const { songId } = await request.json()
 
     if (!songId) {
-      return NextResponse.json({ error: "Song ID is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "Song ID is required" }, { status: 400 }))
+    }
+
+    // Validate songId is a valid UUID
+    const songIdError = validateUUID(songId, "Song ID")
+    if (songIdError) {
+      return applySecurityHeaders(NextResponse.json({ error: songIdError }, { status: 400 }))
     }
 
     // Check if song exists
     if (!global.songs?.has(songId)) {
-      return NextResponse.json({ error: "Song not found" }, { status: 404 })
+      return applySecurityHeaders(NextResponse.json({ error: "Song not found" }, { status: 404 }))
     }
 
     // Check if song is already in playlist
     if (playlist.songIds.includes(songId)) {
-      return NextResponse.json({ error: "Song already in playlist" }, { status: 409 })
+      return applySecurityHeaders(NextResponse.json({ error: "Song already in playlist" }, { status: 409 }))
     }
 
     const updated: Playlist = {
@@ -69,10 +77,13 @@ export async function POST(
 
     global.playlists?.set(id, updated)
 
-    return NextResponse.json({ playlist: updated })
+    // Invalidate playlist cache for owner
+    playlistCache.delete(`playlists:${playlist.userId}`)
+
+    return applySecurityHeaders(NextResponse.json({ playlist: updated }))
   } catch (error) {
     console.error("Add song to playlist error:", error)
-    return NextResponse.json({ error: "Failed to add song to playlist" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to add song to playlist" }, { status: 500 }))
   }
 }
 
@@ -83,19 +94,19 @@ export async function DELETE(
 ) {
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   const { id } = await params
   const playlist = global.playlists?.get(id) as Playlist | undefined
 
   if (!playlist) {
-    return NextResponse.json({ error: "Playlist not found" }, { status: 404 })
+    return applySecurityHeaders(NextResponse.json({ error: "Playlist not found" }, { status: 404 }))
   }
 
   // Check ownership
   if (playlist.userId !== user.id && user.role !== 'ADMIN') {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    return applySecurityHeaders(NextResponse.json({ error: "Forbidden" }, { status: 403 }))
   }
 
   try {
@@ -103,7 +114,13 @@ export async function DELETE(
     const songId = searchParams.get('songId')
 
     if (!songId) {
-      return NextResponse.json({ error: "Song ID is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "Song ID is required" }, { status: 400 }))
+    }
+
+    // Validate songId is a valid UUID
+    const songIdError = validateUUID(songId, "Song ID")
+    if (songIdError) {
+      return applySecurityHeaders(NextResponse.json({ error: songIdError }, { status: 400 }))
     }
 
     const updated: Playlist = {
@@ -114,9 +131,12 @@ export async function DELETE(
 
     global.playlists?.set(id, updated)
 
-    return NextResponse.json({ playlist: updated })
+    // Invalidate playlist cache for owner
+    playlistCache.delete(`playlists:${playlist.userId}`)
+
+    return applySecurityHeaders(NextResponse.json({ playlist: updated }))
   } catch (error) {
     console.error("Remove song from playlist error:", error)
-    return NextResponse.json({ error: "Failed to remove song from playlist" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to remove song from playlist" }, { status: 500 }))
   }
 }

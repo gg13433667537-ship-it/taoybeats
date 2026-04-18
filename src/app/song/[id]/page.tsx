@@ -782,7 +782,6 @@ export default function SongSharePage() {
             {song.audioUrl && song.status === 'COMPLETED' && (
               <div className="mt-6">
                 <AdvancedAudioEditor
-                  songId={songId}
                   audioUrl={song.audioUrl}
                   onProcessed={(processedUrl) => {
                     // Could redirect to new song or update current

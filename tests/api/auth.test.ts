@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { createSessionToken, verifySessionToken } from '@/lib/auth-utils'
 import type { User } from '@/lib/types'
 

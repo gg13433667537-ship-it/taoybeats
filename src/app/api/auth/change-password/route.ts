@@ -3,15 +3,48 @@ import bcrypt from "bcryptjs"
 import { verifySessionToken } from "@/lib/auth-utils"
 import {
   rateLimitMiddleware,
-  sanitizeString,
   applySecurityHeaders,
   AUTH_RATE_LIMIT,
 } from "@/lib/security"
+import { prisma } from "@/lib/db"
 
 
-if (!global.users) global.users = new Map()
+/**
+ * Validate password strength
+ * Requirements:
+ * - At least 8 characters
+ * - At least one uppercase letter
+ * - At least one lowercase letter
+ * - At least one number
+ * - At least one special character
+ */
+function validatePasswordStrength(password: string): string | null {
+  if (!password || typeof password !== "string") {
+    return "Password is required"
+  }
 
-const users = global.users!
+  if (password.length < 8) {
+    return "Password must be at least 8 characters"
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    return "Password must contain at least one uppercase letter"
+  }
+
+  if (!/[a-z]/.test(password)) {
+    return "Password must contain at least one lowercase letter"
+  }
+
+  if (!/[0-9]/.test(password)) {
+    return "Password must contain at least one number"
+  }
+
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return "Password must contain at least one special character"
+  }
+
+  return null
+}
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting for password change
@@ -32,7 +65,7 @@ export async function POST(request: NextRequest) {
       return applySecurityHeaders(NextResponse.json({ error: "Invalid session" }, { status: 401 }))
     }
 
-    const userId = payload.id || payload.email
+    const userId = payload.id
     if (!userId) {
       return applySecurityHeaders(NextResponse.json({ error: "Invalid session" }, { status: 401 }))
     }
@@ -40,11 +73,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { currentPassword, newPassword } = body
 
-    // Input validation and sanitization
-    const sanitizedCurrentPassword = sanitizeString(currentPassword)
-    const sanitizedNewPassword = sanitizeString(newPassword)
-
-    if (!sanitizedCurrentPassword || !sanitizedNewPassword) {
+    // Validate required fields (do NOT sanitize passwords - they must be used as-is)
+    if (!currentPassword || !newPassword) {
       return applySecurityHeaders(
         NextResponse.json(
           { error: "Current password and new password are required" },
@@ -53,24 +83,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (sanitizedNewPassword.length < 8) {
+    // Validate password strength (use raw passwords, not sanitized)
+    const strengthError = validatePasswordStrength(newPassword)
+    if (strengthError) {
+      return applySecurityHeaders(
+        NextResponse.json({ error: strengthError }, { status: 400 })
+      )
+    }
+
+    // Prevent new password being same as current (optional additional check)
+    if (currentPassword === newPassword) {
       return applySecurityHeaders(
         NextResponse.json(
-          { error: "Password must be at least 8 characters" },
+          { error: "New password must be different from current password" },
           { status: 400 }
         )
       )
     }
 
-    // Find user
-    const user = users.get(userId)
+    // Find user in database
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, password: true },
+    })
+
     if (!user) {
       return applySecurityHeaders(NextResponse.json({ error: "User not found" }, { status: 404 }))
     }
 
     // Verify current password
     if (user.password) {
-      const isValid = await bcrypt.compare(sanitizedCurrentPassword, user.password)
+      const isValid = await bcrypt.compare(currentPassword, user.password)
       if (!isValid) {
         return applySecurityHeaders(NextResponse.json({ error: "Current password is incorrect" }, { status: 401 }))
       }
@@ -78,10 +121,12 @@ export async function POST(request: NextRequest) {
       return applySecurityHeaders(NextResponse.json({ error: "No password set for this account" }, { status: 400 }))
     }
 
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(sanitizedNewPassword, 10)
-    user.password = hashedPassword
-    users.set(userId, user)
+    // Hash new password and update
+    const hashedPassword = await bcrypt.hash(newPassword, 12)
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    })
 
     return applySecurityHeaders(NextResponse.json({ success: true }))
   } catch (error) {

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import type { User, Song } from "@/lib/types"
 import { miniMaxProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { } from "@/lib/security"
+import crypto from "crypto"
 
 
 if (!global.users) global.users = new Map()

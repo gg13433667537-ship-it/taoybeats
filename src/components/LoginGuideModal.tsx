@@ -7,9 +7,10 @@ import { useRouter } from "next/navigation"
 interface LoginGuideModalProps {
   isOpen: boolean
   onClose: () => void
+  _onLoginSuccess?: () => void
 }
 
-export default function LoginGuideModal({ isOpen, onClose }: LoginGuideModalProps) {
+export default function LoginGuideModal({ isOpen, onClose, _onLoginSuccess }: LoginGuideModalProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 

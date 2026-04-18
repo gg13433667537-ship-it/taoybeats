@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders, DEFAULT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
@@ -53,9 +54,15 @@ interface TranslatedLyrics {
  * - Human review step for quality assurance
  */
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "lyrics-multilingual")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   try {
@@ -63,15 +70,15 @@ export async function POST(request: NextRequest) {
     const { originalLyrics, targetLanguages, preserveFormat = true, keepRhymes = true, styleMatch = true } = body
 
     if (!originalLyrics) {
-      return NextResponse.json({ error: "originalLyrics is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "originalLyrics is required" }, { status: 400 }))
     }
 
     if (!targetLanguages || targetLanguages.length === 0) {
-      return NextResponse.json({ error: "At least one target language is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "At least one target language is required" }, { status: 400 }))
     }
 
     if (targetLanguages.length > 5) {
-      return NextResponse.json({ error: "Maximum 5 languages allowed per request" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "Maximum 5 languages allowed per request" }, { status: 400 }))
     }
 
     // Check user tier
@@ -80,10 +87,10 @@ export async function POST(request: NextRequest) {
     const isPro = userData?.tier === 'PRO' || user.role === 'ADMIN'
 
     if (targetLanguages.length > 2 && !isPro) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: "Free users can translate to up to 2 languages. Upgrade to Pro for up to 5." },
         { status: 403 }
-      )
+      ))
     }
 
     // In production, this would:
@@ -114,7 +121,7 @@ export async function POST(request: NextRequest) {
       translatedTitle: undefined // Would be translated in production
     }))
 
-    return NextResponse.json({
+    return applySecurityHeaders(NextResponse.json({
       success: true,
       originalLyrics,
       translations,
@@ -124,9 +131,9 @@ export async function POST(request: NextRequest) {
         styleMatch
       },
       message: "Multilingual translation is a placeholder. Production would use translation API."
-    })
+    }))
   } catch (error) {
     console.error("Multilingual lyrics error:", error)
-    return NextResponse.json({ error: "Failed to translate lyrics" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to translate lyrics" }, { status: 500 }))
   }
 }

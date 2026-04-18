@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders, rateLimitMiddleware, DEFAULT_RATE_LIMIT } from "@/lib/security"
 
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
@@ -42,9 +43,15 @@ export interface TrimRequest {
  * - Or integrate with a cloud audio processing service
  */
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "audio-trim")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   try {
@@ -52,15 +59,49 @@ export async function POST(request: NextRequest) {
     const { audioUrl, startTime, endTime, fadeIn = 0, fadeOut = 0, outputFormat = 'mp3' } = body
 
     if (!audioUrl) {
-      return NextResponse.json({ error: "audioUrl is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "audioUrl is required" }, { status: 400 }))
+    }
+
+    // Validate time values are numbers
+    if (typeof startTime !== 'number' || typeof endTime !== 'number' ||
+        isNaN(startTime) || isNaN(endTime) || !isFinite(startTime) || !isFinite(endTime)) {
+      return applySecurityHeaders(NextResponse.json({ error: "startTime and endTime must be valid numbers" }, { status: 400 }))
     }
 
     if (startTime < 0) {
-      return NextResponse.json({ error: "startTime must be >= 0" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "startTime must be >= 0" }, { status: 400 }))
     }
 
     if (endTime <= startTime) {
-      return NextResponse.json({ error: "endTime must be greater than startTime" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "endTime must be greater than startTime" }, { status: 400 }))
+    }
+
+    // Validate fade values
+    if (typeof fadeIn !== 'number' || isNaN(fadeIn) || fadeIn < 0) {
+      return applySecurityHeaders(NextResponse.json({ error: "fadeIn must be a non-negative number" }, { status: 400 }))
+    }
+
+    if (typeof fadeOut !== 'number' || isNaN(fadeOut) || fadeOut < 0) {
+      return applySecurityHeaders(NextResponse.json({ error: "fadeOut must be a non-negative number" }, { status: 400 }))
+    }
+
+    // Validate output format
+    const allowedFormats = ['mp3', 'wav', 'flac']
+    if (!allowedFormats.includes(outputFormat)) {
+      return applySecurityHeaders(NextResponse.json({ error: `outputFormat must be one of: ${allowedFormats.join(', ')}` }, { status: 400 }))
+    }
+
+    // Validate audioUrl format and protocol
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(audioUrl)
+    } catch {
+      return applySecurityHeaders(NextResponse.json({ error: "audioUrl must be a valid URL" }, { status: 400 }))
+    }
+
+    // Only allow http and https protocols to prevent SSRF
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return applySecurityHeaders(NextResponse.json({ error: "audioUrl must use HTTP or HTTPS protocol" }, { status: 400 }))
     }
 
     // Max duration check (10 minutes for free users)
@@ -70,10 +111,10 @@ export async function POST(request: NextRequest) {
     const maxDuration = isPro ? 600 : 120 // Pro: 10min, Free: 2min
 
     if (endTime - startTime > maxDuration) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: `Trimmed audio exceeds maximum duration. Pro users can trim up to 10 minutes.` },
         { status: 400 }
-      )
+      ))
     }
 
     // In production, this would:
@@ -100,6 +141,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Audio trim error:", error)
-    return NextResponse.json({ error: "Failed to trim audio" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to trim audio" }, { status: 500 }))
   }
 }

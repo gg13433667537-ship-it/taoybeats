@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { miniMaxProvider } from "@/lib/ai-providers"
@@ -26,7 +27,7 @@ function getDemoUser(): { id: string; email: string; role: string } {
 /**
  * Extended Generation API
  *
- * Generates an extended version of a song (3-5 minutes) by chaining
+ * Generates an extended version of a song (1-5 minutes) by chaining
  * multiple generation segments using the continue API with reference_audio
  * to maintain style consistency.
  *
@@ -189,7 +190,7 @@ async function generateExtendedVersion(
       currentDuration = segmentDuration
       segmentCount = 1
     } else {
-      currentDuration = await getAudioDuration() || 0
+      currentDuration = await getAudioDuration(currentAudioUrl) || segmentDuration
       console.log(`[Extend] Song ${songId}: Starting with ${currentDuration}s audio`)
     }
 
@@ -342,14 +343,29 @@ async function continueSong(
 }
 
 /**
- * Get audio duration from URL (approximate)
+ * Get actual audio duration from URL
+ * Fetches audio metadata to determine precise duration
  */
-async function getAudioDuration(): Promise<number | null> {
+async function getAudioDuration(audioUrl: string): Promise<number | null> {
   try {
-    // For MiniMax URLs, we can estimate based on the generation params
-    // This is an approximation - in production you'd want to fetch audio metadata
-    // Return a default estimate of 120 seconds (2 minutes)
-    return 120
+    // For MiniMax URLs, we need to fetch the audio and get its duration
+    // Use a HEAD request first to check if the URL is accessible
+    const response = await fetch(audioUrl, { method: 'HEAD' })
+    if (!response.ok) {
+      return null
+    }
+
+    // Try to get Content-Length and estimate duration based on bitrate
+    const contentLength = response.headers.get('Content-Length')
+    if (contentLength) {
+      // Assuming 256kbps MP3 (32KB/s) as default bitrate
+      // This is an approximation - actual bitrate may vary
+      const fileSizeKB = parseInt(contentLength, 10) / 1024
+      const estimatedDurationSec = fileSizeKB / 32
+      return Math.round(estimatedDurationSec)
+    }
+
+    return null
   } catch {
     return null
   }

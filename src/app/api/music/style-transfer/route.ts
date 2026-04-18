@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders, DEFAULT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
@@ -46,9 +47,15 @@ export interface StyleTransferRequest {
  * - Could also use MiniMax if they support style transfer
  */
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "style-transfer")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
   try {
@@ -64,18 +71,18 @@ export async function POST(request: NextRequest) {
     } = body
 
     if (!audioUrl) {
-      return NextResponse.json({ error: "audioUrl is required" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "audioUrl is required" }, { status: 400 }))
     }
 
     if (!targetGenre && !targetMood && !targetInstruments && !referenceAudioUrl) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: "At least one style target is required (genre, mood, instruments, or referenceAudio)" },
         { status: 400 }
-      )
+      ))
     }
 
     if (intensity < 0 || intensity > 1) {
-      return NextResponse.json({ error: "intensity must be between 0 and 1" }, { status: 400 })
+      return applySecurityHeaders(NextResponse.json({ error: "intensity must be between 0 and 1" }, { status: 400 }))
     }
 
     // Check user tier
@@ -84,10 +91,10 @@ export async function POST(request: NextRequest) {
     const isPro = userData?.tier === 'PRO' || user.role === 'ADMIN'
 
     if (!isPro) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: "Style transfer is available for Pro users only" },
         { status: 403 }
-      )
+      ))
     }
 
     // In production, this would:
@@ -103,7 +110,7 @@ export async function POST(request: NextRequest) {
     // Placeholder response
     const styledUrl = audioUrl // In production, this would be the styled file URL
 
-    return NextResponse.json({
+    return applySecurityHeaders(NextResponse.json({
       success: true,
       originalUrl: audioUrl,
       styledUrl,
@@ -116,9 +123,9 @@ export async function POST(request: NextRequest) {
         intensity
       },
       message: "Style transfer requires server-side AI processing. This is a placeholder."
-    })
+    }))
   } catch (error) {
     console.error("Style transfer error:", error)
-    return NextResponse.json({ error: "Failed to apply style transfer" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to apply style transfer" }, { status: 500 }))
   }
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { applySecurityHeaders } from "@/lib/security"
+import { applySecurityHeaders, rateLimitMiddleware, DEFAULT_RATE_LIMIT } from "@/lib/security"
 
 // Initialize global state
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
@@ -33,6 +33,12 @@ export interface ConvertRequest {
   bitrate?: number
 }
 
+// Quality and bitrate validation constants
+const VALID_QUALITIES = ['low', 'medium', 'high', 'lossless'] as const
+const MIN_BITRATE = 32000   // 32 kbps minimum
+const MAX_BITRATE = 1411200 // 1411.2 kbps (CD quality) maximum
+const MAX_AUDIO_URL_LENGTH = 2048
+
 /**
  * Audio Format Conversion API
  *
@@ -45,6 +51,12 @@ export interface ConvertRequest {
  *   Cloudflare Stream, AWS MediaConvert, or similar
  */
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "audio-convert")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
+
   const user = getSessionUser(request)
   if (!user) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
@@ -54,12 +66,52 @@ export async function POST(request: NextRequest) {
     const body: ConvertRequest = await request.json()
     const { audioUrl, outputFormat, quality = 'high', bitrate } = body
 
+    // Validate audioUrl
     if (!audioUrl) {
       return applySecurityHeaders(NextResponse.json({ error: "audioUrl is required" }, { status: 400 }))
     }
 
+    // Validate audioUrl format and length
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(audioUrl)
+    } catch {
+      return applySecurityHeaders(NextResponse.json({ error: "audioUrl must be a valid URL" }, { status: 400 }))
+    }
+
+    // Only allow http and https protocols to prevent SSRF
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return applySecurityHeaders(NextResponse.json({ error: "audioUrl must use HTTP or HTTPS protocol" }, { status: 400 }))
+    }
+
+    // Check URL length to prevent DoS
+    if (audioUrl.length > MAX_AUDIO_URL_LENGTH) {
+      return applySecurityHeaders(NextResponse.json({ error: "audioUrl exceeds maximum length" }, { status: 400 }))
+    }
+
     if (!outputFormat) {
       return applySecurityHeaders(NextResponse.json({ error: "outputFormat is required" }, { status: 400 }))
+    }
+
+    // Validate quality
+    if (quality && !VALID_QUALITIES.includes(quality as typeof VALID_QUALITIES[number])) {
+      return applySecurityHeaders(NextResponse.json(
+        { error: `Invalid quality. Supported: ${VALID_QUALITIES.join(', ')}` },
+        { status: 400 }
+      ))
+    }
+
+    // Validate bitrate if provided
+    if (bitrate !== undefined) {
+      if (typeof bitrate !== 'number' || !Number.isInteger(bitrate)) {
+        return applySecurityHeaders(NextResponse.json({ error: "bitrate must be an integer" }, { status: 400 }))
+      }
+      if (bitrate < MIN_BITRATE || bitrate > MAX_BITRATE) {
+        return applySecurityHeaders(NextResponse.json(
+          { error: `bitrate must be between ${MIN_BITRATE} and ${MAX_BITRATE}` },
+          { status: 400 }
+        ))
+      }
     }
 
     const supportedFormats: AudioFormat[] = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'pcm']
@@ -89,21 +141,24 @@ export async function POST(request: NextRequest) {
     // 3. Upload the converted file
     // 4. Return the new URL
 
-    // Placeholder response
-    const convertedUrl = audioUrl // In production, this would be the converted file URL
-
-    return NextResponse.json({
-      success: true,
+    // Return 501 Not Implemented since conversion is not yet available
+    return applySecurityHeaders(NextResponse.json({
+      success: false,
+      error: "Audio format conversion is not yet implemented",
       originalUrl: audioUrl,
-      convertedUrl,
       outputFormat,
       quality,
       bitrate: bitrate || getDefaultBitrate(outputFormat, quality),
-      message: "Format conversion requires server-side audio processing. This is a placeholder."
-    })
+    }, { status: 501 }))
   } catch (error) {
     console.error("Audio convert error:", error)
-    return applySecurityHeaders(NextResponse.json({ error: "Failed to convert audio" }, { status: 500 }))
+
+    // Handle JSON parse errors with specific message
+    if (error instanceof SyntaxError && 'body' in error) {
+      return applySecurityHeaders(NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 }))
+    }
+
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to process audio conversion request" }, { status: 500 }))
   }
 }
 

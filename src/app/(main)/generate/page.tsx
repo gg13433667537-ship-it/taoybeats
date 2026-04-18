@@ -1012,10 +1012,6 @@ export default function GeneratePage() {
       <LoginGuideModal
         isOpen={showLoginGuide}
         onClose={() => setShowLoginGuide(false)}
-        onLoginSuccess={() => {
-          setShowLoginGuide(false)
-          setIsLyricsModalOpen(true)
-        }}
       />
 
       {/* Genre Selector Drawer */}
