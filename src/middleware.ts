@@ -21,11 +21,12 @@ const securityHeaders = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 }
 
-// CSP for browser routes - no unsafe-inline or unsafe-eval needed
+// CSP for browser routes
+// 'unsafe-inline' is required for Next.js React hydration and inline scripts
 // Tailwind CSS 4 extracts styles at build time
 const browserCSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self'",
   "img-src 'self' data: blob: https://*.supabase.co https://*.minimax.io",
   "font-src 'self' data:",
@@ -145,20 +146,29 @@ export async function middleware(request: NextRequest) {
 
   // Check for auth token
   const token = request.cookies.get("session-token")?.value
-  const isAuthenticated = !!token
 
-  // Verify token signature for protected routes (not just decode)
+  // Verify token first, then set isAuthenticated based on verification result
+  let isAuthenticated = false
   let userRole = 'USER'
+
   if (token) {
     try {
       const secret = getAuthSecret()
       const payload = await verifyTokenEdge(token, secret)
       if (payload) {
+        isAuthenticated = true
         userRole = payload.role
+      } else {
+        // Invalid or expired token - clear cookie and treat as unauthenticated
+        const response = NextResponse.redirect(new URL("/login", request.url))
+        response.cookies.delete("session-token")
+        return response
       }
     } catch {
-      // Invalid token, treat as unauthenticated
-      userRole = 'USER'
+      // Invalid token, treat as unauthenticated - clear cookie
+      const response = NextResponse.redirect(new URL("/login", request.url))
+      response.cookies.delete("session-token")
+      return response
     }
   }
 

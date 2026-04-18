@@ -133,7 +133,8 @@ export default function DiscoverPage() {
     }
     document.addEventListener('click', handleClick)
     return () => document.removeEventListener('click', handleClick)
-  }, [playingId])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // playingId is captured in closure, no need to re-run effect when it changes
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)

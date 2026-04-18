@@ -37,7 +37,7 @@ export default function SettingsPage() {
     weeklySummary: false,
   })
 
-  // Fetch user profile and role from API
+  // Fetch user profile from API (runs once on mount)
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -47,25 +47,6 @@ export default function SettingsPage() {
           if (data.user) {
             startTransition(() => {
               setUserRole(data.user.role || 'USER')
-              setEmail(data.user.email || '')
-            })
-          }
-        }
-      } catch {
-        // ignore profile fetch errors
-      }
-    }
-    fetchProfile()
-  }, [])
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await fetch('/api/auth/profile')
-        if (res.ok) {
-          const data = await res.json()
-          if (data.user) {
-            startTransition(() => {
               setName(data.user.name || '')
               setEmail(data.user.email || '')
             })

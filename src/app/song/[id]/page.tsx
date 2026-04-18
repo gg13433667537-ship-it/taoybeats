@@ -174,7 +174,8 @@ export default function SongSharePage() {
       audio.removeEventListener('durationchange', onDurationChange)
       audio.removeEventListener('ended', onEnded)
     }
-  }, [song?.audioUrl])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Audio ref is stable, no need to re-attach listeners when song changes
 
   // Canvas waveform animation
   useEffect(() => {

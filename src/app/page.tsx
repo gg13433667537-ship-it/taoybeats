@@ -68,7 +68,7 @@ export default function HomePage() {
                 {t('startCreatingFree')}
               </Link>
               <Link
-                href="/generate"
+                href="/login?returnUrl=/generate"
                 className="px-8 py-4 rounded-xl border border-border hover:border-accent text-foreground text-lg font-medium transition-colors"
               >
                 {t('tryDemo')}

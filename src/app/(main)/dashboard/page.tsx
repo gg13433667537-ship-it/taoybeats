@@ -229,8 +229,9 @@ export default function DashboardPage() {
 
   // Poll for GENERATING songs status updates
   useEffect(() => {
-    const generatingSongs = songs.filter(s => s.status === 'GENERATING')
-    if (generatingSongs.length === 0) return
+    // Check if there are any GENERATING songs
+    const hasGeneratingSongs = songs.some(s => s.status === 'GENERATING')
+    if (!hasGeneratingSongs) return
 
     const pollInterval = setInterval(async () => {
       try {
@@ -245,7 +246,8 @@ export default function DashboardPage() {
     }, 5000) // Poll every 5 seconds
 
     return () => clearInterval(pollInterval)
-  }, [songs])
+  }, [songs]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Intentionally depends on songs to re-check for GENERATING status after songs update
 
   const getStatusColor = (status: string) => {
     switch (status) {
