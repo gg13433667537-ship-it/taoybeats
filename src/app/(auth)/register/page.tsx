@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Music, Loader2, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const { t } = useI18n()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -210,5 +210,13 @@ export default function RegisterPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-accent" /></div>}>
+      <RegisterPageContent />
+    </Suspense>
   )
 }

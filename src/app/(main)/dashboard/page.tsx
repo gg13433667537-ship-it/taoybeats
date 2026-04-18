@@ -211,7 +211,11 @@ export default function DashboardPage() {
         }
 
         // Fetch playlists
-        fetchPlaylists()
+        const playlistsRes = await fetch("/api/playlists")
+        if (playlistsRes.ok) {
+          const playlistsData = await playlistsRes.json()
+          setPlaylists(playlistsData.playlists || [])
+        }
       } catch (error) {
         console.error("Error fetching data:", error)
         setDashboardError(t('loadDataFailed'))
@@ -221,7 +225,27 @@ export default function DashboardPage() {
     }
 
     fetchData()
-  }, [lang, fetchPlaylists])
+  }, [lang]) // Only fetch on mount and lang change
+
+  // Poll for GENERATING songs status updates
+  useEffect(() => {
+    const generatingSongs = songs.filter(s => s.status === 'GENERATING')
+    if (generatingSongs.length === 0) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/songs")
+        if (res.ok) {
+          const data = await res.json()
+          setSongs(data.songs || [])
+        }
+      } catch (error) {
+        console.error("Error polling songs:", error)
+      }
+    }, 5000) // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [songs])
 
   const getStatusColor = (status: string) => {
     switch (status) {
