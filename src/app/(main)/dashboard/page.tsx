@@ -106,9 +106,20 @@ export default function DashboardPage() {
   // Click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowDropdown(false)
+      // Get all dropdown toggle buttons that should be excluded from click outside check
+      const dropdownToggle = document.querySelector('[aria-label="User menu"]')
+      const themeToggle = document.querySelector('[aria-label*="Switch to"]')
+
+      // Check if click is on a dropdown toggle button (these handle their own state)
+      const isDropdownToggle = dropdownToggle?.contains(event.target as Node) ||
+                              themeToggle?.contains(event.target as Node)
+
+      if (!isDropdownToggle) {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+          setShowDropdown(false)
+        }
       }
+
       if (playlistDropdownRef.current && !playlistDropdownRef.current.contains(event.target as Node)) {
         setShowPlaylistDropdown(null)
       }
