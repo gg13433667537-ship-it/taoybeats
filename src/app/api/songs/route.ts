@@ -3,7 +3,6 @@ import type { User, Song } from "@/lib/types"
 import { miniMaxProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { checkDuplicateGeneration } from "@/lib/cache"
-import { getActiveAPIKey, reportAPIKeyError, reportAPISuccess } from "@/lib/api-keys"
 
 // Shared global storage
 
@@ -135,8 +134,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use API key management with automatic failover
-    const { key: apiKey, model: effectiveModel, isHighSpeed } = getActiveAPIKey()
+    // Use system API key - no client-side API key required
+    const apiKey = global.systemApiKey
     const apiUrl = global.systemApiUrl || 'https://api.minimaxi.com'
 
     // Validate API key is configured
@@ -215,8 +214,8 @@ export async function POST(request: NextRequest) {
     const songsMap = global.songs as Map<string, Song>
     songsMap.set(songId, song)
 
-    // Start real generation in background with automatic failover
-    generateMusic(songId, song, apiKey, apiUrl, effectiveModel).catch((err) => {
+    // Start real generation in background
+    generateMusic(songId, song, apiKey, apiUrl).catch((err) => {
       console.error(`[Generate] Song ${songId} background generation failed:`, err)
     })
 
@@ -242,8 +241,7 @@ async function generateMusic(
   songId: string,
   song: Song,
   apiKey: string,
-  apiUrl?: string,
-  model?: 'music-2.6' | 'music-2.7'
+  apiUrl?: string
 ) {
   const songsMap = global.songs as Map<string, Song>
 
@@ -264,16 +262,13 @@ async function generateMusic(
       isInstrumental: song.isInstrumental,
       voiceId: song.voiceId,
       referenceAudio: song.referenceAudio,
-      model: model || song.model || 'music-2.6',
+      model: song.model || 'music-2.6',
       outputFormat: song.outputFormat,
       lyricsOptimizer: song.lyricsOptimizer,
       sampleRate: song.sampleRate,
       bitrate: song.bitrate,
       aigcWatermark: song.aigcWatermark,
     }, apiKey, apiUrl || 'https://api.minimaxi.com')
-
-    // Report success to keep key active
-    reportAPISuccess()
 
     // Poll for progress
     const maxWaitTime = 10 * 60 * 1000 // 10 minutes max
@@ -318,11 +313,7 @@ async function generateMusic(
       })
     }
   } catch (error) {
-    // Report error for potential key failover
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error(`[Generate] Song ${songId} error:`, errorMessage)
-    reportAPIKeyError(errorMessage)
-
+    console.error(`[Generate] Song ${songId} error:`, error)
     songsMap.set(songId, {
       ...song,
       status: 'FAILED',
