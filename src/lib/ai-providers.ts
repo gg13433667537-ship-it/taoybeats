@@ -89,8 +89,24 @@ export const miniMaxProvider: AIProvider = {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-      const errorMessage = errorData.error?.message || errorData.error || `HTTP ${response.status}`
-      throw new Error(`MiniMax API error: ${errorMessage}`)
+      const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
+      const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
+
+      // Map MiniMax error codes to user-friendly messages
+      const errorMessages: Record<number, string> = {
+        1002: '请求过于频繁，请稍后再试',
+        1004: 'API鉴权失败，请检查配置',
+        1008: '账户余额不足，请充值后重试',
+        1026: '内容包含敏感词，请修改后重试',
+        2013: '请求参数错误，请检查输入',
+        2049: '无效的API Key，请检查配置',
+      }
+
+      const userMessage = errorCode && errorMessages[errorCode]
+        ? errorMessages[errorCode]
+        : errorMessage
+
+      throw new Error(`MiniMax API error: ${userMessage}`)
     }
 
     const data = await response.json()
@@ -110,8 +126,24 @@ export const miniMaxProvider: AIProvider = {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-      const errorMessage = errorData.error?.message || errorData.error || `HTTP ${response.status}`
-      throw new Error(`MiniMax API error: ${errorMessage}`)
+      const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
+      const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
+
+      // Map MiniMax error codes to user-friendly messages
+      const errorMessages: Record<number, string> = {
+        1002: '请求过于频繁，请稍后再试',
+        1004: 'API鉴权失败，请检查配置',
+        1008: '账户余额不足，请充值后重试',
+        1026: '内容包含敏感词，请修改后重试',
+        2013: '请求参数错误，请检查输入',
+        2049: '无效的API Key，请检查配置',
+      }
+
+      const userMessage = errorCode && errorMessages[errorCode]
+        ? errorMessages[errorCode]
+        : errorMessage
+
+      throw new Error(`MiniMax API error: ${userMessage}`)
     }
 
     const data = await response.json()
@@ -130,8 +162,24 @@ export const miniMaxProvider: AIProvider = {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-      const errorMessage = errorData.error?.message || errorData.error || `HTTP ${response.status}`
-      throw new Error(`MiniMax API error: ${errorMessage}`)
+      const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
+      const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
+
+      // Map MiniMax error codes to user-friendly messages
+      const errorMessages: Record<number, string> = {
+        1002: '请求过于频繁，请稍后再试',
+        1004: 'API鉴权失败，请检查配置',
+        1008: '账户余额不足，请充值后重试',
+        1026: '内容包含敏感词，请修改后重试',
+        2013: '请求参数错误，请检查输入',
+        2049: '无效的API Key，请检查配置',
+      }
+
+      const userMessage = errorCode && errorMessages[errorCode]
+        ? errorMessages[errorCode]
+        : errorMessage
+
+      throw new Error(`MiniMax API error: ${userMessage}`)
     }
 
     const data = await response.json()
