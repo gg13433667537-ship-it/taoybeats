@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import type { User } from "@/lib/types"
 import { createSessionToken } from "@/lib/auth-utils"
+import {
+  rateLimitMiddleware,
+  sanitizeEmail,
+  sanitizeString,
+  applySecurityHeaders,
+  AUTH_RATE_LIMIT,
+} from "@/lib/security"
 
-declare global {
-  var users: Map<string, User> | undefined
-  var songs: Map<string, unknown> | undefined
-  var adminLogs: Map<string, unknown> | undefined
-}
 
 if (!global.users) global.users = new Map()
 if (!global.songs) global.songs = new Map()
@@ -16,54 +18,75 @@ if (!global.adminLogs) global.adminLogs = new Map()
 const users = global.users!
 
 export async function POST(request: NextRequest) {
-  try {
-    const { email, password } = await request.json()
+  // Apply rate limiting for auth endpoints
+  const rateLimitResponse = rateLimitMiddleware(request, AUTH_RATE_LIMIT, "login")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
 
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: "请输入邮箱和密码" },
-        { status: 400 }
+  try {
+    const body = await request.json()
+    const { email, password } = body
+
+    // Input validation and sanitization
+    const sanitizedEmail = sanitizeEmail(email)
+    const sanitizedPassword = sanitizeString(password)
+
+    if (!sanitizedEmail || !sanitizedPassword) {
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "请输入邮箱和密码" },
+          { status: 400 }
+        )
       )
     }
 
     // Find user by email
-    const user = users.get(email)
+    const user = users.get(sanitizedEmail)
     if (!user) {
-      return NextResponse.json(
-        { error: "该邮箱尚未注册，请先注册" },
-        { status: 401 }
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "该邮箱尚未注册，请先注册" },
+          { status: 401 }
+        )
       )
     }
 
     // Check if user has a password
     if (!user.password) {
-      return NextResponse.json(
-        { error: "该账号尚未设置密码，请使用验证码登录" },
-        { status: 401 }
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "该账号尚未设置密码，请使用验证码登录" },
+          { status: 401 }
+        )
       )
     }
 
     // Verify password
-    const isValid = await bcrypt.compare(password, user.password)
+    const isValid = await bcrypt.compare(sanitizedPassword, user.password)
     if (!isValid) {
-      return NextResponse.json(
-        { error: "密码错误，请重试" },
-        { status: 401 }
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "密码错误，请重试" },
+          { status: 401 }
+        )
       )
     }
 
     // Check if user is active
     if (!user.isActive) {
-      return NextResponse.json(
-        { error: "账号已被禁用，请联系管理员" },
-        { status: 403 }
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "账号已被禁用，请联系管理员" },
+          { status: 403 }
+        )
       )
     }
 
     // If this is the only user, make them ADMIN (first user rule)
     if (users.size === 1 && user.role !== 'ADMIN') {
       user.role = 'ADMIN'
-      users.set(email, user)
+      users.set(sanitizedEmail, user)
       if (user.id) users.set(user.id, user)
     }
 
@@ -88,12 +111,14 @@ export async function POST(request: NextRequest) {
       path: "/",
     })
 
-    return response
+    return applySecurityHeaders(response)
   } catch (error) {
     console.error("Login error:", error)
-    return NextResponse.json(
-      { error: "登录失败，请稍后重试" },
-      { status: 500 }
+    return applySecurityHeaders(
+      NextResponse.json(
+        { error: "登录失败，请稍后重试" },
+        { status: 500 }
+      )
     )
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useI18n, languages } from '@/lib/i18n'
+import { useI18n, languages, Language } from '@/lib/i18n'
 import { Globe } from 'lucide-react'
 
 export default function LanguageSwitcher() {
@@ -11,7 +11,7 @@ export default function LanguageSwitcher() {
       <Globe className="w-4 h-4 text-text-secondary" />
       <select
         value={lang}
-        onChange={(e) => setLang(e.target.value as 'en' | 'zh')}
+        onChange={(e) => setLang(e.target.value as Language)}
         className="bg-transparent text-sm text-text-secondary hover:text-foreground cursor-pointer focus:outline-none"
       >
         {languages.map((l) => (

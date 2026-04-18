@@ -10,27 +10,132 @@ const adminRoutes = ["/admin"]
 // Routes that redirect to dashboard if authenticated
 const authRoutes = ["/login", "/register"]
 
-// Lightweight role extraction for middleware (Edge Runtime compatible)
-// Note: This only decodes the token without verifying the signature.
-// Actual signature verification happens in API routes.
-function getUserRole(token: string): string {
+// Security headers
+const securityHeaders = {
+  "X-DNS-Prefetch-Control": "on",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "X-XSS-Protection": "1; mode=block",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+// Allowed origins for CORS
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
+  "http://localhost:3000",
+  "http://localhost:3001",
+]
+
+// Edge-compatible HMAC verification using Web Crypto API
+async function hmacVerify(data: string, signature: string, secret: string): Promise<boolean> {
+  const encoder = new TextEncoder()
+  const keyData = encoder.encode(secret)
+  const dataBuffer = encoder.encode(data)
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"]
+  )
+
+  const signatureBuffer = Uint8Array.from(atob(signature), c => c.charCodeAt(0))
+  const dataArrayBuffer = dataBuffer.buffer
+
+  return await crypto.subtle.verify("HMAC", cryptoKey, signatureBuffer, dataArrayBuffer)
+}
+
+// Lightweight token verification for Edge Runtime (middleware only)
+// Note: This only verifies the token structure and signature, not the full payload
+async function verifyTokenEdge(token: string, secret: string): Promise<{ role: string } | null> {
   try {
-    const [payloadBase64] = token.split(".")
-    if (!payloadBase64) return 'USER'
-    const payload = JSON.parse(atob(payloadBase64))
-    return payload?.role || 'USER'
-  } catch {
-    return 'USER'
+    const parts = token.split(".")
+    if (parts.length !== 2) return null
+
+    const [payloadBase64, signature] = parts
+    if (!payloadBase64 || !signature) return null
+
+    // Verify signature using Web Crypto API
+    const isValid = await hmacVerify(payloadBase64, signature, secret)
+    if (!isValid) {
+      console.error("Invalid session token signature")
+      return null
+    }
+
+    // Decode payload
+    const payload = JSON.parse(atob(payloadBase64)) as { id?: string; email?: string; role: string; exp: number }
+
+    // Check expiration
+    if (payload.exp < Date.now()) {
+      console.error("Session token expired")
+      return null
+    }
+
+    return { role: payload.role || "USER" }
+  } catch (error) {
+    console.error("Token verification failed:", error)
+    return null
   }
 }
 
-export function middleware(request: NextRequest) {
+// Get AUTH_SECRET for middleware (throws if not configured in production)
+function getAuthSecret(): string {
+  const secret = process.env.AUTH_SECRET
+  if (!secret) {
+    // In development, return a placeholder that won't match any real tokens
+    if (process.env.NODE_ENV === "development") {
+      return "development-secret-key"
+    }
+    throw new Error("AUTH_SECRET environment variable is required")
+  }
+  return secret
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Check for auth token (JWT in cookie)
+  // Apply security headers to all responses
+  const response = NextResponse.next()
+  for (const [key, value] of Object.entries(securityHeaders)) {
+    response.headers.set(key, value)
+  }
+
+  // Handle CORS for API routes
+  if (pathname.startsWith("/api/")) {
+    const origin = request.headers.get("origin")
+    if (origin && allowedOrigins.some(o => o === origin || new URL(origin).hostname === new URL(o).hostname)) {
+      response.headers.set("Access-Control-Allow-Origin", origin)
+      response.headers.set("Access-Control-Allow-Credentials", "true")
+      response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+      response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token")
+    }
+
+    // Handle preflight
+    if (request.method === "OPTIONS") {
+      return response
+    }
+  }
+
+  // Check for auth token
   const token = request.cookies.get("session-token")?.value
   const isAuthenticated = !!token
-  const userRole = token ? getUserRole(token) : 'USER'
+
+  // Verify token signature for protected routes (not just decode)
+  let userRole = 'USER'
+  if (token) {
+    try {
+      const secret = getAuthSecret()
+      const payload = await verifyTokenEdge(token, secret)
+      if (payload) {
+        userRole = payload.role
+      }
+    } catch {
+      // Invalid token, treat as unauthenticated
+      userRole = 'USER'
+    }
+  }
 
   // Admin routes - require ADMIN role
   if (adminRoutes.some((route) => pathname.startsWith(route))) {
@@ -39,12 +144,12 @@ export function middleware(request: NextRequest) {
       loginUrl.searchParams.set("redirect", pathname)
       return NextResponse.redirect(loginUrl)
     }
-    // Check if user is ADMIN
+    // Check if user is ADMIN (verified from token)
     if (userRole !== 'ADMIN') {
       // Not admin - redirect to dashboard
       return NextResponse.redirect(new URL("/dashboard", request.url))
     }
-    return NextResponse.next()
+    return response
   }
 
   // Protected routes - require authentication
@@ -63,7 +168,7 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next()
+  return response
 }
 
 export const config = {

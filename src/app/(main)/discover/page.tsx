@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Music, Clock, Loader2, Filter, ChevronLeft, ChevronRight, Share2, User, Play, Pause, Search, ArrowUpDown } from "lucide-react"
+import { Music, Clock, Filter, ChevronLeft, ChevronRight, Share2, User, Play, Pause, Search, ArrowUpDown, AlertTriangle, RefreshCw, Check } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
+import { DiscoverGridSkeleton, FilterBarSkeleton } from "@/components/Skeleton"
 
 interface DiscoverSong {
   id: string
@@ -26,7 +27,12 @@ interface DiscoverResponse {
   page: number
   limit: number
   total: number
-  totalPages: number
+ totalPages: number
+}
+
+interface ErrorState {
+  hasError: boolean
+  message: string
 }
 
 export default function DiscoverPage() {
@@ -44,12 +50,15 @@ export default function DiscoverPage() {
   const [playingId, setPlayingId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [errorState, setErrorState] = useState<ErrorState>({ hasError: false, message: "" })
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const GENRES = ["Pop", "Hip-Hop", "Rock", "Electronic", "R&B", "Jazz", "Classical", "Country", "Folk", "Metal", "Indie", "Mandopop", "K-Pop", "Latin"]
   const MOODS = ["Happy", "Sad", "Energetic", "Calm", "Romantic", "Epic", "Dark", "Dreamy", "Festive", "Uplifting"]
 
   const fetchSongs = useCallback(async (pageNum: number) => {
     setLoading(true)
+    setErrorState({ hasError: false, message: "" })
     try {
       const params = new URLSearchParams({
         page: pageNum.toString(),
@@ -67,9 +76,12 @@ export default function DiscoverPage() {
         setPage(data.page)
         setTotalPages(data.totalPages)
         setTotal(data.total)
+      } else if (res.status === 500) {
+        setErrorState({ hasError: true, message: "Server error. Please try again later." })
       }
     } catch (error) {
       console.error("Failed to fetch songs:", error)
+      setErrorState({ hasError: true, message: "Failed to load songs. Please check your connection." })
     } finally {
       setLoading(false)
     }
@@ -139,6 +151,8 @@ export default function DiscoverPage() {
       })
     } else {
       await navigator.clipboard.writeText(shareUrl)
+      setCopiedId(song.id)
+      setTimeout(() => setCopiedId(null), 2000)
     }
   }
 
@@ -182,75 +196,90 @@ export default function DiscoverPage() {
 
           {/* Filters */}
           <div className="mb-8 p-4 rounded-2xl bg-surface border border-border">
-            <div className="flex flex-wrap gap-4">
-              {/* Search */}
-              <div className="flex-1 min-w-[200px] relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search songs, artists, genres..."
-                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent placeholder:text-text-muted"
-                />
-              </div>
+            {loading && !songs.length ? (
+              <FilterBarSkeleton />
+            ) : (
+              <div className="flex flex-wrap gap-4">
+                {/* Search */}
+                <div className="flex-1 min-w-[200px] relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search songs, artists, genres..."
+                    className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent placeholder:text-text-muted"
+                  />
+                </div>
 
-              {/* Sort */}
-              <div className="flex items-center gap-2">
-                <ArrowUpDown className="w-4 h-4 text-text-muted" />
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent"
-                >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Oldest First</option>
-                  <option value="title">By Title</option>
-                </select>
-              </div>
+                {/* Sort */}
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown className="w-4 h-4 text-text-muted" />
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent"
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="title">By Title</option>
+                  </select>
+                </div>
 
-              {/* Genre Filter */}
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-text-muted" />
-                <select
-                  value={genreFilter}
-                  onChange={(e) => setGenreFilter(e.target.value)}
-                  className="px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent"
-                >
-                  <option value="">All Genres</option>
-                  {GENRES.map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-              </div>
+                {/* Genre Filter */}
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-text-muted" />
+                  <select
+                    value={genreFilter}
+                    onChange={(e) => setGenreFilter(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent"
+                  >
+                    <option value="">All Genres</option>
+                    {GENRES.map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Mood Filter */}
-              <div className="flex items-center gap-2">
-                <select
-                  value={moodFilter}
-                  onChange={(e) => setMoodFilter(e.target.value)}
-                  className="px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent"
-                >
-                  <option value="">All Moods</option>
-                  {MOODS.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
+                {/* Mood Filter */}
+                <div className="flex items-center gap-2">
+                  <select
+                    value={moodFilter}
+                    onChange={(e) => setMoodFilter(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-accent"
+                  >
+                    <option value="">All Moods</option>
+                    {MOODS.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Results count */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-text-muted">
-                  {total} {total === 1 ? 'song' : 'songs'} found
-                </span>
+                {/* Results count */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-text-muted">
+                    {total} {total === 1 ? 'song' : 'songs'} found
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Songs Grid */}
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 text-accent animate-spin" />
+          {loading && !songs.length ? (
+            <DiscoverGridSkeleton count={6} />
+          ) : errorState.hasError ? (
+            <div className="text-center py-20">
+              <AlertTriangle className="w-16 h-16 text-warning mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">Something went wrong</h3>
+              <p className="text-text-secondary mb-6">{errorState.message}</p>
+              <button
+                onClick={() => fetchSongs(1)}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </button>
             </div>
           ) : songs.length === 0 ? (
             <div className="text-center py-20">
@@ -277,7 +306,7 @@ export default function DiscoverPage() {
                     {/* Cover / Waveform Placeholder */}
                     <div className="h-32 rounded-xl bg-gradient-to-br from-accent/20 to-accent-glow/20 mb-4 flex items-center justify-center overflow-hidden relative group/cover">
                       {song.coverUrl ? (
-                        <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover" />
+                        <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                       ) : (
                         <div className="flex items-center gap-1">
                           {Array.from({ length: 32 }).map((_, i) => (
@@ -346,10 +375,18 @@ export default function DiscoverPage() {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={(e) => handleShare(song, e)}
-                            className="p-2 rounded-lg hover:bg-background text-text-muted hover:text-accent transition-colors"
-                            aria-label="Share"
+                            className={`p-2 rounded-lg transition-colors ${
+                              copiedId === song.id
+                                ? "bg-success/10 text-success"
+                                : "hover:bg-background text-text-muted hover:text-accent"
+                            }`}
+                            aria-label={copiedId === song.id ? "Copied!" : "Share"}
                           >
-                            <Share2 className="w-4 h-4" />
+                            {copiedId === song.id ? (
+                              <Check className="w-4 h-4" />
+                            ) : (
+                              <Share2 className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </div>

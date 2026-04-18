@@ -2,11 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
-declare global {
-  var systemApiKey: string | undefined
-  var systemApiUrl: string | undefined
-  var users: Map<string, User> | undefined
-}
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
 if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'

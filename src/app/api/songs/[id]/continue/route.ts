@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Song, User } from "@/lib/types"
+import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { miniMaxProvider } from "@/lib/ai-providers"
 
@@ -95,6 +95,7 @@ export async function POST(
       userNotes: prompt ? `Continuation: ${prompt}` : 'Continued from original',
       isInstrumental: originalSong.isInstrumental,
       voiceId: originalSong.voiceId,
+      model: originalSong.model,
       status: "PENDING",
       moderationStatus: "APPROVED",
       shareToken,
@@ -110,7 +111,8 @@ export async function POST(
     const apiUrl = global.systemApiUrl || process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
 
     if (apiKey) {
-      generateContinuation(songId, continuedSong, continuationPrompt, apiKey, apiUrl).catch((err) => {
+      // Pass original audio URL for proper continuation with reference audio
+      generateContinuation(songId, continuedSong, continuationPrompt, originalSong.audioUrl || '', apiKey, apiUrl).catch((err) => {
         console.error(`[Continue] Song ${songId} generation failed:`, err)
       })
     }
@@ -170,6 +172,7 @@ async function generateContinuation(
   songId: string,
   song: Song,
   prompt: string,
+  originalAudioUrl: string,
   apiKey: string,
   apiUrl: string
 ) {
@@ -178,18 +181,15 @@ async function generateContinuation(
   try {
     songsMap.set(songId, { ...song, status: "GENERATING", updatedAt: new Date().toISOString() })
 
-    // Call MiniMax API
-    const taskId = await miniMaxProvider.generate({
-      title: song.title,
-      lyrics: song.lyrics || '',
-      genre: song.genre,
-      mood: song.mood || '',
-      instruments: song.instruments,
-      referenceSinger: song.referenceSinger,
-      referenceSong: song.referenceSong,
-      userNotes: song.userNotes,
-      isInstrumental: song.isInstrumental,
-      voiceId: song.voiceId,
+    // Use miniMaxProvider.continue() for proper track continuation with reference audio
+    if (!miniMaxProvider.continue) {
+      throw new Error('Continue not supported by this provider')
+    }
+
+    const taskId = await miniMaxProvider.continue({
+      originalAudioUrl,
+      prompt,
+      model: song.model,
     }, apiKey, apiUrl)
 
     // Poll for progress

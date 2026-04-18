@@ -35,6 +35,12 @@ export interface Song {
   isInstrumental?: boolean
   voiceId?: string
   referenceAudio?: string
+  referenceAudioUrl?: string
+  // Enhanced Audio-to-Audio options
+  timbreSimilarity?: number // 0.0 - 1.0
+  mixMode?: boolean
+  mixModeVocalVolume?: number // 0.0 - 1.0
+  referenceLyrics?: ReferenceLyrics[]
   model?: 'music-2.6' | 'music-cover'
   outputFormat?: 'mp3' | 'wav' | 'pcm'
   lyricsOptimizer?: boolean
@@ -51,6 +57,14 @@ export interface Song {
   forkedFrom?: string
   createdAt: string
   updatedAt: string
+}
+
+// Structured reference lyrics for learning songwriting style
+export interface ReferenceLyrics {
+  text: string
+  startTime?: number // Optional timestamp in seconds
+  endTime?: number // Optional timestamp in seconds
+  section?: string // e.g., "[Verse]", "[Chorus]"
 }
 
 export interface SessionPayload {

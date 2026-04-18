@@ -238,19 +238,6 @@ export default function DashboardPage() {
     }
   }
 
-  // Get songs count per day for last 7 days
-  const getLast7DaysData = () => {
-    const counts = new Array(7).fill(0)
-    const now = new Date()
-    songs.forEach(song => {
-      const songDate = new Date(song.createdAt)
-      const diffDays = Math.floor((now.getTime() - songDate.getTime()) / 86400000)
-      if (diffDays >= 0 && diffDays < 7) {
-        counts[6 - diffDays]++
-      }
-    })
-    return counts
-  }
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)

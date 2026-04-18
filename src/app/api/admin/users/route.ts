@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { User, UserRole } from "@/lib/types"
+import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
 // In-memory user storage (shared with other routes for demo)
-declare global {
-  var users: Map<string, User> | undefined
-  var songs: Map<string, unknown> | undefined
-  var adminLogs: Map<string, unknown> | undefined
-}
 
 interface SessionUser {
   id: string

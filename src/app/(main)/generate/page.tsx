@@ -15,6 +15,7 @@ import VoiceSelector from "@/components/VoiceSelector"
 import PersonaSelector from "@/components/PersonaSelector"
 import AdvancedOptions from "@/components/AdvancedOptions"
 import GenerationProgress from "@/components/GenerationProgress"
+import { useToast } from "@/components/Toast"
 
 // Genre options
 const GENRES = [
@@ -28,20 +29,12 @@ const MOODS = [
   "Festive", "Celebration", "Chill", "Uplifting", "Melancholic", "Intense"
 ]
 
-// Instrument options - expanded for competitive features
-const INSTRUMENTS = [
-  "Guitar", "Piano", "Drum", "Bass", "Synth", "Strings", "Brass", "Vocals",
-  "Violin", "Cello", "Flute", "Saxophone", "Trumpet", "Clarinet", "Harp",
-  "Choir", "Organ", "Harmonica", "Banjo", "Ukulele", "Mandolin", "Tabla",
-  "Steel Drum", "Bagpipes", "Didgeridoo"
-]
-
 // Duration options
 const DURATIONS = [
   { label: 'Short (30s)', value: 30, description: 'Quick clip' },
-  { label: 'Medium (1min)', value: 60, description: 'Standard' },
-  { label: 'Long (2min)', value: 120, description: 'Extended' },
-  { label: 'Full (3min)', value: 180, description: 'Complete song' },
+  { label: 'Standard (2min)', value: 120, description: 'Standard song' },
+  { label: 'Extended (3min)', value: 180, description: 'Full song' },
+  { label: 'Extended (5min)', value: 300, description: 'Complete album version' },
 ]
 
 // Selector drawer options
@@ -64,42 +57,13 @@ const INSTRUMENT_OPTIONS: SelectOption[] = Object.entries(INSTRUMENT_GROUPS).fla
   ([group, instruments]) => instruments.map(i => ({ value: i, label: i, group }))
 )
 
-// Quick generate presets
-interface GenerationPreset {
-  id: string
-  name: string
-  genre: string[]
-  mood: string
-  instruments: string[]
-  isInstrumental: boolean
-  duration: number
-}
-
-const DEFAULT_PRESETS: GenerationPreset[] = [
-  { id: 'quick-pop', name: 'Quick Pop', genre: ['Pop'], mood: 'Happy', instruments: ['Guitar', 'Piano', 'Drum'], isInstrumental: false, duration: 60 },
-  { id: 'quick-chill', name: 'Chill Vibes', genre: ['Electronic', 'Indie'], mood: 'Calm', instruments: ['Synth', 'Piano'], isInstrumental: true, duration: 120 },
-  { id: 'quick-energy', name: 'High Energy', genre: ['Hip-Hop', 'Electronic'], mood: 'Energetic', instruments: ['Drum', 'Bass', 'Synth'], isInstrumental: false, duration: 60 },
-]
-
-function loadPresets(): GenerationPreset[] {
-  if (typeof window === 'undefined') return DEFAULT_PRESETS
-  const saved = localStorage.getItem('taoybeats-presets')
-  if (saved) {
-    try {
-      return JSON.parse(saved)
-    } catch {
-      return DEFAULT_PRESETS
-    }
-  }
-  return DEFAULT_PRESETS
-}
-
 type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | 'completed' | 'failed'
 
 export default function GeneratePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { t } = useI18n()
+  const { showToast } = useToast()
 
   // Handle fork parameter (remix from shared song)
   // fork param = original song ID to pre-fill from
@@ -142,6 +106,20 @@ export default function GeneratePage() {
   // Reference audio for cover generation
   const [referenceAudio, setReferenceAudio] = useState<string | null>(null)
 
+  // Enhanced Audio-to-Audio options
+  const [audioOptions, setAudioOptions] = useState({
+    timbreSimilarity: 0.7,
+    mixMode: false,
+    mixModeVocalVolume: 0.5,
+    referenceLyrics: [] as { text: string; startTime?: number; endTime?: number; section?: string }[],
+    referenceAudioUrl: '',
+  })
+
+  // Handler for partial audio options updates
+  const handleAudioOptionsChange = (partial: Partial<typeof audioOptions>) => {
+    setAudioOptions(prev => ({ ...prev, ...partial }))
+  }
+
   // Model and format selection
   const [model, setModel] = useState<'music-2.6' | 'music-cover'>('music-2.6')
   const [outputFormat, setOutputFormat] = useState<'mp3' | 'wav' | 'pcm'>('mp3')
@@ -151,6 +129,9 @@ export default function GeneratePage() {
   const [sampleRate, setSampleRate] = useState<16000 | 24000 | 32000 | 44100>(44100)
   const [bitrate, setBitrate] = useState<32000 | 64000 | 128000 | 256000>(256000)
   const [aigcWatermark, setAigcWatermark] = useState(false)
+
+  // Field validation errors
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   // Modal states
   const [isLyricsModalOpen, setIsLyricsModalOpen] = useState(false)
@@ -180,7 +161,7 @@ export default function GeneratePage() {
   })()
 
   // Cloud sync presets
-  const { presets: cloudPresets, isLoading: presetsLoading, createPreset: savePresetToCloud, deletePreset: deletePresetFromCloud } = usePresets()
+  const { presets: cloudPresets, createPreset: savePresetToCloud } = usePresets()
 
   // Generation state
   const [generationStage, setGenerationStage] = useState<GenerationStage>('idle')
@@ -196,23 +177,14 @@ export default function GeneratePage() {
         .then(res => res.json())
         .then(song => {
           if (song) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTitle(song.title || '')
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setLyrics(song.lyrics || '')
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedGenres(song.genre || [])
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setMood(song.mood || '')
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedInstruments(song.instruments || [])
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setReferenceSinger(song.referenceSinger || '')
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setReferenceSong(song.referenceSong || '')
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setUserNotes(song.userNotes || '')
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsInstrumental(song.isInstrumental || false)
           }
         })
@@ -225,51 +197,41 @@ export default function GeneratePage() {
   // Beat Maker mode effect - enables instrumental and pre-selects beat instruments
   useEffect(() => {
     if (beatMakerMode) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentionally updating form state based on beatMakerMode toggle
       setIsInstrumental(true)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedInstruments(['Drum', 'Bass', 'Synth'])
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedGenres(['Electronic', 'Hip-Hop'])
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMood('Energetic')
     }
   }, [beatMakerMode])
 
-  // Handle genre toggle
-  const toggleGenre = (genre: string) => {
-    setSelectedGenres(prev =>
-      prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre]
-    )
-  }
-
-  // Handle instrument toggle
-  const toggleInstrument = (instrument: string) => {
-    setSelectedInstruments(prev =>
-      prev.includes(instrument) ? prev.filter(i => i !== instrument) : [...prev, instrument]
-    )
-  }
-
   // Handle generation
   const handleGenerate = async () => {
-    if (!title) {
-      setError("Please enter a song title.")
-      return
+    // Clear previous errors
+    setError(null)
+    setFieldErrors({})
+
+    // Validate fields
+    const errors: Record<string, string> = {}
+    if (!title.trim()) {
+      errors.title = "Please enter a song title"
     }
     if (!isInstrumental && !lyrics.trim()) {
-      setError("Lyrics are required for song generation.")
-      return
+      errors.lyrics = "Lyrics are required for song generation"
     }
     if (selectedGenres.length === 0) {
-      setError("Please select at least one genre.")
-      return
+      errors.genres = "Please select at least one genre"
     }
     if (!mood) {
-      setError("Please select a mood.")
+      errors.mood = "Please select a mood"
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      setError("Please fill in all required fields")
       return
     }
 
-    setError(null)
     setGenerationStage('initializing')
     setProgress(0)
     setAudioUrl(null)
@@ -299,6 +261,12 @@ export default function GeneratePage() {
           sampleRate,
           bitrate,
           aigcWatermark,
+          // Enhanced Audio-to-Audio options
+          timbreSimilarity: audioOptions.timbreSimilarity,
+          mixMode: audioOptions.mixMode,
+          mixModeVocalVolume: audioOptions.mixModeVocalVolume,
+          referenceLyrics: audioOptions.referenceLyrics,
+          referenceAudioUrl: audioOptions.referenceAudioUrl,
         }),
       })
 
@@ -379,6 +347,7 @@ export default function GeneratePage() {
   const handleDownload = () => {
     if (audioUrl) {
       window.open(audioUrl, '_blank')
+      showToast("success", "Download started!")
     }
   }
 
@@ -394,6 +363,7 @@ export default function GeneratePage() {
       })
     } else {
       await navigator.clipboard.writeText(shareUrl)
+      showToast("success", "Link copied to clipboard!")
     }
   }
 
@@ -410,11 +380,19 @@ export default function GeneratePage() {
     setIsInstrumental(false)
     setSelectedVoiceId('')
     setReferenceAudio(null)
+    setAudioOptions({
+      timbreSimilarity: 0.7,
+      mixMode: false,
+      mixModeVocalVolume: 0.5,
+      referenceLyrics: [],
+      referenceAudioUrl: '',
+    })
     setDuration(60)
     setGenerationStage('idle')
     setProgress(0)
     setAudioUrl(null)
     setError(null)
+    setFieldErrors({})
     setSongId(null)
   }
 
@@ -606,11 +584,26 @@ export default function GeneratePage() {
                     <input
                       type="text"
                       value={title}
-                      onChange={(e) => setTitle(e.target.value)}
+                      onChange={(e) => {
+                        setTitle(e.target.value)
+                        if (fieldErrors.title) {
+                          setFieldErrors(prev => ({ ...prev, title: "" }))
+                        }
+                      }}
                       placeholder="My Awesome Song"
                       maxLength={100}
-                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
+                      className={`w-full px-4 py-3 rounded-xl bg-background text-foreground placeholder:text-text-muted focus:outline-none ${
+                        fieldErrors.title
+                          ? "border-2 border-error focus:border-error"
+                          : "border border-border focus:border-accent"
+                      }`}
                     />
+                    {fieldErrors.title && (
+                      <p className="mt-1 text-xs text-error flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {fieldErrors.title}
+                      </p>
+                    )}
                   </div>
 
                   {/* Instrumental Toggle */}
@@ -678,27 +671,42 @@ export default function GeneratePage() {
 
                     <textarea
                       value={lyrics}
-                      onChange={(e) => setLyrics(e.target.value)}
+                      onChange={(e) => {
+                        setLyrics(e.target.value)
+                        if (fieldErrors.lyrics) {
+                          setFieldErrors(prev => ({ ...prev, lyrics: "" }))
+                        }
+                      }}
                       placeholder="Paste your lyrics here... Use [Verse], [Chorus], [Bridge] tags for structure"
                       rows={8}
                       maxLength={5000}
                       disabled={isInstrumental}
-                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent resize-none font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      className={`w-full px-4 py-3 rounded-xl bg-background text-foreground placeholder:text-text-muted focus:outline-none resize-none font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                        fieldErrors.lyrics && !isInstrumental
+                          ? "border-2 border-error focus:border-error"
+                          : "border border-border focus:border-accent"
+                      }`}
                     />
+                    {fieldErrors.lyrics && !isInstrumental && (
+                      <p className="mt-1 text-xs text-error flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {fieldErrors.lyrics}
+                      </p>
+                    )}
                     {isInstrumental ? (
                       <p className="mt-1 text-xs text-accent">{t('lyricsDisabledBecauseInstrumental')}</p>
                     ) : (
                       <div className="flex items-center justify-between mt-1">
                         <p className="text-xs text-text-muted">
-                          {lyrics.length}/5000 characters
+                          {lyrics.length}/5000 {t('characters')}
                           {lyrics.length > 0 && (
                             <span className="ml-2">
-                              • {lyrics.split(/\s+/).filter(w => w.length > 0).length} words
+                              • {lyrics.split(/\s+/).filter(w => w.length > 0).length} {t('words')}
                             </span>
                           )}
                         </p>
                         <p className="text-xs text-text-muted">
-                          {lyrics.split('\n').filter(l => l.trim()).length} lines
+                          {lyrics.split('\n').filter(l => l.trim()).length} {t('lines')}
                         </p>
                       </div>
                     )}
@@ -710,14 +718,29 @@ export default function GeneratePage() {
                       {t('genre')} <span className="text-error">*</span>
                     </label>
                     <button
-                      onClick={() => setIsGenreDrawerOpen(true)}
-                      className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground text-left hover:border-accent transition-colors flex items-center justify-between"
+                      onClick={() => {
+                        setIsGenreDrawerOpen(true)
+                        if (fieldErrors.genres) {
+                          setFieldErrors(prev => ({ ...prev, genres: "" }))
+                        }
+                      }}
+                      className={`w-full px-4 py-3 rounded-xl bg-background text-foreground text-left hover:border-accent transition-colors flex items-center justify-between ${
+                        fieldErrors.genres
+                          ? "border-2 border-error"
+                          : "border border-border"
+                      }`}
                     >
                       <span className={selectedGenres.length > 0 ? "text-foreground" : "text-text-muted"}>
                         {selectedGenres.length > 0 ? selectedGenres.join(', ') : t('selectStyle')}
                       </span>
                       <span className="text-sm text-accent">{selectedGenres.length} selected</span>
                     </button>
+                    {fieldErrors.genres && (
+                      <p className="mt-1 text-xs text-error flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {fieldErrors.genres}
+                      </p>
+                    )}
                   </div>
 
                   {/* Duration */}
@@ -854,6 +877,8 @@ export default function GeneratePage() {
                 onBitrateChange={setBitrate}
                 aigcWatermark={aigcWatermark}
                 onAigcWatermarkChange={setAigcWatermark}
+                audioOptions={audioOptions}
+                onAudioOptionsChange={handleAudioOptionsChange}
               />
 
               {/* Generate Button */}
@@ -984,7 +1009,7 @@ export default function GeneratePage() {
         selectedValues={selectedGenres}
         onConfirm={(values) => setSelectedGenres(values)}
         multiSelect={true}
-        searchPlaceholder="搜索风格..."
+        searchPlaceholder={t('searchPlaceholderShort')}
       />
 
       {/* Mood Selector Drawer */}
@@ -996,7 +1021,7 @@ export default function GeneratePage() {
         selectedValues={mood ? [mood] : []}
         onConfirm={(values) => setMood(values[0] || '')}
         multiSelect={false}
-        searchPlaceholder="搜索情绪..."
+        searchPlaceholder={t('searchPlaceholderShort')}
       />
 
       {/* Instrument Selector Drawer */}
@@ -1008,7 +1033,7 @@ export default function GeneratePage() {
         selectedValues={selectedInstruments}
         onConfirm={(values) => setSelectedInstruments(values)}
         multiSelect={true}
-        searchPlaceholder="搜索乐器..."
+        searchPlaceholder={t('searchPlaceholderShort')}
       />
     </div>
   )

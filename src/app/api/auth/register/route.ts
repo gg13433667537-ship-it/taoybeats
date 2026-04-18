@@ -3,12 +3,14 @@ import bcrypt from "bcryptjs"
 import crypto from "crypto"
 import type { User } from "@/lib/types"
 import { createSessionToken } from "@/lib/auth-utils"
+import {
+  rateLimitMiddleware,
+  sanitizeEmail,
+  sanitizeString,
+  applySecurityHeaders,
+  AUTH_RATE_LIMIT,
+} from "@/lib/security"
 
-declare global {
-  var users: Map<string, User> | undefined
-  var songs: Map<string, unknown> | undefined
-  var adminLogs: Map<string, unknown> | undefined
-}
 
 if (!global.users) global.users = new Map()
 if (!global.songs) global.songs = new Map()
@@ -17,34 +19,52 @@ if (!global.adminLogs) global.adminLogs = new Map()
 const users = global.users!
 
 export async function POST(request: NextRequest) {
-  try {
-    const { email, password, name } = await request.json()
+  // Apply rate limiting for auth endpoints
+  const rateLimitResponse = rateLimitMiddleware(request, AUTH_RATE_LIMIT, "register")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
 
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: "请提供邮箱和密码" },
-        { status: 400 }
+  try {
+    const body = await request.json()
+    const { email, password, name } = body
+
+    // Input validation and sanitization
+    const sanitizedEmail = sanitizeEmail(email)
+    const sanitizedPassword = sanitizeString(password)
+    const sanitizedName = name ? sanitizeString(name) : undefined
+
+    if (!sanitizedEmail || !sanitizedPassword) {
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "请提供邮箱和密码" },
+          { status: 400 }
+        )
       )
     }
 
     // Validate password length
-    if (password.length < 6) {
-      return NextResponse.json(
-        { error: "密码长度至少为6个字符" },
-        { status: 400 }
+    if (sanitizedPassword.length < 6) {
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "密码长度至少为6个字符" },
+          { status: 400 }
+        )
       )
     }
 
     // Check if user already exists
-    if (users.has(email)) {
-      return NextResponse.json(
-        { error: "该邮箱已被注册" },
-        { status: 409 }
+    if (users.has(sanitizedEmail)) {
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "该邮箱已被注册" },
+          { status: 409 }
+        )
       )
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(sanitizedPassword, 10)
 
     // Check if this is the first user (make them ADMIN)
     const isFirstUser = users.size === 0
@@ -52,8 +72,8 @@ export async function POST(request: NextRequest) {
     // Create user
     const user: User = {
       id: crypto.randomUUID(),
-      email,
-      name: name || email.split("@")[0],
+      email: sanitizedEmail,
+      name: sanitizedName || sanitizedEmail.split("@")[0],
       password: hashedPassword,
       role: isFirstUser ? "ADMIN" : "USER",
       isActive: true,
@@ -66,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Store by both email and id for easy lookup
-    users.set(email, user)
+    users.set(sanitizedEmail, user)
     users.set(user.id, user)
 
     // Create session token
@@ -90,12 +110,14 @@ export async function POST(request: NextRequest) {
       path: "/",
     })
 
-    return response
+    return applySecurityHeaders(response)
   } catch (error) {
     console.error("Register error:", error)
-    return NextResponse.json(
-      { error: "注册失败，请稍后重试" },
-      { status: 500 }
+    return applySecurityHeaders(
+      NextResponse.json(
+        { error: "注册失败，请稍后重试" },
+        { status: 500 }
+      )
     )
   }
 }

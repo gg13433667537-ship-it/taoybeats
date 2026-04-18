@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 
 export interface Preset {
   id: string
@@ -23,6 +23,7 @@ export function usePresets() {
   const [presets, setPresets] = useState<Preset[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
+  const isMountedRef = useRef(true)
 
   // Load presets from localStorage
   const loadLocalPresets = useCallback((): Preset[] => {
@@ -60,23 +61,33 @@ export function usePresets() {
         const data = await response.json()
         // Update local storage with merged presets
         saveLocalPresets(data.presets)
-        setPresets(data.presets)
+        if (isMountedRef.current) {
+          setPresets(data.presets)
+        }
       }
     } catch (error) {
       console.error('Failed to sync presets:', error)
       // Fallback to local presets
       const localPresets = loadLocalPresets()
-      setPresets(localPresets)
+      if (isMountedRef.current) {
+        setPresets(localPresets)
+      }
     } finally {
-      setIsSyncing(false)
-      setIsLoading(false)
+      if (isMountedRef.current) {
+        setIsSyncing(false)
+        setIsLoading(false)
+      }
     }
   }, [loadLocalPresets, saveLocalPresets])
 
   // Initial load and sync
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    isMountedRef.current = true
     syncWithServer()
+
+    return () => {
+      isMountedRef.current = false
+    }
   }, [syncWithServer])
 
   // Create preset

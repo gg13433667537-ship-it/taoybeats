@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Preset } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
-declare global {
-  var presets: Map<string, Preset> | undefined
-}
 
 const presets = global.presets!
 

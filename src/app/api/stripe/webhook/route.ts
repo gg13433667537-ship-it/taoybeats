@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
 import Stripe from "stripe"
+import { applySecurityHeaders } from "@/lib/security"
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder")
+// Validate that Stripe secret key is configured
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY
+if (!stripeSecretKey) {
+  console.error("STRIPE_SECRET_KEY environment variable is not set")
+}
+
+const stripe = new Stripe(stripeSecretKey || "sk_test_placeholder")
 
 // Raw body needed for Stripe signature verification
 export async function POST(request: NextRequest) {
@@ -22,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error("Webhook signature verification failed:", err)
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 })
+    return applySecurityHeaders(NextResponse.json({ error: "Invalid signature" }, { status: 400 }))
   }
 
   // Handle the event
@@ -89,8 +96,8 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error(`Error handling event ${event.type}:`, err)
-    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 })
+    return applySecurityHeaders(NextResponse.json({ error: "Webhook handler failed" }, { status: 500 }))
   }
 
-  return NextResponse.json({ received: true })
+  return applySecurityHeaders(NextResponse.json({ received: true }))
 }

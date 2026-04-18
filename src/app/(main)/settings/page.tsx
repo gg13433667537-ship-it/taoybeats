@@ -130,22 +130,22 @@ export default function SettingsPage() {
     setPasswordSuccess('')
 
     if (!currentPassword) {
-      setPasswordError('Current password is required')
+      setPasswordError(t('passwordRequired'))
       return
     }
 
     if (!newPassword) {
-      setPasswordError('New password is required')
+      setPasswordError(t('newPasswordRequired'))
       return
     }
 
     if (newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters')
+      setPasswordError(t('passwordMinLength'))
       return
     }
 
     if (newPassword !== confirmPassword) {
-      setPasswordError('Passwords do not match')
+      setPasswordError(t('passwordsDoNotMatch'))
       return
     }
 
@@ -157,16 +157,16 @@ export default function SettingsPage() {
       })
 
       if (res.ok) {
-        setPasswordSuccess('Password changed successfully')
+        setPasswordSuccess(t('passwordChangedSuccess'))
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
       } else {
         const data = await res.json()
-        setPasswordError(data.error || 'Failed to change password')
+        setPasswordError(data.error || t('failedChangePassword'))
       }
     } catch {
-      setPasswordError('Failed to change password')
+      setPasswordError(t('failedChangePassword'))
     }
   }
 
@@ -367,9 +367,9 @@ export default function SettingsPage() {
 
                   <div className="space-y-4">
                     {[
-                      { key: 'generationComplete', label: t('generationComplete'), description: 'Get notified when your song is ready' },
-                      { key: 'generationFailed', label: t('generationFailed'), description: 'Get notified if generation fails' },
-                      { key: 'weeklySummary', label: t('weeklySummary'), description: 'Receive a weekly summary of your creations' },
+                      { key: 'generationComplete', label: t('generationComplete'), description: t('notifyGenerationComplete') },
+                      { key: 'generationFailed', label: t('generationFailed'), description: t('notifyGenerationFailed') },
+                      { key: 'weeklySummary', label: t('weeklySummary'), description: t('notifyWeeklySummary') },
                     ].map((item) => (
                       <div key={item.key} className="flex items-center justify-between p-4 rounded-xl bg-background border border-border">
                         <div>

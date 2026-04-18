@@ -3,11 +3,6 @@ import type { Song, User } from "@/lib/types"
 import { miniMaxProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 
-declare global {
-  var users: Map<string, User> | undefined
-  var systemApiKey: string | undefined
-  var systemApiUrl: string | undefined
-}
 
 if (!global.users) global.users = new Map()
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY

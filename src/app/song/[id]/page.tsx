@@ -7,6 +7,7 @@ import { Music, Play, Pause, Download, Share2, Check, Loader2, Volume2, VolumeX,
 import { useI18n } from "@/lib/i18n"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/useKeyboardShortcuts"
+import AdvancedAudioEditor from "@/components/AdvancedAudioEditor"
 
 export default function SongSharePage() {
   const { t } = useI18n()
@@ -33,15 +34,18 @@ export default function SongSharePage() {
   const [waveformData, setWaveformData] = useState<number[]>([])
   const [isRemixing, setIsRemixing] = useState(false)
   const [isSplitting, setIsSplitting] = useState(false)
+  const [isExtending, setIsExtending] = useState(false)
   const [stemsResult, setStemsResult] = useState<{
     stems: Array<{ stem_type: string; label: string; audioUrl: string }>
   } | null>(null)
   const [showStemsModal, setShowStemsModal] = useState(false)
   const [showShareMenu, setShowShareMenu] = useState(false)
   const [songError, setSongError] = useState<string | null>(null)
+  const [playingStem, setPlayingStem] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const animationRef = useRef<number | null>(null)
+  const stemAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({})
 
   // Helper to update meta tags
   const updateMetaTag = (property: string, content: string) => {
@@ -322,6 +326,42 @@ export default function SongSharePage() {
     }
   }
 
+  const handleExtend = async () => {
+    if (!song) return
+
+    const targetDuration = prompt('Select extended duration (in seconds):\n- 180 (3 minutes)\n- 300 (5 minutes)', '300')
+    if (targetDuration === null) return // User cancelled
+
+    const duration = parseInt(targetDuration, 10)
+    if (isNaN(duration) || duration < 60 || duration > 300) {
+      setSongError('Please enter a valid duration between 60 and 300 seconds')
+      return
+    }
+
+    setIsExtending(true)
+    try {
+      const res = await fetch(`/api/songs/${songId}/extend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetDuration: duration, prompt: 'Create an extended version maintaining style and mood' }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        // Redirect to the new extended song
+        window.location.href = data.redirectUrl || `/song/${data.id}`
+      } else {
+        const error = await res.json()
+        setSongError(error.error || t('extendFailed'))
+      }
+    } catch (error) {
+      console.error('Extend error:', error)
+      setSongError(t('extendFailed'))
+    } finally {
+      setIsExtending(false)
+    }
+  }
+
   const handleSplitStems = async () => {
     if (!song) return
 
@@ -346,6 +386,51 @@ export default function SongSharePage() {
     } finally {
       setIsSplitting(false)
     }
+  }
+
+  const toggleStemPlay = (stemType: string, audioUrl: string) => {
+    // Stop currently playing stem if different
+    if (playingStem && playingStem !== stemType) {
+      const currentAudio = stemAudioRefs.current[playingStem]
+      if (currentAudio) {
+        currentAudio.pause()
+        currentAudio.currentTime = 0
+      }
+    }
+
+    // Toggle the selected stem
+    if (playingStem === stemType) {
+      // Stop current stem
+      const currentAudio = stemAudioRefs.current[stemType]
+      if (currentAudio) {
+        currentAudio.pause()
+        currentAudio.currentTime = 0
+      }
+      setPlayingStem(null)
+    } else {
+      // Play new stem
+      let audio = stemAudioRefs.current[stemType]
+      if (!audio) {
+        audio = new Audio(audioUrl)
+        audio.preload = 'metadata'
+        audio.addEventListener('ended', () => {
+          setPlayingStem(null)
+        })
+        stemAudioRefs.current[stemType] = audio
+      }
+      audio.play()
+      setPlayingStem(stemType)
+    }
+  }
+
+  const stopAllStems = () => {
+    Object.values(stemAudioRefs.current).forEach(audio => {
+      if (audio) {
+        audio.pause()
+        audio.currentTime = 0
+      }
+    })
+    setPlayingStem(null)
   }
 
   const isGenerating = song?.status === 'GENERATING' || song?.status === 'PENDING'
@@ -563,6 +648,19 @@ export default function SongSharePage() {
               </div>
             )}
 
+            {/* Extended Version Info */}
+            {song.forkedFrom && (song.forkedFrom as string).length > 0 && (
+              <div className="mb-6 p-4 rounded-xl bg-accent/5 border border-accent/20">
+                <div className="flex items-center gap-2 text-sm text-accent">
+                  <Layers className="w-4 h-4" />
+                  <span className="font-medium">{t('extendedVersion') || 'Extended Version'}</span>
+                </div>
+                <p className="text-xs text-text-muted mt-1">
+                  {t('extendedFromOriginal') || 'This is an extended version of the original track'}
+                </p>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex gap-3">
               <button
@@ -596,6 +694,20 @@ export default function SongSharePage() {
               >
                 <Plus className="w-4 h-4" aria-hidden="true" />
                 {isRemixing ? t('continuing') : t('continue')}
+              </button>
+              <button
+                onClick={handleExtend}
+                disabled={isGenerating || isExtending || !song.audioUrl}
+                aria-label={isExtending ? t('extending') : t('extend')}
+                className="flex-1 py-3 rounded-xl bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 text-orange-400 font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={t('extendDesc') || 'Generate extended 3-5 minute version'}
+              >
+                {isExtending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Layers className="w-4 h-4" aria-hidden="true" />
+                )}
+                {isExtending ? t('extending') : t('extend')}
               </button>
               <button
                 onClick={handleSplitStems}
@@ -665,6 +777,21 @@ export default function SongSharePage() {
                 </Link>
               </p>
             </div>
+
+            {/* Advanced Audio Editor */}
+            {song.audioUrl && song.status === 'COMPLETED' && (
+              <div className="mt-6">
+                <AdvancedAudioEditor
+                  songId={songId}
+                  audioUrl={song.audioUrl}
+                  onProcessed={(processedUrl) => {
+                    // Could redirect to new song or update current
+                    // Processed audio URL available for further actions
+                    void processedUrl
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -680,7 +807,10 @@ export default function SongSharePage() {
                   <p className="text-sm text-text-secondary mt-1">{t('stemsModalDesc')}</p>
                 </div>
                 <button
-                  onClick={() => setShowStemsModal(false)}
+                  onClick={() => {
+                    stopAllStems()
+                    setShowStemsModal(false)
+                  }}
                   className="p-2 rounded-lg hover:bg-surface-elevated text-text-secondary hover:text-foreground transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -694,22 +824,46 @@ export default function SongSharePage() {
                   className="p-4 rounded-xl bg-surface-elevated border border-border flex items-center justify-between"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-                      <Layers className="w-5 h-5 text-cyan-400" />
-                    </div>
+                    <button
+                      onClick={() => toggleStemPlay(stem.stem_type, stem.audioUrl)}
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+                        playingStem === stem.stem_type
+                          ? 'bg-cyan-500/20 text-cyan-400'
+                          : 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20'
+                      }`}
+                      aria-label={playingStem === stem.stem_type ? t('pause') : t('play')}
+                    >
+                      {playingStem === stem.stem_type ? (
+                        <Pause className="w-5 h-5" />
+                      ) : (
+                        <Play className="w-5 h-5 ml-0.5" />
+                      )}
+                    </button>
                     <div>
                       <p className="font-medium text-foreground">{stem.label}</p>
                       <p className="text-xs text-text-muted capitalize">{stem.stem_type}</p>
                     </div>
                   </div>
-                  <a
-                    href={stem.audioUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-sm font-medium transition-colors"
-                  >
-                    {t('download')}
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleStemPlay(stem.stem_type, stem.audioUrl)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        playingStem === stem.stem_type
+                          ? 'bg-cyan-500/20 text-cyan-400'
+                          : 'bg-surface-elevated hover:bg-cyan-500/10 text-text-secondary hover:text-cyan-400'
+                      }`}
+                    >
+                      {playingStem === stem.stem_type ? t('pause') : t('play')}
+                    </button>
+                    <a
+                      href={stem.audioUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-xs font-medium transition-colors"
+                    >
+                      {t('download')}
+                    </a>
+                  </div>
                 </div>
               ))}
             </div>

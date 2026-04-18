@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song, User } from "@/lib/types"
+import { discoverCache } from "@/lib/cache"
 
-declare global {
-  var users: Map<string, User> | undefined
-  var songs: Map<string, unknown> | undefined
+
+// Build cache key from query params
+function buildDiscoverCacheKey(page: number, limit: number, genre: string | null, mood: string | null, search: string | null, sort: string): string {
+  return `discover:${page}:${limit}:${genre || ''}:${mood || ''}:${search || ''}:${sort}`
 }
 
 export async function GET(request: NextRequest) {
@@ -14,7 +16,13 @@ export async function GET(request: NextRequest) {
     const genre = searchParams.get('genre')
     const mood = searchParams.get('mood')
     const search = searchParams.get('search')
-    const sort = searchParams.get('sort') || 'newest' // newest, oldest, title
+    const sort = searchParams.get('sort') || 'newest'
+
+    // Check cache first (only for first page without filters)
+    const cacheKey = buildDiscoverCacheKey(page, limit, genre, mood, search, sort)
+    if (page === 1 && !genre && !mood && !search && discoverCache.has(cacheKey)) {
+      return NextResponse.json(discoverCache.get(cacheKey))
+    }
 
     const songsMap = global.songs as Map<string, Song> | undefined
     if (!songsMap || songsMap.size === 0) {
@@ -98,7 +106,7 @@ export async function GET(request: NextRequest) {
     const startIndex = (page - 1) * limit
     const paginatedSongs = publicSongs.slice(startIndex, startIndex + limit)
 
-    return NextResponse.json({
+    const response = {
       songs: paginatedSongs.map(song => ({
         id: song.id,
         title: song.title,
@@ -115,7 +123,14 @@ export async function GET(request: NextRequest) {
       limit,
       total,
       totalPages,
-    })
+    }
+
+    // Cache first page results without filters for 10 seconds
+    if (page === 1 && !genre && !mood && !search) {
+      discoverCache.set(cacheKey, response, 10000)
+    }
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error("Discover error:", error)
     return NextResponse.json(

@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Song, User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
-declare global {
-  var users: Map<string, User> | undefined
-}
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
   const sessionToken = request.cookies.get('session-token')?.value

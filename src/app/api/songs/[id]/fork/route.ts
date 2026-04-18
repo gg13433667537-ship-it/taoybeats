@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Song, User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
-declare global {
-  var users: Map<string, User> | undefined
-}
 
 if (!global.users) global.users = new Map()
 

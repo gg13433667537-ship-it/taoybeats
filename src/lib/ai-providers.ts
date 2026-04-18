@@ -36,11 +36,35 @@ export type SongParams = {
   aigcWatermark?: boolean
 }
 
+export type StemType = 'vocals' | 'drums' | 'bass' | 'other'
+
+export type StemResult = {
+  stem_type: StemType
+  label: string
+  description: string
+  audioUrl: string
+  format: string
+  duration: number
+}
+
+export type ContinueParams = {
+  originalAudioUrl: string
+  prompt?: string
+  duration?: number
+  model?: 'music-2.6' | 'music-cover'
+}
+
+export type StemsParams = {
+  audioUrl: string
+}
+
 export type AIProvider = {
   name: string
   generate: (params: SongParams, apiKey: string, apiUrl: string) => Promise<string> // returns taskId
   getProgress: (taskId: string, apiKey: string, apiUrl: string) => Promise<GenerationProgress>
   download: (taskId: string, apiKey: string, apiUrl: string) => Promise<string> // returns audio URL
+  continue?: (params: ContinueParams, apiKey: string, apiUrl: string) => Promise<string> // returns taskId
+  splitStems?: (params: StemsParams, apiKey: string, apiUrl: string) => Promise<StemResult[]> // returns stems
 }
 
 // MiniMax Provider - Official API Implementation
@@ -128,7 +152,7 @@ export const miniMaxProvider: AIProvider = {
 
   async getProgress(taskId, apiKey, apiUrl) {
     // Handle synchronous completion (audio URL prefixed with 'audio:')
-    if (taskId.startsWith('audio:')) {
+    if (taskId?.startsWith('audio:')) {
       const audioUrl = taskId.slice(6) // Remove 'audio:' prefix
       return {
         status: 'COMPLETED' as GenerationStatus,
@@ -136,6 +160,11 @@ export const miniMaxProvider: AIProvider = {
         stage: 'completed',
         audioUrl,
       }
+    }
+
+    // Handle null/undefined taskId
+    if (!taskId) {
+      throw new Error('Task ID is required')
     }
 
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
@@ -175,8 +204,13 @@ export const miniMaxProvider: AIProvider = {
 
   async download(taskId, apiKey, apiUrl) {
     // Handle synchronous completion (audio URL prefixed with 'audio:')
-    if (taskId.startsWith('audio:')) {
+    if (taskId?.startsWith('audio:')) {
       return taskId.slice(6) // Remove 'audio:' prefix and return URL
+    }
+
+    // Handle null/undefined taskId
+    if (!taskId) {
+      throw new Error('Task ID is required')
     }
 
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
@@ -217,6 +251,152 @@ export const miniMaxProvider: AIProvider = {
       throw new Error('Audio not ready yet')
     }
     return audioUrl
+  },
+
+  /**
+   * Continue singing - generates a continuation of an existing audio track
+   * Uses MiniMax API with reference_audio parameter to maintain style consistency
+   */
+  async continue(params, apiKey, apiUrl) {
+    const baseUrl = apiUrl || 'https://api.minimaxi.com'
+    const model = params.model || 'music-2.6'
+
+    const response = await fetch(`${baseUrl}/v1/music_generation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        prompt: params.prompt || 'Continue the song naturally',
+        is_instrumental: false,
+        stream: false,
+        output_format: 'url',
+        reference_audio: params.originalAudioUrl,
+        audio_setting: {
+          sample_rate: 44100,
+          bitrate: 256000,
+          format: 'mp3'
+        },
+        aigc_watermark: false,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
+      const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
+      const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
+
+      const errorMessages: Record<number, string> = {
+        1002: '请求过于频繁，请稍后再试',
+        1004: 'API鉴权失败，请检查配置',
+        1008: '账户余额不足，请充值后重试',
+        1026: '内容包含敏感词，请修改后重试',
+        2013: '请求参数错误，请检查输入',
+        2049: '无效的API Key，请检查配置',
+      }
+
+      const userMessage = errorCode && errorMessages[errorCode]
+        ? errorMessages[errorCode]
+        : errorMessage
+
+      throw new Error(`MiniMax API error: ${userMessage}`)
+    }
+
+    const data = await response.json()
+    const audioUrl = data.data?.audio
+    const taskId = data.data?.task_id
+    const status = data.data?.status
+
+    if (audioUrl && status === 2) {
+      return `audio:${audioUrl}`
+    }
+
+    return taskId || data.task_id
+  },
+
+  /**
+   * Split audio into stems (vocals, drums, bass, other)
+   * Uses Demucs via MiniMax's stem separation endpoint
+   */
+  async splitStems(params, apiKey, apiUrl) {
+    const baseUrl = apiUrl || 'https://api.minimaxi.com'
+
+    // MiniMax stem separation API endpoint
+    const response = await fetch(`${baseUrl}/v1/stems`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        audio_url: params.audioUrl,
+        format: 'mp3',
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
+      const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
+      const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
+
+      const errorMessages: Record<number, string> = {
+        1002: '请求过于频繁，请稍后再试',
+        1004: 'API鉴权失败，请检查配置',
+        1008: '账户余额不足，请充值后重试',
+        1026: '内容包含敏感词，请修改后重试',
+        2013: '请求参数错误，请检查输入',
+        2049: '无效的API Key，请检查配置',
+      }
+
+      const userMessage = errorCode && errorMessages[errorCode]
+        ? errorMessages[errorCode]
+        : errorMessage
+
+      throw new Error(`MiniMax API error: ${userMessage}`)
+    }
+
+    const data = await response.json()
+
+    // Map MiniMax stem response to our StemResult format
+    const stemLabels: Record<string, { label: string; description: string }> = {
+      vocals: { label: 'Vocals', description: 'Lead vocals and harmonies' },
+      drums: { label: 'Drums', description: 'Drum tracks and percussion' },
+      bass: { label: 'Bass', description: 'Bass guitar and low-frequency instruments' },
+      other: { label: 'Other', description: 'Guitars, synths, strings, and other instruments' },
+    }
+
+    const stems: StemResult[] = []
+    const stemData = data.data || data.stems || {}
+
+    for (const [stemType, stemUrl] of Object.entries(stemData)) {
+      if (stemUrl && typeof stemUrl === 'string') {
+        const labelInfo = stemLabels[stemType] || { label: stemType, description: '' }
+        stems.push({
+          stem_type: stemType as StemType,
+          label: labelInfo.label,
+          description: labelInfo.description,
+          audioUrl: stemUrl,
+          format: 'mp3',
+          duration: 0,
+        })
+      }
+    }
+
+    // If no stems returned, return the original audio as a single stem
+    if (stems.length === 0) {
+      stems.push({
+        stem_type: 'other',
+        label: 'Original',
+        description: 'Original audio track',
+        audioUrl: params.audioUrl,
+        format: 'mp3',
+        duration: 0,
+      })
+    }
+
+    return stems
   },
 }
 

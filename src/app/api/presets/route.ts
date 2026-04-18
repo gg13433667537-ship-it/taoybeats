@@ -2,10 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import type { User, Preset } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
-declare global {
-  var users: Map<string, User> | undefined
-  var presets: Map<string, Preset> | undefined
-}
 
 if (!global.users) global.users = new Map()
 if (!global.presets) global.presets = new Map()

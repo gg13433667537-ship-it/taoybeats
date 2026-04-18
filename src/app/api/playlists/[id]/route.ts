@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User, Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { playlistCache } from "@/lib/cache"
 
-declare global {
-  var users: Map<string, User> | undefined
-  var playlists: Map<string, Playlist> | undefined
-}
 
 if (!global.users) global.users = new Map()
 if (!global.playlists) global.playlists = new Map()
@@ -86,6 +83,9 @@ export async function PUT(
 
     global.playlists?.set(id, updated)
 
+    // Invalidate playlist cache for owner
+    playlistCache.delete(`playlists:${playlist.userId}`)
+
     return NextResponse.json({ playlist: updated })
   } catch (error) {
     console.error("Update playlist error:", error)
@@ -116,6 +116,9 @@ export async function DELETE(
   }
 
   global.playlists?.delete(id)
+
+  // Invalidate playlist cache for owner
+  playlistCache.delete(`playlists:${playlist.userId}`)
 
   return NextResponse.json({ success: true })
 }

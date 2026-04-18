@@ -2,18 +2,20 @@
 
 ## 项目概述
 
-**项目**: AI Music  
-**目录**: `/Users/taoyang/Desktop/my-projects/ai-music`  
-**状态**: 初始化阶段，协作框架已建立，等待业务需求注入
+**项目**: AI Music (TaoyBeats)
+**目录**: `/Users/taoyang/Desktop/my-projects/ai-music`
+**状态**: 活跃开发中
 
 ## 技术栈
 
-| 类别 | 状态 |
+| 类别 | 技术 |
 |------|------|
-| 语言 | **TBD** |
-| 框架 | **TBD** |
-| 包管理器 | **TBD** |
-| 测试框架 | **TBD** |
+| 语言 | TypeScript |
+| 框架 | Next.js 16.2.4 |
+| 包管理器 | npm |
+| 数据库 | PostgreSQL + Prisma |
+| 测试框架 | Vitest + Playwright |
+| UI | Tailwind CSS 4 |
 
 ## 项目结构
 
@@ -33,8 +35,16 @@ ai-music/
 │   └── CHECKS.md       # 验证命令
 ├── AGENTS.md           # 全局协作协议（与 Codex 共享）
 ├── src/                # 源代码
-├── tests/              # 测试代码
-└── docs/               # 文档
+│   ├── app/            # Next.js App Router 页面
+│   ├── components/     # React 组件
+│   ├── hooks/          # 自定义 Hooks
+│   └── lib/            # 工具函数和库
+├── tests/              # 测试代码 (Vitest + Playwright)
+├── docs/               # 文档
+├── prisma/             # Prisma Schema
+├── scripts/            # 构建和部署脚本
+├── public/             # 静态资源
+└── supabase/           # Supabase 配置
 ```
 
 ## 协作协议
@@ -60,11 +70,16 @@ ai-music/
 ## 运行命令
 
 ```bash
-# TBD — 项目初始化后填写
-npm install
-npm test
-npm run build
-npm run lint
+npm install          # 安装依赖
+npm run dev          # 开发服务器
+npm run build        # 生产构建
+npm run lint         # 代码检查
+npm run lint:fix     # 自动修复 lint 问题
+npm run type-check   # TypeScript 类型检查
+npm test             # 运行 Vitest 单元测试
+npm run e2e          # 运行 Playwright E2E 测试
+npm run db:push      # 推送 Prisma schema 到数据库
+npm run db:studio    # 打开 Prisma Studio
 ```
 
 ## 入口行为

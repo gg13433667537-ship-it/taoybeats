@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Music, Plus, Loader2, Trash2, Edit2, ListMusic, Share2, Lock, Globe, X, Check } from "lucide-react"
+import { Music, Plus, Loader2, Trash2, Edit2, ListMusic, Lock, Globe, X, Check } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
 
@@ -76,7 +76,7 @@ export default function PlaylistsPage() {
         const data = await res.json()
         setError(data.error || 'Failed to create playlist')
       }
-    } catch (err) {
+    } catch {
       setError('Failed to create playlist')
     } finally {
       setIsSaving(false)
@@ -94,8 +94,8 @@ export default function PlaylistsPage() {
       if (res.ok) {
         fetchPlaylists()
       }
-    } catch (err) {
-      console.error("Failed to delete playlist:", err)
+    } catch {
+      console.error("Failed to delete playlist")
     }
   }
 
@@ -126,7 +126,7 @@ export default function PlaylistsPage() {
         const data = await res.json()
         setError(data.error || 'Failed to update playlist')
       }
-    } catch (err) {
+    } catch {
       setError('Failed to update playlist')
     } finally {
       setIsSaving(false)

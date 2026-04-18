@@ -6,13 +6,6 @@ import { checkDuplicateGeneration } from "@/lib/cache"
 import { getActiveAPIKey, reportAPIKeyError, reportAPISuccess } from "@/lib/api-keys"
 
 // Shared global storage
-declare global {
-  var users: Map<string, User> | undefined
-  var songs: Map<string, unknown> | undefined
-  var adminLogs: Map<string, unknown> | undefined
-  var systemApiKey: string | undefined
-  var systemApiUrl: string | undefined
-}
 
 if (!global.users) global.users = new Map()
 if (!global.songs) global.songs = new Map()

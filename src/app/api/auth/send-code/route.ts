@@ -1,15 +1,32 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createTransport } from "nodemailer"
+import crypto from "crypto"
 import { generateCode } from "@/lib/auth-codes"
+import {
+  rateLimitMiddleware,
+  sanitizeEmail,
+  applySecurityHeaders,
+  AUTH_RATE_LIMIT,
+  verifyCSRFToken,
+  generateCSRFToken,
+} from "@/lib/security"
 
 function createVerifyToken(email: string, code: string): string {
+  // Use CSRF secret for signing verification tokens
+  const csrfSecret = process.env.CSRF_SECRET || process.env.AUTH_SECRET
+  if (!csrfSecret) {
+    throw new Error("CSRF_SECRET or AUTH_SECRET environment variable is required")
+  }
+
   const payload = {
     email,
     code,
     exp: Date.now() + 10 * 60 * 1000, // 10 minutes
   }
-  // Simple base64 encoding (in production use proper JWT)
-  return Buffer.from(JSON.stringify(payload)).toString("base64url")
+  const payloadStr = JSON.stringify(payload)
+  const payloadBase64 = Buffer.from(payloadStr).toString("base64")
+  const signature = crypto.createHmac("sha256", csrfSecret).update(payloadBase64).digest("hex")
+  return `${payloadBase64}.${signature}`
 }
 
 async function sendVerificationEmail(email: string, code: string) {
@@ -83,34 +100,47 @@ async function sendVerificationEmail(email: string, code: string) {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const { email } = await request.json()
+  // Apply rate limiting for send-code endpoint
+  const rateLimitResponse = rateLimitMiddleware(request, AUTH_RATE_LIMIT, "send-code")
+  if (rateLimitResponse) {
+    return applySecurityHeaders(rateLimitResponse)
+  }
 
-    if (!email || !email.includes('@')) {
-      return NextResponse.json(
-        { error: "请输入有效的邮箱地址" },
-        { status: 400 }
+  try {
+    const body = await request.json()
+    const { email, csrfToken } = body
+
+    // Validate CSRF token (use email as session identifier for non-authenticated endpoint)
+    if (csrfToken && !verifyCSRFToken(csrfToken, email || "anonymous")) {
+      return applySecurityHeaders(
+        NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 })
       )
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: "邮箱地址格式不正确" },
-        { status: 400 }
+    // Input validation and sanitization
+    const sanitizedEmail = sanitizeEmail(email)
+
+    if (!sanitizedEmail) {
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "请输入有效的邮箱地址" },
+          { status: 400 }
+        )
       )
     }
 
     const code = generateCode()
-    const token = createVerifyToken(email, code)
+    const token = createVerifyToken(sanitizedEmail, code)
 
     // Send verification email first
-    const result = await sendVerificationEmail(email, code)
+    const result = await sendVerificationEmail(sanitizedEmail, code)
 
     if (!result.success && process.env.SMTP_HOST) {
-      return NextResponse.json(
-        { error: "发送验证码失败，请稍后重试" },
-        { status: 500 }
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "发送验证码失败，请稍后重试" },
+          { status: 500 }
+        )
       )
     }
 
@@ -123,7 +153,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set("verify-token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "strict",
       maxAge: 10 * 60, // 10 minutes
       path: "/",
     })
@@ -139,12 +169,23 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return response
+    // Also generate a CSRF token for the verification step
+    response.cookies.set("csrf-token", generateCSRFToken(sanitizedEmail), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 10 * 60, // 10 minutes
+      path: "/",
+    })
+
+    return applySecurityHeaders(response)
   } catch (error) {
     console.error("Send code error:", error)
-    return NextResponse.json(
-      { error: "发送验证码失败" },
-      { status: 500 }
+    return applySecurityHeaders(
+      NextResponse.json(
+        { error: "发送验证码失败" },
+        { status: 500 }
+      )
     )
   }
 }

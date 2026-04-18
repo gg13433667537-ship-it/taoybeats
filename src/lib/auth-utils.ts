@@ -2,7 +2,15 @@ import crypto from "crypto"
 import type { User } from "./types"
 
 export function getSecretKey(): string {
-  return process.env.AUTH_SECRET || "fallback-secret-key-change-in-production"
+  const secret = process.env.AUTH_SECRET
+  if (!secret) {
+    throw new Error("AUTH_SECRET environment variable is required. Set it in your .env file.")
+  }
+  // Ensure minimum key length for HMAC-SHA256
+  if (secret.length < 32) {
+    throw new Error("AUTH_SECRET must be at least 32 characters for adequate security.")
+  }
+  return secret
 }
 
 function createHmac(data: string): string {

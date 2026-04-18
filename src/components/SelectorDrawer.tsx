@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { X, Search, Check } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
@@ -37,6 +37,9 @@ export default function SelectorDrawer({
   const [searchQuery, setSearchQuery] = useState("")
   const [tempSelected, setTempSelected] = useState<string[]>(selectedValues)
   const drawerRef = useRef<HTMLDivElement>(null)
+  const [translateY, setTranslateY] = useState(0)
+  const startYRef = useRef(0)
+  const isDraggingRef = useRef(false)
 
   // Group options
   const groupedOptions = options.reduce((acc, option) => {
@@ -87,6 +90,34 @@ export default function SelectorDrawer({
     return () => { document.body.style.overflow = "" }
   }, [isOpen])
 
+  // Touch handlers for swipe to close on mobile
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (window.innerWidth >= 640) return // Only on mobile
+    startYRef.current = e.touches[0].clientY
+    isDraggingRef.current = true
+    setTranslateY(0)
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDraggingRef.current || window.innerWidth >= 640) return
+    const currentY = e.touches[0].clientY
+    const diff = currentY - startYRef.current
+    // Only allow dragging down (positive diff)
+    if (diff > 0) {
+      setTranslateY(diff)
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    if (window.innerWidth >= 640) return
+    isDraggingRef.current = false
+    // If dragged more than 100px, close the drawer
+    if (translateY > 100) {
+      onClose()
+    }
+    setTranslateY(0)
+  }, [translateY, onClose])
+
   const handleToggle = (value: string) => {
     if (multiSelect) {
       setTempSelected(prev =>
@@ -122,21 +153,33 @@ export default function SelectorDrawer({
       {/* Drawer */}
       <div
         ref={drawerRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         className={`absolute bg-surface border border-border shadow-2xl transition-all duration-300 ${
           isAnimating ? "translate-y-0" : "translate-y-full"
         } ${
           // Desktop: side drawer from right, Mobile: bottom drawer
-          "w-full sm:w-[420px sm:inset-y-0 sm:right-0 sm:left-auto sm:translate-x-0 sm:rounded-l-2xl bottom-0 sm:translate-y-0 rounded-t-2xl"
+          "w-full sm:w-[420px] sm:inset-y-0 sm:right-0 sm:left-auto sm:translate-x-0 sm:rounded-l-2xl bottom-0 sm:translate-y-0 rounded-t-2xl"
         }`}
+        style={{
+          transform: `translateY(${translateY}px)`,
+          transition: isDraggingRef.current ? "none" : undefined,
+        }}
       >
+        {/* Drag handle for mobile */}
+        <div className="flex justify-center pt-3 pb-2 sm:hidden">
+          <div className="w-10 h-1 rounded-full bg-border" />
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h2 className="text-lg font-bold text-foreground">{title}</h2>
             <p className="text-sm text-text-muted">
               {tempSelected.length > 0
-                ? `已选 ${tempSelected.length} 个`
-                : multiSelect ? "可多选" : "选择一个"}
+                ? `${t('selectedCount')} ${tempSelected.length}`
+                : multiSelect ? t('multiple') : t('single')}
             </p>
           </div>
           <button
@@ -156,7 +199,7 @@ export default function SelectorDrawer({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={searchPlaceholder || "搜索..."}
+              placeholder={searchPlaceholder || t('searchPlaceholderShort')}
               className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
             />
           </div>
@@ -195,7 +238,7 @@ export default function SelectorDrawer({
 
           {Object.keys(filteredGroupedOptions).length === 0 && (
             <div className="text-center py-8 text-text-muted">
-              未找到匹配选项
+              {t('noResults')}
             </div>
           )}
         </div>
@@ -208,7 +251,7 @@ export default function SelectorDrawer({
             className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <Check className="w-4 h-4" />
-            确认 ({tempSelected.length})
+            {t('confirm')} ({tempSelected.length})
           </button>
         </div>
       </div>

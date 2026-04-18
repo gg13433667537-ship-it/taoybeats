@@ -2,11 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import type { User, Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
-declare global {
-  var users: Map<string, User> | undefined
-  var playlists: Map<string, Playlist> | undefined
-  var songs: Map<string, unknown> | undefined
-}
 
 if (!global.users) global.users = new Map()
 if (!global.playlists) global.playlists = new Map()

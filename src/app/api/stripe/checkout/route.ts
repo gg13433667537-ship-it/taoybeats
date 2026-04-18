@@ -3,9 +3,6 @@ import type { User } from "@/lib/types"
 import Stripe from "stripe"
 import { verifySessionToken } from "@/lib/auth-utils"
 
-declare global {
-  var users: Map<string, User> | undefined
-}
 
 if (!global.users) global.users = new Map()
 

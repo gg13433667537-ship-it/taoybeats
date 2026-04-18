@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { Music, Play, Loader2, User, Calendar, ListMusic, Share2 } from "lucide-react"
+import { Music, Play, Loader2, User, Calendar, ListMusic } from "lucide-react"
 
 interface ProfileSong {
   id: string
@@ -41,7 +41,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'songs' | 'playlists'>('songs')
-  const [playingId, setPlayingId] = useState<string | null>(null)
 
   const fetchProfile = useCallback(async () => {
     setLoading(true)
@@ -56,7 +55,7 @@ export default function ProfilePage() {
       } else {
         setError('Failed to load profile')
       }
-    } catch (err) {
+    } catch {
       setError('Failed to load profile')
     } finally {
       setLoading(false)
@@ -74,14 +73,6 @@ export default function ProfilePage() {
       month: 'long',
       day: 'numeric',
     })
-  }
-
-  const handleShare = async (url: string, title: string) => {
-    if (navigator.share) {
-      await navigator.share({ title, url })
-    } else {
-      await navigator.clipboard.writeText(url)
-    }
   }
 
   if (loading) {
@@ -204,7 +195,7 @@ export default function ProfilePage() {
                     {/* Cover */}
                     <div className="h-32 rounded-xl bg-gradient-to-br from-accent/20 to-accent-glow/20 mb-4 flex items-center justify-center relative">
                       {song.coverUrl ? (
-                        <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover rounded-xl" />
+                        <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover rounded-xl" loading="lazy" decoding="async" />
                       ) : (
                         <Music className="w-12 h-12 text-accent/40" />
                       )}

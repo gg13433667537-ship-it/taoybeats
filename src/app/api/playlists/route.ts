@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User, Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { playlistCache } from "@/lib/cache"
 
-declare global {
-  var users: Map<string, User> | undefined
-  var playlists: Map<string, Playlist> | undefined
-}
 
 if (!global.users) global.users = new Map()
 if (!global.playlists) global.playlists = new Map()
@@ -33,6 +30,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  // Check cache first
+  const cacheKey = `playlists:${user.id}`
+  if (playlistCache.has(cacheKey)) {
+    return NextResponse.json(playlistCache.get(cacheKey))
+  }
+
   const playlists = Array.from(global.playlists?.values() || [])
     .filter(p => p.userId === user.id)
     .map(p => ({
@@ -40,7 +43,12 @@ export async function GET(request: NextRequest) {
       songCount: p.songIds.length,
     }))
 
-  return NextResponse.json({ playlists })
+  const response = { playlists }
+
+  // Cache for 30 seconds
+  playlistCache.set(cacheKey, response, 30000)
+
+  return NextResponse.json(response)
 }
 
 // POST /api/playlists - Create a new playlist
@@ -69,6 +77,9 @@ export async function POST(request: NextRequest) {
     }
 
     global.playlists?.set(playlist.id, playlist)
+
+    // Invalidate playlist cache for this user
+    playlistCache.delete(`playlists:${user.id}`)
 
     return NextResponse.json({ playlist }, { status: 201 })
   } catch (error) {

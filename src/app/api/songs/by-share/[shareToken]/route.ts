@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Song } from "@/lib/types"
+import type { Song, User } from "@/lib/types"
+
+
+if (!global.users) global.users = new Map()
+if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
+if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
 
 export async function GET(
   request: NextRequest,

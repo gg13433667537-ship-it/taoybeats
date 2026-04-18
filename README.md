@@ -48,7 +48,7 @@ npm run dev
 
 ## 技术栈
 
-- **前端**: Next.js 14 + TypeScript + Tailwind CSS
+- **前端**: Next.js 16 + TypeScript + Tailwind CSS
 - **认证**: 邮箱验证码登录
 - **AI**: MiniMax API (music-2.6)
 - **部署**: Vercel
