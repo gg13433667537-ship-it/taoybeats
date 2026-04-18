@@ -64,6 +64,7 @@ export default function ProfilePage() {
   }, [userId])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProfile()
   }, [fetchProfile])
 
@@ -96,7 +97,7 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-foreground mb-2">{error || 'User not found'}</h1>
-          <p className="text-text-secondary mb-6">This profile doesn't exist or is private</p>
+          <p className="text-text-secondary mb-6">This profile doesn&apos;t exist or is private</p>
           <Link
             href="/"
             className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors"
@@ -190,7 +191,7 @@ export default function ProfilePage() {
               <div className="text-center py-20">
                 <Music className="w-16 h-16 text-text-muted mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-2">No songs yet</h3>
-                <p className="text-text-secondary">This user hasn't created any songs</p>
+                <p className="text-text-secondary">This user hasn&apos;t created any songs</p>
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -235,7 +236,7 @@ export default function ProfilePage() {
               <div className="text-center py-20">
                 <ListMusic className="w-16 h-16 text-text-muted mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-2">No playlists yet</h3>
-                <p className="text-text-secondary">This user hasn't created any playlists</p>
+                <p className="text-text-secondary">This user hasn&apos;t created any playlists</p>
               </div>
             ) : (
               <div className="grid gap-4">

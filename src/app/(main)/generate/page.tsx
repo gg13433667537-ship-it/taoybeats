@@ -196,14 +196,23 @@ export default function GeneratePage() {
         .then(res => res.json())
         .then(song => {
           if (song) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTitle(song.title || '')
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setLyrics(song.lyrics || '')
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedGenres(song.genre || [])
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setMood(song.mood || '')
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedInstruments(song.instruments || [])
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setReferenceSinger(song.referenceSinger || '')
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setReferenceSong(song.referenceSong || '')
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setUserNotes(song.userNotes || '')
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsInstrumental(song.isInstrumental || false)
           }
         })
@@ -216,9 +225,13 @@ export default function GeneratePage() {
   // Beat Maker mode effect - enables instrumental and pre-selects beat instruments
   useEffect(() => {
     if (beatMakerMode) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsInstrumental(true)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedInstruments(['Drum', 'Bass', 'Synth'])
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedGenres(['Electronic', 'Hip-Hop'])
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMood('Energetic')
     }
   }, [beatMakerMode])

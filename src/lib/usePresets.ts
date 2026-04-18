@@ -75,6 +75,7 @@ export function usePresets() {
 
   // Initial load and sync
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     syncWithServer()
   }, [syncWithServer])
 

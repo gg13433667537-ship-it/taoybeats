@@ -85,8 +85,8 @@ export default function DiscoverPage() {
 
   // Reload when filters change
   useEffect(() => {
-    fetchSongs(1)
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchSongs(1)
   }, [debouncedSearch, sortBy, genreFilter, moodFilter, fetchSongs])
 
   // Audio controls

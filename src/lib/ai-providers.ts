@@ -110,11 +110,34 @@ export const miniMaxProvider: AIProvider = {
     }
 
     const data = await response.json()
-    // MiniMax returns task_id in data.data.task_id
-    return data.data?.task_id || data.task_id
+
+    // Music 2.6 may return audio directly (status=2 means completed)
+    // or return a task_id for async polling (status=1 means processing)
+    const audioUrl = data.data?.audio
+    const taskId = data.data?.task_id
+    const status = data.data?.status
+
+    if (audioUrl && status === 2) {
+      // Synchronous completion - return audio URL prefixed with 'audio:'
+      return `audio:${audioUrl}`
+    }
+
+    // Return task_id for async polling
+    return taskId || data.task_id
   },
 
   async getProgress(taskId, apiKey, apiUrl) {
+    // Handle synchronous completion (audio URL prefixed with 'audio:')
+    if (taskId.startsWith('audio:')) {
+      const audioUrl = taskId.slice(6) // Remove 'audio:' prefix
+      return {
+        status: 'COMPLETED' as GenerationStatus,
+        progress: 100,
+        stage: 'completed',
+        audioUrl,
+      }
+    }
+
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
 
     const response = await fetch(`${baseUrl}/v1/music_generation_info?task_id=${taskId}`, {
@@ -151,6 +174,11 @@ export const miniMaxProvider: AIProvider = {
   },
 
   async download(taskId, apiKey, apiUrl) {
+    // Handle synchronous completion (audio URL prefixed with 'audio:')
+    if (taskId.startsWith('audio:')) {
+      return taskId.slice(6) // Remove 'audio:' prefix and return URL
+    }
+
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
 
     const response = await fetch(`${baseUrl}/v1/music_generation_info?task_id=${taskId}`, {

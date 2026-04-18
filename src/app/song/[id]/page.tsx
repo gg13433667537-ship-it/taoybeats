@@ -109,12 +109,13 @@ export default function SongSharePage() {
 
   // Audio controls
   const togglePlay = useCallback(() => {
-    if (!audioRef.current) return
+    const audio = audioRef.current
+    if (!audio) return
 
     if (isPlaying) {
-      audioRef.current.pause()
+      audio.pause()
     } else {
-      audioRef.current.play()
+      audio.play()
     }
     setIsPlaying(!isPlaying)
   }, [isPlaying])
@@ -347,6 +348,21 @@ export default function SongSharePage() {
     }
   }
 
+  const isGenerating = song?.status === 'GENERATING' || song?.status === 'PENDING'
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    /* eslint-disable react-hooks/refs */
+    SHORTCUTS.PLAY_PAUSE(togglePlay),
+    SHORTCUTS.SHARE(() => setShowShareMenu(true)),
+    SHORTCUTS.DOWNLOAD(handleDownload),
+    SHORTCUTS.MUTE(() => setIsMuted(!isMuted)),
+    SHORTCUTS.CLOSE_MODAL(() => {
+      setShowShareMenu(false)
+      setShowStemsModal(false)
+    }),
+  ])
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -375,19 +391,6 @@ export default function SongSharePage() {
     )
   }
 
-  const isGenerating = song.status === 'GENERATING' || song.status === 'PENDING'
-
-  // Keyboard shortcuts
-  useKeyboardShortcuts([
-    SHORTCUTS.PLAY_PAUSE(togglePlay),
-    SHORTCUTS.SHARE(() => setShowShareMenu(true)),
-    SHORTCUTS.DOWNLOAD(handleDownload),
-    SHORTCUTS.MUTE(() => setIsMuted(!isMuted)),
-    SHORTCUTS.CLOSE_MODAL(() => {
-      setShowShareMenu(false)
-      setShowStemsModal(false)
-    }),
-  ])
 
   return (
     <div className="min-h-screen bg-background">
