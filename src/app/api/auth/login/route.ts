@@ -64,13 +64,35 @@ export async function POST(request: NextRequest) {
     }
 
     // Find user by email - first check memory, then fall back to Prisma
+    logger.debug(`Login attempt for email: ${sanitizedEmail}`, { requestId })
+    logger.debug(`Users in memory: ${users.size}`, { requestId })
+
+    // Debug: log all emails in memory
+    if (users.size > 0) {
+      const memoryEmails = Array.from(users.keys()).filter(k => k.includes('@'))
+      logger.debug(`Memory emails: ${JSON.stringify(memoryEmails)}`, { requestId })
+    }
+
     let user = users.get(sanitizedEmail)
+    logger.debug(`User from memory lookup: ${user ? 'found' : 'not found'}`, { requestId })
 
     // If not in memory, try Prisma (for serverless cold starts)
     if (!user) {
-      const dbUser = await prisma.user.findUnique({
-        where: { email: sanitizedEmail },
+      logger.debug(`Querying Prisma for email: ${sanitizedEmail}`, { requestId })
+
+      // Use findFirst with case-insensitive mode to handle case mismatches
+      // This is important because sanitizeEmail converts to lowercase,
+      // but users might have registered with mixed-case emails
+      const dbUser = await prisma.user.findFirst({
+        where: {
+          email: {
+            equals: sanitizedEmail,
+            mode: 'insensitive',
+          },
+        },
       })
+      logger.debug(`Prisma result: ${dbUser ? `found user ${dbUser.id}` : 'not found'}`, { requestId })
+
       if (dbUser) {
         // Rehydrate user into memory
         user = {
@@ -87,13 +109,17 @@ export async function POST(request: NextRequest) {
           monthlyResetAt: dbUser.monthlyResetAt || getMonthKey(),
           createdAt: dbUser.createdAt.toISOString(),
         }
+        logger.debug(`Rehydrating user into memory with keys: ${sanitizedEmail}, ${user.id}`, { requestId })
         users.set(sanitizedEmail, user)
         users.set(user.id, user)
+        logger.debug(`Memory after rehydrate: ${users.size} entries`, { requestId })
       }
     }
 
     if (!user) {
       const duration = Date.now() - startTime
+      logger.warn(`User not found for email: ${sanitizedEmail}`, { requestId })
+
       logger.api.response("POST", endpoint, 401, duration, { requestId })
       logger.auth.login(sanitizedEmail, false, { requestId })
       return applySecurityHeaders(

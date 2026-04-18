@@ -117,21 +117,37 @@ export async function POST(request: NextRequest) {
     }
 
     // Persist to Prisma database FIRST - this must succeed before anything else
-    await prisma.user.create({
-      data: {
-        id: user.id,
-        email: user.email,
-        name: user.name || null,
-        password: user.password,
-        role: user.role as "USER" | "PRO" | "ADMIN",
-        isActive: user.isActive,
-        tier: user.tier,
-        dailyUsage: user.dailyUsage,
-        monthlyUsage: user.monthlyUsage,
-        dailyResetAt: user.dailyResetAt,
-        monthlyResetAt: user.monthlyResetAt,
-      },
-    })
+    logger.debug(`Creating user in Prisma: ${JSON.stringify({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      isActive: user.isActive,
+      tier: user.tier,
+    })}`, { requestId })
+
+    try {
+      const createdUser = await prisma.user.create({
+        data: {
+          id: user.id,
+          email: user.email,
+          name: user.name || null,
+          password: user.password,
+          role: user.role as "USER" | "PRO" | "ADMIN",
+          isActive: user.isActive,
+          tier: user.tier,
+          dailyUsage: user.dailyUsage,
+          monthlyUsage: user.monthlyUsage,
+          dailyResetAt: user.dailyResetAt,
+          monthlyResetAt: user.monthlyResetAt,
+        },
+      })
+
+      logger.info(`User created in Prisma successfully: ${createdUser.id}`, { requestId })
+    } catch (prismaError) {
+      logger.error(`Prisma user.create failed: ${prismaError}`, undefined, { requestId })
+      throw prismaError
+    }
 
     // Only after Prisma succeeds, store in memory
     users.set(sanitizedEmail, user)
