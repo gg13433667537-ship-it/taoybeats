@@ -80,34 +80,50 @@ export async function POST(request: NextRequest) {
     if (!user) {
       logger.debug(`Querying Prisma for email: ${sanitizedEmail}`, { requestId })
 
-      // Use findFirst with case-insensitive mode to handle case mismatches
-      // This is important because sanitizeEmail converts to lowercase,
-      // but users might have registered with mixed-case emails
+      // First try exact match with lowercase email (most common case)
+      // This is more reliable than mode: 'insensitive' which depends on DB collation
       const dbUser = await prisma.user.findFirst({
         where: {
-          email: {
-            equals: sanitizedEmail,
-            mode: 'insensitive',
-          },
+          email: sanitizedEmail.toLowerCase(),
         },
       })
-      logger.debug(`Prisma result: ${dbUser ? `found user ${dbUser.id}` : 'not found'}`, { requestId })
 
-      if (dbUser) {
+      // If not found, try case-insensitive match as fallback
+      let foundDbUser = dbUser
+      if (!foundDbUser) {
+        const dbUserCaseInsensitive = await prisma.user.findFirst({
+          where: {
+            email: {
+              equals: sanitizedEmail,
+              mode: 'insensitive',
+            },
+          },
+        })
+        if (dbUserCaseInsensitive) {
+          // Update the email to lowercase for future lookups
+          foundDbUser = await prisma.user.update({
+            where: { id: dbUserCaseInsensitive.id },
+            data: { email: sanitizedEmail.toLowerCase() },
+          })
+        }
+      }
+      logger.debug(`Prisma result: ${foundDbUser ? `found user ${foundDbUser.id}` : 'not found'}`, { requestId })
+
+      if (foundDbUser) {
         // Rehydrate user into memory
         user = {
-          id: dbUser.id,
-          email: dbUser.email || sanitizedEmail,
-          name: dbUser.name || undefined,
-          password: dbUser.password || undefined,
-          role: dbUser.role as "USER" | "PRO" | "ADMIN",
-          isActive: dbUser.isActive,
-          tier: dbUser.tier as "FREE" | "PRO",
-          dailyUsage: dbUser.dailyUsage,
-          monthlyUsage: dbUser.monthlyUsage,
-          dailyResetAt: dbUser.dailyResetAt || getDateKey(),
-          monthlyResetAt: dbUser.monthlyResetAt || getMonthKey(),
-          createdAt: dbUser.createdAt.toISOString(),
+          id: foundDbUser.id,
+          email: foundDbUser.email || sanitizedEmail,
+          name: foundDbUser.name || undefined,
+          password: foundDbUser.password || undefined,
+          role: foundDbUser.role as "USER" | "PRO" | "ADMIN",
+          isActive: foundDbUser.isActive,
+          tier: foundDbUser.tier as "FREE" | "PRO",
+          dailyUsage: foundDbUser.dailyUsage,
+          monthlyUsage: foundDbUser.monthlyUsage,
+          dailyResetAt: foundDbUser.dailyResetAt || getDateKey(),
+          monthlyResetAt: foundDbUser.monthlyResetAt || getMonthKey(),
+          createdAt: foundDbUser.createdAt.toISOString(),
         }
         logger.debug(`Rehydrating user into memory with keys: ${sanitizedEmail}, ${user.id}`, { requestId })
         users.set(sanitizedEmail, user)
