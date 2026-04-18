@@ -5,6 +5,7 @@ import { Music, Zap, Share2, Download } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 import LanguageSwitcher from "@/components/LanguageSwitcher"
 import { ThemeToggle } from "@/components/ThemeToggle"
+import VersionBadge from "@/components/VersionBadge"
 
 export default function HomePage() {
   const { t } = useI18n()
@@ -155,6 +156,9 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* Version Badge */}
+      <VersionBadge />
     </div>
   )
 }

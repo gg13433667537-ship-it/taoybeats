@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "buildCommand": "prisma generate && npm run build",
+  "buildCommand": "prisma generate && NEXT_PUBLIC_VERSION=$(node -p \"require('./package.json').version\") NEXT_PUBLIC_COMMIT=$VERCEL_GIT_COMMIT_SHA npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install --legacy-peer-deps",
   "regions": ["hnd1"]
