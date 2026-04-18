@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import type { User, Song } from "@/lib/types"
 import { miniMaxProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { checkDuplicateGeneration } from "@/lib/cache"
+import { getActiveAPIKey, reportAPIKeyError, reportAPISuccess } from "@/lib/api-keys"
 
 // Shared global storage
 declare global {
@@ -128,8 +130,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use system API key - no client-side API key required
-    const apiKey = global.systemApiKey
+    // Request deduplication - prevent duplicate generation requests
+    if (checkDuplicateGeneration(user.id, title)) {
+      return NextResponse.json(
+        {
+          error: "Duplicate request",
+          message: "A generation request for this song was recently submitted. Please wait a moment before trying again.",
+          code: "DUPLICATE_REQUEST",
+        },
+        { status: 429 }
+      )
+    }
+
+    // Use API key management with automatic failover
+    const { key: apiKey, model: effectiveModel, isHighSpeed } = getActiveAPIKey()
     const apiUrl = global.systemApiUrl || 'https://api.minimaxi.com'
 
     // Validate API key is configured
@@ -208,8 +222,8 @@ export async function POST(request: NextRequest) {
     const songsMap = global.songs as Map<string, Song>
     songsMap.set(songId, song)
 
-    // Start real generation in background
-    generateMusic(songId, song, apiKey, apiUrl).catch((err) => {
+    // Start real generation in background with automatic failover
+    generateMusic(songId, song, apiKey, apiUrl, effectiveModel).catch((err) => {
       console.error(`[Generate] Song ${songId} background generation failed:`, err)
     })
 
@@ -235,7 +249,8 @@ async function generateMusic(
   songId: string,
   song: Song,
   apiKey: string,
-  apiUrl?: string
+  apiUrl?: string,
+  model?: 'music-2.6' | 'music-2.7'
 ) {
   const songsMap = global.songs as Map<string, Song>
 
@@ -256,13 +271,16 @@ async function generateMusic(
       isInstrumental: song.isInstrumental,
       voiceId: song.voiceId,
       referenceAudio: song.referenceAudio,
-      model: song.model,
+      model: model || song.model || 'music-2.6',
       outputFormat: song.outputFormat,
       lyricsOptimizer: song.lyricsOptimizer,
       sampleRate: song.sampleRate,
       bitrate: song.bitrate,
       aigcWatermark: song.aigcWatermark,
     }, apiKey, apiUrl || 'https://api.minimaxi.com')
+
+    // Report success to keep key active
+    reportAPISuccess()
 
     // Poll for progress
     const maxWaitTime = 10 * 60 * 1000 // 10 minutes max
@@ -307,7 +325,11 @@ async function generateMusic(
       })
     }
   } catch (error) {
-    console.error(`[Generate] Song ${songId} error:`, error)
+    // Report error for potential key failover
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error(`[Generate] Song ${songId} error:`, errorMessage)
+    reportAPIKeyError(errorMessage)
+
     songsMap.set(songId, {
       ...song,
       status: 'FAILED',
