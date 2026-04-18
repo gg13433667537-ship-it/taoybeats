@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
       audioUrl,
       genre,
       mood,
-      duration,
       fadeIn = 0,
       fadeOut = 2,
       volume = 0.8,

@@ -1,15 +1,20 @@
 // Shared global state initialization
 // This module should be imported by all API routes
 
-import type { User, Song } from './types'
+import type { User, Song, Playlist, Preset } from './types'
 
 declare global {
   var systemApiKey: string | undefined
   var systemApiUrl: string | undefined
   var users: Map<string, User> | undefined
   var songs: Map<string, Song> | undefined
+  var playlists: Map<string, Playlist> | undefined
+  var presets: Map<string, Preset> | undefined
   var adminLogs: Map<string, unknown> | undefined
 }
+
+// Ensure this file is treated as a module
+export {}
 
 // Initialize all globals
 export function initGlobals() {
@@ -17,6 +22,8 @@ export function initGlobals() {
   if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
   if (!global.users) global.users = new Map()
   if (!global.songs) global.songs = new Map()
+  if (!global.playlists) global.playlists = new Map()
+  if (!global.presets) global.presets = new Map()
   if (!global.adminLogs) global.adminLogs = new Map()
 }
 

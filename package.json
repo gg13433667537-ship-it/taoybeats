@@ -47,7 +47,6 @@
   "devDependencies": {
     "@playwright/test": "^1.40.0",
     "@prisma/client": "^5.22.0",
-    "@sentry/nextjs": "^7.100.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.4.0",

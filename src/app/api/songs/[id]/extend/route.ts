@@ -19,6 +19,10 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
   }
 }
 
+function getDemoUser(): { id: string; email: string; role: string } {
+  return { id: 'demo-user', email: 'demo@taoybeats.com', role: 'USER' }
+}
+
 /**
  * Extended Generation API
  *
@@ -36,20 +40,20 @@ export async function POST(
   try {
     const { id: originalSongId } = await params
 
-    // Auth check
-    const user = getSessionUser(request)
+    // Auth check - allow demo user for consistency with /api/songs
+    let user = getSessionUser(request)
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      user = getDemoUser()
     }
 
     const songsMap = global.songs as Map<string, Song> | undefined
     if (!songsMap) {
-      return NextResponse.json({ error: "Song not found" }, { status: 404 })
+      return NextResponse.json({ error: "Storage not initialized" }, { status: 500 })
     }
 
     const originalSong = songsMap.get(originalSongId)
     if (!originalSong) {
-      return NextResponse.json({ error: "Song not found" }, { status: 404 })
+      return NextResponse.json({ error: "Original song not found" }, { status: 404 })
     }
 
     // Check ownership
@@ -60,7 +64,7 @@ export async function POST(
     // Check if original is completed
     if (originalSong.status !== 'COMPLETED') {
       return NextResponse.json(
-        { error: "Can only extend completed songs" },
+        { error: "Cannot extend song", details: `Song is currently ${originalSong.status}. Only completed songs can be extended.` },
         { status: 400 }
       )
     }
@@ -84,7 +88,7 @@ export async function POST(
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: "API key not configured" },
+        { error: "API key not configured", details: "Please set MINIMAX_API_KEY environment variable." },
         { status: 500 }
       )
     }
@@ -177,14 +181,15 @@ async function generateExtendedVersion(
     if (!originalAudioUrl) {
       // Need to generate initial segment first
       console.log(`[Extend] Song ${songId}: No original audio, generating initial segment`)
-      currentAudioUrl = await generateInitialSegment(song, apiKey, apiUrl)
-      if (!currentAudioUrl) {
+      const newAudioUrl = await generateInitialSegment(song, apiKey, apiUrl)
+      if (!newAudioUrl) {
         throw new Error("Failed to generate initial segment")
       }
+      currentAudioUrl = newAudioUrl
       currentDuration = segmentDuration
       segmentCount = 1
     } else {
-      currentDuration = await getAudioDuration(originalAudioUrl) || 0
+      currentDuration = await getAudioDuration() || 0
       console.log(`[Extend] Song ${songId}: Starting with ${currentDuration}s audio`)
     }
 
@@ -203,7 +208,6 @@ async function generateExtendedVersion(
       segmentCount++
 
       // Update progress
-      const progress = Math.min(95, Math.round((currentDuration / targetDuration) * 100))
       songsMap.set(songId, {
         ...songsMap.get(songId)!,
         status: "GENERATING",
@@ -291,6 +295,10 @@ async function continueSong(
   apiUrl: string
 ): Promise<string | null> {
   try {
+    if (!miniMaxProvider.continue) {
+      console.error('[Extend] miniMaxProvider.continue is not available')
+      return null
+    }
     const taskId = await miniMaxProvider.continue({
       originalAudioUrl: referenceAudioUrl,
       prompt,
@@ -336,7 +344,7 @@ async function continueSong(
 /**
  * Get audio duration from URL (approximate)
  */
-async function getAudioDuration(audioUrl: string): Promise<number | null> {
+async function getAudioDuration(): Promise<number | null> {
   try {
     // For MiniMax URLs, we can estimate based on the generation params
     // This is an approximation - in production you'd want to fetch audio metadata

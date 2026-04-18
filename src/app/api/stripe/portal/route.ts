@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
-import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
 

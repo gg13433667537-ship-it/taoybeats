@@ -343,7 +343,7 @@ export default function SongSharePage() {
       const res = await fetch(`/api/songs/${songId}/extend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetDuration: duration, prompt: 'Create an extended version maintaining style and mood' }),
+        body: JSON.stringify({ targetDuration: duration, prompt: t('extendPrompt') }),
       })
 
       if (res.ok) {

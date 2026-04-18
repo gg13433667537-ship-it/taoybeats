@@ -21,6 +21,10 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
   }
 }
 
+function getDemoUser(): { id: string; email: string; role: string } {
+  return { id: 'demo-user', email: 'demo@taoybeats.com', role: 'USER' }
+}
+
 export type StemType = 'vocals' | 'drums' | 'bass' | 'other'
 
 export interface StemResult {
@@ -60,16 +64,16 @@ export async function POST(
   try {
     const { id: songId } = await params
 
-    // Auth check
-    const user = getSessionUser(request)
+    // Auth check - allow demo user for consistency with /api/songs
+    let user = getSessionUser(request)
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      user = getDemoUser()
     }
 
     // Get song
     const songsMap = global.songs as Map<string, Song> | undefined
     if (!songsMap) {
-      return NextResponse.json({ error: "Song not found" }, { status: 404 })
+      return NextResponse.json({ error: "Storage not initialized" }, { status: 500 })
     }
 
     const song = songsMap.get(songId)

@@ -70,8 +70,6 @@ export async function POST(
     const body = await request.json().catch(() => ({}))
     const {
       prompt, // Optional: custom continuation prompt
-      startFrom = 'end', // Where to start the continuation
-      duration = 60, // Duration in seconds (default 1 minute)
     } = body
 
     // Build continuation prompt from original song + custom prompt

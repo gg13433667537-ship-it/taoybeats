@@ -378,6 +378,7 @@ export default function GeneratePage() {
     setReferenceSong("")
     setUserNotes("")
     setIsInstrumental(false)
+    setBeatMakerMode(false)
     setSelectedVoiceId('')
     setReferenceAudio(null)
     setAudioOptions({
@@ -387,6 +388,12 @@ export default function GeneratePage() {
       referenceLyrics: [],
       referenceAudioUrl: '',
     })
+    setModel('music-2.6')
+    setOutputFormat('mp3')
+    setLyricsOptimizer(false)
+    setSampleRate(44100)
+    setBitrate(256000)
+    setAigcWatermark(false)
     setDuration(60)
     setGenerationStage('idle')
     setProgress(0)

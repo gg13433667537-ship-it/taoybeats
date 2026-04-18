@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { ChevronDown, ChevronUp, Music, Disc, FileAudio, Wand2, Gauge, Sliders, Layers, FileText } from "lucide-react"
+import { useI18n } from "@/lib/i18n"
 import ReferenceAudioUploader from "./ReferenceAudioUploader"
 
 // Enhanced Audio-to-Audio types
@@ -40,31 +41,6 @@ interface AdvancedOptionsProps {
   onAudioOptionsChange?: (options: Partial<AdvancedAudioOptions>) => void
 }
 
-const MODELS = [
-  { value: 'music-2.6', label: 'Music 2.6 (推荐)', desc: '高质量文本生成音乐' },
-  { value: 'music-cover', label: 'Music Cover (翻唱)', desc: '基于参考音频生成' },
-]
-
-const OUTPUT_FORMATS = [
-  { value: 'mp3', label: 'MP3', desc: '通用格式，压缩率高' },
-  { value: 'wav', label: 'WAV', desc: '无损格式，文件较大' },
-  { value: 'pcm', label: 'PCM', desc: '原始音频，适合后期处理' },
-]
-
-const SAMPLE_RATES = [
-  { value: 16000, label: '16kHz', desc: '低带宽' },
-  { value: 24000, label: '24kHz', desc: '标准' },
-  { value: 32000, label: '32kHz', desc: '高质量' },
-  { value: 44100, label: '44.1kHz', desc: 'CD品质' },
-]
-
-const BITRATES = [
-  { value: 32000, label: '32kbps', desc: '低' },
-  { value: 64000, label: '64kbps', desc: '中' },
-  { value: 128000, label: '128kbps', desc: '高' },
-  { value: 256000, label: '256kbps', desc: '极高' },
-]
-
 export default function AdvancedOptions({
   referenceAudio,
   onReferenceAudioChange,
@@ -83,7 +59,34 @@ export default function AdvancedOptions({
   audioOptions = {},
   onAudioOptionsChange,
 }: AdvancedOptionsProps) {
+  const { t } = useI18n()
   const [isExpanded, setIsExpanded] = useState(false)
+
+  // Computed arrays with translated values
+  const models = [
+    { value: 'music-2.6', label: t('model26Label'), desc: t('model26Desc') },
+    { value: 'music-cover', label: t('modelCoverLabel'), desc: t('modelCoverDesc') },
+  ]
+
+  const outputFormats = [
+    { value: 'mp3', label: 'MP3', desc: t('formatMp3Desc') },
+    { value: 'wav', label: 'WAV', desc: t('formatWavDesc') },
+    { value: 'pcm', label: 'PCM', desc: t('formatPcmDesc') },
+  ]
+
+  const sampleRates = [
+    { value: 16000, label: '16kHz', desc: t('sampleRateLow') },
+    { value: 24000, label: '24kHz', desc: t('sampleRateStandard') },
+    { value: 32000, label: '32kHz', desc: t('sampleRateHigh') },
+    { value: 44100, label: '44.1kHz', desc: t('sampleRateCd') },
+  ]
+
+  const bitrates = [
+    { value: 32000, label: '32kbps', desc: t('bitrateLow') },
+    { value: 64000, label: '64kbps', desc: t('bitrateMedium') },
+    { value: 128000, label: '128kbps', desc: t('bitrateHigh') },
+    { value: 256000, label: '256kbps', desc: t('bitrateVeryHigh') },
+  ]
 
   // Enhanced Audio-to-Audio state
   const [timbreSimilarity, setTimbreSimilarity] = useState(audioOptions.timbreSimilarity ?? 0.7)
@@ -147,30 +150,30 @@ export default function AdvancedOptions({
       >
         <div className="flex items-center gap-2">
           <Music className="w-4 h-4 text-text-muted" />
-          <span className="text-sm font-medium text-foreground">高级选项</span>
+          <span className="text-sm font-medium text-foreground">{t('advancedOptions')}</span>
           {referenceAudio && (
             <span className="text-xs px-2 py-0.5 rounded bg-accent/10 text-accent">
-              参考音频
+              {t('referenceAudio')}
             </span>
           )}
           {timbreSimilarity !== 0.7 && model === 'music-cover' && (
             <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-400">
-              音色:{Math.round(timbreSimilarity * 100)}%
+              {t('timbre')}:{Math.round(timbreSimilarity * 100)}%
             </span>
           )}
           {mixMode && (
             <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400">
-              混音模式
+              {t('mixMode')}
             </span>
           )}
           {referenceLyrics.length > 0 && (
             <span className="text-xs px-2 py-0.5 rounded bg-green-500/10 text-green-400">
-              参考歌词:{referenceLyrics.length}
+              {t('referenceLyrics')}:{referenceLyrics.length}
             </span>
           )}
           {model !== 'music-2.6' && (
             <span className="text-xs px-2 py-0.5 rounded bg-accent/10 text-accent">
-              Cover模型
+              {t('coverModel')}
             </span>
           )}
         </div>
@@ -188,10 +191,10 @@ export default function AdvancedOptions({
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-2 flex items-center gap-2">
               <Disc className="w-4 h-4" />
-              生成模型
+              {t('generationModel')}
             </label>
             <div className="space-y-2">
-              {MODELS.map((m) => (
+              {models.map((m) => (
                 <button
                   key={m.value}
                   onClick={() => onModelChange?.(m.value as 'music-2.6' | 'music-cover')}
@@ -204,7 +207,7 @@ export default function AdvancedOptions({
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">{m.label}</span>
                     {model === m.value && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-accent text-white">已选</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-accent text-white">{t('selected')}</span>
                     )}
                   </div>
                   <p className="text-xs text-text-muted mt-1">{m.desc}</p>
@@ -217,10 +220,10 @@ export default function AdvancedOptions({
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-2 flex items-center gap-2">
               <FileAudio className="w-4 h-4" />
-              输出格式
+              {t('outputFormat')}
             </label>
             <div className="flex gap-2">
-              {OUTPUT_FORMATS.map((f) => (
+              {outputFormats.map((f) => (
                 <button
                   key={f.value}
                   onClick={() => onOutputFormatChange?.(f.value as 'mp3' | 'wav' | 'pcm')}
@@ -241,7 +244,7 @@ export default function AdvancedOptions({
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-2 flex items-center gap-2">
               <Wand2 className="w-4 h-4" />
-              智能歌词生成
+              {t('smartLyricsGeneration')}
             </label>
             <button
               onClick={() => onLyricsOptimizerChange?.(!lyricsOptimizer)}
@@ -252,8 +255,8 @@ export default function AdvancedOptions({
               }`}
             >
               <div className="text-left">
-                <div className="text-sm font-medium text-foreground">自动生成歌词</div>
-                <p className="text-xs text-text-muted mt-1">根据音乐风格描述自动生成完整歌词</p>
+                <div className="text-sm font-medium text-foreground">{t('autoGenerateLyrics')}</div>
+                <p className="text-xs text-text-muted mt-1">{t('autoGenerateLyricsDesc')}</p>
               </div>
               <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                 lyricsOptimizer ? 'bg-accent border-accent' : 'border-text-muted'
@@ -269,17 +272,17 @@ export default function AdvancedOptions({
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-2 flex items-center gap-2">
               <Gauge className="w-4 h-4" />
-              音频质量
+              {t('audioQuality')}
             </label>
             <div className="space-y-3">
               {/* Sample Rate */}
               <div>
                 <div className="flex justify-between text-xs text-text-muted mb-1">
-                  <span>采样率</span>
+                  <span>{t('sampleRate')}</span>
                   <span>{sampleRate / 1000}kHz</span>
                 </div>
                 <div className="flex gap-1">
-                  {SAMPLE_RATES.map((r) => (
+                  {sampleRates.map((r) => (
                     <button
                       key={r.value}
                       onClick={() => onSampleRateChange?.(r.value as 16000 | 24000 | 32000 | 44100)}
@@ -297,11 +300,11 @@ export default function AdvancedOptions({
               {/* Bitrate */}
               <div>
                 <div className="flex justify-between text-xs text-text-muted mb-1">
-                  <span>比特率</span>
+                  <span>{t('bitrate')}</span>
                   <span>{bitrate / 1000}kbps</span>
                 </div>
                 <div className="flex gap-1">
-                  {BITRATES.map((b) => (
+                  {bitrates.map((b) => (
                     <button
                       key={b.value}
                       onClick={() => onBitrateChange?.(b.value as 32000 | 64000 | 128000 | 256000)}
@@ -330,8 +333,8 @@ export default function AdvancedOptions({
               }`}
             >
               <div className="text-left">
-                <div className="text-sm font-medium text-foreground">AI水印</div>
-                <p className="text-xs text-text-muted mt-1">添加AI生成标识（部分平台要求）</p>
+                <div className="text-sm font-medium text-foreground">{t('aiWatermark')}</div>
+                <p className="text-xs text-text-muted mt-1">{t('aiWatermarkDesc')}</p>
               </div>
               <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                 aigcWatermark ? 'bg-accent border-accent' : 'border-text-muted'
@@ -347,10 +350,10 @@ export default function AdvancedOptions({
           <div className="pt-4 border-t border-border">
             <label className="block text-sm font-medium text-text-secondary mb-2 flex items-center gap-2">
               <Music className="w-4 h-4" />
-              参考音频（可选）
+              {t('referenceAudioOptional')}
             </label>
             <p className="text-xs text-text-muted mb-3">
-              上传音频文件或输入URL，AI会学习这个音频的风格来生成新音乐
+              {t('referenceAudioDesc')}
             </p>
 
             {/* URL Input Option */}
@@ -360,7 +363,7 @@ export default function AdvancedOptions({
                   type="url"
                   value={referenceAudioUrl}
                   onChange={(e) => handleReferenceAudioUrlChange(e.target.value)}
-                  placeholder="或输入音频URL (https://...)"
+                  placeholder={t('orInputAudioUrl')}
                   className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm placeholder:text-text-muted focus:outline-none focus:border-accent"
                 />
                 {referenceAudioUrl && (
@@ -368,7 +371,7 @@ export default function AdvancedOptions({
                     onClick={() => handleReferenceAudioUrlChange('')}
                     className="px-3 py-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors text-sm"
                   >
-                    清除
+                    {t('clear')}
                   </button>
                 )}
               </div>
@@ -386,11 +389,11 @@ export default function AdvancedOptions({
             <div className="pt-4 border-t border-border">
               <label className="block text-sm font-medium text-text-secondary mb-2 flex items-center gap-2">
                 <Sliders className="w-4 h-4" />
-                音色相似度
+                {t('timbreSimilarity')}
                 <span className="text-xs text-accent font-normal">({Math.round(timbreSimilarity * 100)}%)</span>
               </label>
               <p className="text-xs text-text-muted mb-3">
-                控制生成音频的音色与参考音频的相似程度
+                {t('timbreSimilarityDesc')}
               </p>
               <div className="space-y-2">
                 <input
@@ -403,8 +406,8 @@ export default function AdvancedOptions({
                   className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-gradient-to-r from-accent/20 to-accent accent-accent"
                 />
                 <div className="flex justify-between text-xs text-text-muted">
-                  <span>原创风格</span>
-                  <span>完全模仿</span>
+                  <span>{t('originalStyle')}</span>
+                  <span>{t('fullImitation')}</span>
                 </div>
               </div>
             </div>
@@ -424,8 +427,8 @@ export default function AdvancedOptions({
                 <div className="flex items-center gap-3">
                   <Layers className={`w-5 h-5 ${mixMode ? 'text-blue-400' : 'text-text-muted'}`} />
                   <div className="text-left">
-                    <div className="text-sm font-medium text-foreground">混音模式</div>
-                    <p className="text-xs text-text-muted mt-1">将参考音频的人声与新的背景音乐混合</p>
+                    <div className="text-sm font-medium text-foreground">{t('mixMode')}</div>
+                    <p className="text-xs text-text-muted mt-1">{t('mixModeDesc')}</p>
                   </div>
                 </div>
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -441,7 +444,7 @@ export default function AdvancedOptions({
               {mixMode && (
                 <div className="mt-3 p-3 rounded-xl bg-surface-elevated border border-border">
                   <div className="flex justify-between text-xs text-text-muted mb-2">
-                    <span>人声音量</span>
+                    <span>{t('vocalVolume')}</span>
                     <span>{Math.round(mixModeVocalVolume * 100)}%</span>
                   </div>
                   <input
@@ -463,15 +466,15 @@ export default function AdvancedOptions({
             <div className="pt-4 border-t border-border">
               <label className="block text-sm font-medium text-text-secondary mb-2 flex items-center gap-2">
                 <FileText className="w-4 h-4" />
-                参考歌词（可选）
+                {t('referenceLyricsOptional')}
                 {referenceLyrics.length > 0 && (
                   <span className="text-xs px-2 py-0.5 rounded bg-green-500/10 text-green-400">
-                    {referenceLyrics.length}条
+                    {referenceLyrics.length}{t('items')}
                   </span>
                 )}
               </label>
               <p className="text-xs text-text-muted mb-3">
-                添加结构化参考歌词，帮助AI学习歌曲的结构和风格
+                {t('referenceLyricsDesc')}
               </p>
 
               {/* Add Reference Lyrics Form */}
@@ -480,14 +483,14 @@ export default function AdvancedOptions({
                   type="text"
                   value={newLyricsSection}
                   onChange={(e) => setNewLyricsSection(e.target.value)}
-                  placeholder="段落标签 (如 [Verse], [Chorus])"
+                  placeholder={t('sectionTagPlaceholder')}
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm placeholder:text-text-muted focus:outline-none focus:border-accent"
                 />
                 <div className="flex gap-2">
                   <textarea
                     value={newLyricsText}
                     onChange={(e) => setNewLyricsText(e.target.value)}
-                    placeholder="歌词内容..."
+                    placeholder={t('lyricsContentPlaceholder')}
                     rows={2}
                     className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm placeholder:text-text-muted focus:outline-none focus:border-accent resize-none"
                   />
@@ -496,7 +499,7 @@ export default function AdvancedOptions({
                     disabled={!newLyricsText.trim()}
                     className="px-3 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    添加
+                    {t('add')}
                   </button>
                 </div>
               </div>
@@ -516,7 +519,7 @@ export default function AdvancedOptions({
                           onClick={() => removeReferenceLyrics(index)}
                           className="text-xs text-error hover:text-error/80 transition-colors"
                         >
-                          删除
+                          {t('delete')}
                         </button>
                       </div>
                       <p className="text-sm text-foreground line-clamp-2">{lyrics.text}</p>
@@ -529,8 +532,7 @@ export default function AdvancedOptions({
 
           <div className="p-3 rounded-xl bg-accent/5 border border-accent/20">
             <p className="text-xs text-text-muted">
-              💡 提示：参考音频可以帮助AI更好地理解你想要的音乐风格。
-              请确保你拥有该音频的版权。
+              💡 {t('tipReferenceAudio')}
             </p>
           </div>
         </div>

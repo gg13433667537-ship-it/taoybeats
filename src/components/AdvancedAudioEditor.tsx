@@ -592,7 +592,7 @@ export default function AdvancedAudioEditor({ songId, audioUrl, onProcessed }: A
           {activeTab === 'translate' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">Original Lyrics</label>
+                <label className="block text-sm font-medium text-text-secondary mb-2">{t('originalLyrics')}</label>
                 <textarea
                   value={originalLyrics}
                   onChange={e => setOriginalLyrics(e.target.value)}

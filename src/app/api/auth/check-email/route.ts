@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { User } from "@/lib/types"
-
 
 if (!global.users) global.users = new Map()
 if (!global.songs) global.songs = new Map()

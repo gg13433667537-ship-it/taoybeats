@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { User } from "@/lib/types"
 import { createSessionToken } from "@/lib/auth-utils"
 
 // Shared global storage

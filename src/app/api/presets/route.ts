@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { User, Preset } from "@/lib/types"
+import type { Preset } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 
 

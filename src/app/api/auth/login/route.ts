@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
-import type { User } from "@/lib/types"
 import { createSessionToken } from "@/lib/auth-utils"
 import {
   rateLimitMiddleware,

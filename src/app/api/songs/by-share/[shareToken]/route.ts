@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Song, User } from "@/lib/types"
+import type { Song } from "@/lib/types"
 
 
 if (!global.users) global.users = new Map()

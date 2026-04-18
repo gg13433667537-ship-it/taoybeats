@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { User, Playlist } from "@/lib/types"
+import type { Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { playlistCache } from "@/lib/cache"
 

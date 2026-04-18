@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Song, User } from "@/lib/types"
+import type { Song } from "@/lib/types"
 import { miniMaxProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 
