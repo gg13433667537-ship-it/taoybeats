@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n"
 import { decodeSessionToken } from "@/lib/auth-utils"
 import AudioPlayer from "@/components/AudioPlayer"
 import LyricsAssistantModal from "@/components/LyricsAssistantModal"
+import LoginGuideModal from "@/components/LoginGuideModal"
 import VoiceSelector from "@/components/VoiceSelector"
 import PersonaSelector from "@/components/PersonaSelector"
 import AdvancedOptions from "@/components/AdvancedOptions"
@@ -131,6 +132,25 @@ export default function GeneratePage() {
 
   // Modal states
   const [isLyricsModalOpen, setIsLyricsModalOpen] = useState(false)
+  const [showLoginGuide, setShowLoginGuide] = useState(false)
+
+  // Check if user is logged in
+  const isLoggedIn = (() => {
+    if (typeof document === 'undefined') return false
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=')
+      if (name === 'session-token' && value) {
+        try {
+          const payload = decodeSessionToken(value)
+          return !!payload
+        } catch {
+          return false
+        }
+      }
+    }
+    return false
+  })()
 
   // Generation state
   const [generationStage, setGenerationStage] = useState<GenerationStage>('idle')
@@ -460,7 +480,7 @@ export default function GeneratePage() {
               {generationStage === 'idle' && (
                 <section className="p-4 rounded-2xl bg-gradient-to-r from-accent/10 to-accent-glow/10 border border-accent/20">
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-semibold text-foreground">Quick Generate</h2>
+                    <h2 className="text-sm font-semibold text-foreground">{t('quickGenerate')}</h2>
                     <button
                       onClick={() => {
                         const name = prompt('Preset name:')
@@ -481,7 +501,7 @@ export default function GeneratePage() {
                       }}
                       className="text-xs px-2 py-1 rounded bg-accent/20 text-accent hover:bg-accent/30 transition-colors"
                     >
-                      + Save Current
+                      + {t('saveCurrent')}
                     </button>
                   </div>
 
@@ -503,12 +523,12 @@ export default function GeneratePage() {
                       />
                     </button>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">Beat Maker Mode</p>
-                      <p className="text-xs text-text-muted">Generate instrumentals without vocals</p>
+                      <p className="text-sm font-medium text-foreground">{t('beatMakerMode')}</p>
+                      <p className="text-xs text-text-muted">{t('beatMakerModeDesc')}</p>
                     </div>
                     {beatMakerMode && (
                       <span className="px-2 py-1 rounded bg-purple-500/10 text-purple-400 text-xs font-medium">
-                        Drums + Bass + Synth
+                        {t('plusDrumsBassSynth')}
                       </span>
                     )}
                   </div>
@@ -582,7 +602,13 @@ export default function GeneratePage() {
                       {!isInstrumental && (
                         <button
                           type="button"
-                          onClick={() => setIsLyricsModalOpen(true)}
+                          onClick={() => {
+                            if (isLoggedIn) {
+                              setIsLyricsModalOpen(true)
+                            } else {
+                              setShowLoginGuide(true)
+                            }
+                          }}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-xs font-medium transition-all"
                         >
                           <Sparkles className="w-3.5 h-3.5" />
@@ -661,7 +687,7 @@ export default function GeneratePage() {
                   {/* Duration */}
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">
-                      Duration
+                      {t('duration')}
                     </label>
                     <div className="flex gap-2">
                       {DURATIONS.map(d => (
@@ -913,6 +939,16 @@ export default function GeneratePage() {
         onConfirm={handleLyricsConfirmed}
         initialTitle={title}
         initialMood={mood}
+      />
+
+      {/* Login Guide Modal for unauthenticated users */}
+      <LoginGuideModal
+        isOpen={showLoginGuide}
+        onClose={() => setShowLoginGuide(false)}
+        onLoginSuccess={() => {
+          setShowLoginGuide(false)
+          setIsLyricsModalOpen(true)
+        }}
       />
     </div>
   )

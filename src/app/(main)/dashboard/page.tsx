@@ -582,9 +582,9 @@ export default function DashboardPage() {
                               {showPlaylistDropdown === song.id && (
                                 <div className="absolute right-0 top-full mt-1 w-56 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
                                   <div className="p-2">
-                                    <p className="px-3 py-2 text-xs font-medium text-text-muted">Add to Playlist</p>
+                                    <p className="px-3 py-2 text-xs font-medium text-text-muted">{t('addToPlaylist')}</p>
                                     {playlists.length === 0 ? (
-                                      <p className="px-3 py-2 text-sm text-text-muted">No playlists yet</p>
+                                      <p className="px-3 py-2 text-sm text-text-muted">{t('noPlaylists')}</p>
                                     ) : (
                                       playlists.map(playlist => (
                                         <button
@@ -618,20 +618,20 @@ export default function DashboardPage() {
           {/* Playlists Section */}
           <section className="mt-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-foreground">Playlists</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t('playlists')}</h2>
               <button
                 onClick={() => setShowPlaylistModal(true)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-accent hover:bg-accent/10 transition-colors"
               >
                 <FolderPlus className="w-4 h-4" />
-                New Playlist
+                {t('createPlaylist')}
               </button>
             </div>
 
             {playlists.length === 0 ? (
               <div className="p-8 rounded-2xl bg-surface border border-border text-center">
                 <ListMusic className="w-10 h-10 text-text-muted mx-auto mb-3" />
-                <p className="text-text-secondary text-sm">No playlists yet. Create one to organize your songs.</p>
+                <p className="text-text-secondary text-sm">{t('createPlaylistToOrganize')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -653,15 +653,15 @@ export default function DashboardPage() {
                       </button>
                     </div>
                     <h3 className="font-medium text-foreground truncate">{playlist.name}</h3>
-                    <p className="text-sm text-text-muted">{playlist.songCount} songs</p>
+                    <p className="text-sm text-text-muted">{playlist.songCount} {t('songsCount')}</p>
                     <div className="flex items-center gap-2 mt-2">
                       {playlist.isPublic ? (
                         <span className="flex items-center gap-1 text-xs text-text-muted">
-                          <Eye className="w-3 h-3" /> Public
+                          <Eye className="w-3 h-3" /> {t('public')}
                         </span>
                       ) : (
                         <span className="flex items-center gap-1 text-xs text-text-muted">
-                          <EyeOff className="w-3 h-3" /> Private
+                          <EyeOff className="w-3 h-3" /> {t('private')}
                         </span>
                       )}
                     </div>
@@ -678,7 +678,7 @@ export default function DashboardPage() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-foreground">Create Playlist</h2>
+              <h2 className="text-xl font-semibold text-foreground">{t('createPlaylist')}</h2>
               <button
                 onClick={() => setShowPlaylistModal(false)}
                 aria-label="Close"
@@ -689,7 +689,7 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">Name</label>
+                <label className="block text-sm font-medium text-text-secondary mb-2">{t('playlistName')}</label>
                 <input
                   type="text"
                   value={newPlaylistName}
@@ -699,7 +699,7 @@ export default function DashboardPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">Description (optional)</label>
+                <label className="block text-sm font-medium text-text-secondary mb-2">{t('optionalDescription')}</label>
                 <textarea
                   value={newPlaylistDesc}
                   onChange={(e) => setNewPlaylistDesc(e.target.value)}

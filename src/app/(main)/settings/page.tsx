@@ -82,10 +82,16 @@ export default function SettingsPage() {
 
   const TABS = [
     { id: 'profile', label: t('profile'), icon: User },
-    { id: 'api', label: t('apiConfiguration'), icon: Key },
     { id: 'notifications', label: t('notifications'), icon: Bell },
     { id: 'security', label: t('security'), icon: Shield },
   ]
+
+  // Admin-only tabs
+  const ADMIN_TABS = [
+    { id: 'api', label: t('apiConfiguration'), icon: Key },
+  ]
+
+  const allTabs = userRole === 'ADMIN' ? [...TABS, ...ADMIN_TABS] : TABS
 
   // Load API key from localStorage on mount
   useEffect(() => {
@@ -212,7 +218,7 @@ export default function SettingsPage() {
             {/* Sidebar */}
             <nav className="w-64 flex-shrink-0" role="tablist" aria-label="Settings sections">
               <div className="space-y-1">
-                {TABS.map(tab => (
+                {allTabs.map(tab => (
                   <button
                     key={tab.id}
                     role="tab"
