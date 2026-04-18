@@ -7,6 +7,73 @@
 
 ---
 
+## Framework-Reconstruction — Claude Code × Codex 协作框架重建
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-18
+
+Phase 1 - 审计完成:
+  - 归档 AGENTS.md（包含旧的 Codex-centric 规则）
+  - 归档 .coord/CODEX_TASKS.md 和 .coord/CODEX_RESULTS.md
+  - 归档 .codex/agents/ 下的 5 个旧代理定义
+  - 保留 .coord/CLAIMS.md, DECISIONS.md, TASKS.md, HANDOFF.md
+
+Phase 2 - 备份废除完成:
+  - 创建 .archive/legacy-ai-collab/2026-04-18/
+  - 移动 AGENTS.md → .archive/
+  - 移动 CODEX_* → .archive/
+  - 移动 .codex/agents/*.md → .archive/
+
+Phase 3 - 新框架落地完成:
+  - 重写 CLAUDE.md（新框架单一入口规则）
+  - 更新 .coord/CLAIMS.md（移除 Codex agents）
+  - 更新 .coord/DECISIONS.md（添加 D-019 决策）
+  - 更新 .coord/TASKS.md（移除 Codex 委托流程，添加简化协作框架）
+
+Phase 4 - 待集成:
+  - Codex CLI 保留但仅用于高影响决策
+  - Token 成本监控
+  - 定期审查 Codex 调用频率
+
+Phase 5 - 迁移报告输出（本次）
+
+改动文件:
+  - AGENTS.md → .archive/legacy-ai-collab/2026-04-18/
+  - .coord/CODEX_TASKS.md → .archive/
+  - .coord/CODEX_RESULTS.md → .archive/
+  - .codex/agents/*.md → .archive/
+  - CLAUDE.md（重写）
+  - .coord/CLAIMS.md（更新）
+  - .coord/DECISIONS.md（D-019）
+  - .coord/TASKS.md（更新）
+
+新框架核心变更:
+  1. Claude Code 是唯一入口，用户只与 Claude Code 对话
+  2. Codex 仅用于高影响力决策（架构重构、重大技术选型）
+  3. Token 成本是硬约束，常规工作不调用 Codex
+  4. 安全第一：绝不发送 API keys/tokens 到 Codex
+
+验证结果:
+  - 所有文件已正确移动到 .archive/
+  - 新 CLAUDE.md 符合简化框架原则
+  - .coord/ 文件已更新
+
+下一步:
+  - 继续完成待完成任务（T-038 Admin i18n, T-032 管理员入口等）
+  - 监控 Token 使用成本
+  - 定期回顾框架效果
+```
+
+---
+
+
+
+---
+
 ## T-029-fix — Admin 用户编辑 Modal 受控状态修复
 
 **从**: codex-main

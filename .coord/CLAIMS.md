@@ -6,22 +6,12 @@
 
 | Agent ID | 类型 | 配置文件 | 职责 |
 |----------|------|----------|------|
-| claude-main | orchestration | — | 总控、任务分派 |
-| codex-main | implementation | — | 主实现者 |
-| worker-frontend | implementation | .codex/agents/worker-frontend.md | 前端实现 |
-| worker-backend | implementation | .codex/agents/worker-backend.md | 后端实现 |
-| worker-tests | verification | .codex/agents/worker-tests.md | 测试与回归 |
-| explorer-codebase | research | .codex/agents/explorer-codebase.md | 代码分析 |
-| reviewer-quality | review | .codex/agents/reviewer-quality.md | 质量复核 |
+| claude-main | orchestration | — | 总控、任务分派、日常开发 |
 
 ## 活跃 Claims
 
 | 任务号 | 负责人 | 路径 | 认领时间 | 预计释放条件 | 状态 |
 |--------|--------|------|----------|--------------|------|
-| T-029-fix | codex-main | src/app/admin/page.tsx | 2026-04-17 12:46 | Admin 编辑 modal 改为受控状态并完成验证/HANDOFF | released |
-| T-029-fix | codex-main | src/app/admin/user-edit-modal-state.ts | 2026-04-17 12:46 | Admin 编辑 modal 改为受控状态并完成验证/HANDOFF | released |
-| T-029-fix | codex-main | src/app/admin/user-edit-modal-state.test.mts | 2026-04-17 12:46 | Admin 编辑 modal 改为受控状态并完成验证/HANDOFF | released |
-| T-029-fix | codex-main | .coord/HANDOFF.md | 2026-04-17 12:46 | 写入本次修复交接并释放 Claim | released |
 
 ---
 

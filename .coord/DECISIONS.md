@@ -10,6 +10,7 @@
 | D-016 | 2026-04-17 | 方法论升级 | 集成 Superpowers 5.0.7 | brainstorming/TDD/调试/验证标准化 | 全部开发流程 |
 | D-017 | 2026-04-17 | 工具集成 | 集成 Codex Plugin CC 1.0.3 | 直接从 Claude 调用 Codex 审查与委托 | 协作流程 |
 | D-018 | 2026-04-17 | 协作框架 | Claude 总控 + Codex 实现引擎 | Superpowers 方法论指导 + Codex 执行 | 协作模式 |
+| D-019 | 2026-04-18 | 协作框架简化 | Claude Code 单一入口，Codex 仅用于高影响力决策 | Token 成本控制，简化日常开发流程 | 协作模式 |
 | D-004 | 2026-04-17 | 前端框架 | Next.js 14 App Router + TypeScript | SSR/SSG 好，API Routes 内置，Vercel 原生支持 | 前端架构 |
 | D-005 | 2026-04-17 | UI 组件库 | shadcn/ui + Tailwind CSS | 可完全定制，组件质量高，源码在库内，支持暗色主题 | UI 架构 |
 | D-006 | 2026-04-17 | 数据库 | Prisma + PostgreSQL | 类型安全，迁移方便，生态成熟 | 数据层 |

@@ -1,33 +1,44 @@
 # TASKS.md — 任务登记
 
-> 每个任务 ID 对应一个可领取的工作单元。Claim 规则见 AGENTS.md。
+> 每个任务 ID 对应一个可领取的工作单元。Claim 规则见 CLAUDE.md。
 
 ---
 
-## 协作框架更新 (2026-04-17)
+## 协作框架 (2026-04-18 简化版)
 
-### 已集成的工具
+### 核心原则
 
-| 工具 | 版本 | 用途 |
-|------|------|------|
-| Superpowers | 5.0.7 | 方法论：brainstorming/TDD/调试/验证 |
-| Codex Plugin CC | 1.0.3 | 代码审查与任务委托 |
+| 原则 | 说明 |
+|------|------|
+| Claude Code 单一入口 | 用户只与 Claude Code 对话 |
+| Codex 仅限高影响决策 | 架构变更、重大技术选型 |
+| Token 成本硬约束 | 常规工作不调用 Codex |
+| 安全优先 | 绝不发送 API keys/tokens 到 Codex |
 
-### Skill 调用流程
+### Skill 调用策略
 
-任何任务开始前：
-1. `superpowers:brainstorming` — 理解需求、设计方案
-2. `superpowers:test-driven-development` — 实现前写测试
-3. `superpowers:verification-before-completion` — 完成后验证
-4. `/codex:review` — 提交前 Codex 审查
+| 场景 | 调用 Skill |
+|------|-----------|
+| 复杂需求分析 | `superpowers:brainstorming` |
+| 实现前写测试 | `superpowers:test-driven-development` |
+| 完成后验证 | `superpowers:verification-before-completion` |
+| 架构重构方案 | Codex (通过 Agent tool) |
+| 重大技术选型 | Codex (通过 Agent tool) |
 
-### Codex 委托流程
+### Codex 调用条件
 
-```
-/codex:rescue <任务描述>     # 委托 Codex 执行
-/codex:status               # 检查进度
-/codex:result               # 获取结果
-```
+以下情况才调用 Codex：
+- 架构重构方案设计
+- 跨模块复杂问题诊断
+- 重大技术选型评估
+- 安全/性能关键决策
+
+以下情况不调用 Codex：
+- 常规 bug 修复
+- 常规功能开发
+- UI/组件开发
+- 测试编写
+- 代码审查（常规）
 
 ---
 

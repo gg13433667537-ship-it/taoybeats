@@ -25,37 +25,52 @@ ai-music/
 │   ├── settings.json  # 权限和运行设置
 │   ├── agents/        # 项目级子代理定义
 │   ├── hooks/         # 钩子脚本
-│   └── rules/          # 本地规则
-├── .coord/            # 多 Agent 协作协调
-│   ├── PROJECT.md      # 项目概要
-│   ├── TASKS.md        # 任务登记
-│   ├── CLAIMS.md       # 文件认领
-│   ├── DECISIONS.md    # 架构决策
-│   ├── HANDOFF.md      # 任务交接
-│   └── CHECKS.md       # 验证命令
-├── AGENTS.md           # 全局协作协议（与 Codex 共享）
-├── src/                # 源代码
-│   ├── app/            # Next.js App Router 页面
+│   └── rules/         # 本地规则
+├── .coord/            # 协作协调
+│   ├── TASKS.md       # 任务登记
+│   ├── CLAIMS.md      # 文件认领
+│   ├── DECISIONS.md   # 架构决策
+│   └── HANDOFF.md     # 任务交接
+├── src/               # 源代码
+│   ├── app/           # Next.js App Router 页面
 │   ├── components/     # React 组件
-│   ├── hooks/          # 自定义 Hooks
-│   └── lib/            # 工具函数和库
-├── tests/              # 测试代码 (Vitest + Playwright)
-├── docs/               # 文档
-├── prisma/             # Prisma Schema
-├── scripts/            # 构建和部署脚本
-├── public/             # 静态资源
-└── supabase/           # Supabase 配置
+│   ├── hooks/         # 自定义 Hooks
+│   └── lib/           # 工具函数和库
+├── tests/             # 测试代码 (Vitest + Playwright)
+├── docs/              # 文档
+├── prisma/            # Prisma Schema
+├── scripts/           # 构建和部署脚本
+├── public/            # 静态资源
+└── supabase/          # Supabase 配置
 ```
 
 ## 协作协议
 
 **核心规则**：
-1. 写文件前必须先 Claim（`.coord/CLAIMS.md`）
-2. 同一文件同一时刻只有一个写作者
-3. 任务完成必须写 HANDOFF
-4. 未验证的代码不得标记完成
 
-**详细规则**: 见 `AGENTS.md`
+1. **Claude Code 是唯一入口** — 用户只与 Claude Code 对话，不直接与 Codex 交互
+2. **Claude Code 主导日常开发** — 所有任务由 Claude Code 接收、分解、执行
+3. **Codex 仅用于高影响力决策** — 仅在架构变更、重大技术选型等高影响场景才调用 Codex
+4. **Token 成本是硬约束** — 常规工作不调用 Codex，避免不必要的成本
+5. **安全第一** — 绝不将 API keys/tokens 发送给 Codex
+6. **写文件前必须 Claim** — 通过 `.coord/CLAIMS.md` 声明文件所有权
+7. **同一文件同一时刻只有一个写作者**
+8. **任务完成必须写 HANDOFF**
+9. **未验证的代码不得标记完成**
+
+## Codex 使用策略
+
+| 场景 | 是否调用 Codex |
+|------|---------------|
+| 常规 bug 修复 | 否 |
+| 常规功能开发 | 否 |
+| UI/组件开发 | 否 |
+| 测试编写 | 否 |
+| 代码审查（常规）| 否 |
+| 架构重构方案 | 是 |
+| 重大技术选型 | 是 |
+| 跨模块复杂问题 | 是 |
+| 安全/性能关键决策 | 是 |
 
 ## 默认行为
 
@@ -85,9 +100,10 @@ npm run db:studio    # 打开 Prisma Studio
 ## 入口行为
 
 1. 用户自然语言提出想法
-2. AI 总控整理结构化需求
+2. Claude Code 整理结构化需求
 3. 补出关键未考虑到的问题
 4. 给出少量高价值选项
 5. 形成可执行任务清单
 6. 并发执行可并行任务
 7. 串行执行强耦合任务
+8. 完成后验证并更新 HANDOFF
