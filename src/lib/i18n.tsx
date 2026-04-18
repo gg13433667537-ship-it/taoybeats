@@ -154,6 +154,10 @@ const translations = {
     generatingLabel: 'generating',
     role: 'Role',
     usage: 'Usage',
+    updateFailed: 'Update failed',
+    updateFailedRetry: 'Update failed, please try again later',
+    deleteFailed: 'Delete failed',
+    deleteFailedRetry: 'Delete failed, please try again later',
 
     // Generate
     createNewSongPage: 'Create New Song',
@@ -402,6 +406,10 @@ const translations = {
     generatingLabel: '生成中',
     role: '角色',
     usage: '使用量',
+    updateFailed: '更新失败',
+    updateFailedRetry: '更新失败，请稍后重试',
+    deleteFailed: '删除失败',
+    deleteFailedRetry: '删除失败，请稍后重试',
 
     // Generate
     createNewSongPage: '创建新歌曲',

@@ -175,6 +175,7 @@ export async function POST(request: NextRequest) {
       voiceId,
       referenceAudio,
       status: "PENDING",
+      moderationStatus: "APPROVED", // Auto-approve for MVP
       shareToken,
       createdAt: now,
       updatedAt: now,

@@ -138,7 +138,7 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
           <>
             <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
 
-            <div className="absolute top-full left-0 mt-2 w-80 max-h-96 overflow-y-auto bg-surface border border-border rounded-xl shadow-xl z-20">
+            <div className="absolute top-full left-0 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-96 overflow-y-auto bg-surface border border-border rounded-xl shadow-xl z-20">
               <div className="p-3 border-b border-border flex items-center justify-between">
                 <span className="text-sm font-medium text-foreground">选择音色</span>
                 <button

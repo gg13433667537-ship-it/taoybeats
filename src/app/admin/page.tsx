@@ -182,11 +182,11 @@ export default function AdminPage() {
         setShowUserModal(false)
         setSelectedUser(null)
       } else {
-        setAdminError(data.error || "更新失败")
+        setAdminError(data.error || t('updateFailed'))
       }
     } catch (error) {
       console.error("Error updating user:", error)
-      setAdminError("更新失败，请稍后重试")
+      setAdminError(t('updateFailedRetry'))
     }
     setActionLoading(false)
   }
@@ -201,11 +201,11 @@ export default function AdminPage() {
         await Promise.all([fetchUsers(userPagination.page, searchQuery), fetchStats()])
         setShowDeleteConfirm({ show: false })
       } else {
-        setAdminError(data.error || "删除失败")
+        setAdminError(data.error || t('deleteFailed'))
       }
     } catch (error) {
       console.error("Error deleting user:", error)
-      setAdminError("删除失败，请稍后重试")
+      setAdminError(t('deleteFailedRetry'))
     }
     setActionLoading(false)
   }

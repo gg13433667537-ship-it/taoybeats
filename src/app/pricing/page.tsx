@@ -2,12 +2,72 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Music, Check, Zap } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Music, Check, Zap, Loader2 } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 export default function PricingPage() {
   const { t } = useI18n()
+  const router = useRouter()
   const [annual, setAnnual] = useState(false)
+  const [isCheckingOut, setIsCheckingOut] = useState(false)
+
+  // Stripe Price IDs (replace with actual Stripe price IDs)
+  const STRIPE_PRICE_IDS = {
+    pro_monthly: process.env.NEXT_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || "price_monthly_placeholder",
+    pro_annual: process.env.NEXT_PUBLIC_STRIPE_PRO_ANNUAL_PRICE_ID || "price_annual_placeholder",
+  }
+
+  const handleCheckout = async (planId: string) => {
+    if (planId === 'free') {
+      router.push('/register')
+      return
+    }
+
+    // Check if user is logged in
+    const sessionToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('session-token='))
+
+    if (!sessionToken) {
+      router.push('/login?plan=pro')
+      return
+    }
+
+    setIsCheckingOut(true)
+    try {
+      // Parse session token to get user info
+      const token = sessionToken.split('=')[1]
+      const payload = JSON.parse(Buffer.from(token, 'base64').toString())
+      const email = payload.email
+
+      // Create Stripe checkout session
+      const priceId = annual ? STRIPE_PRICE_IDS.pro_annual : STRIPE_PRICE_IDS.pro_monthly
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          priceId,
+          userId: payload.id,
+          email,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.url) {
+        window.location.assign(data.url)
+      } else {
+        console.error('Checkout failed:', data.error)
+        alert('Failed to create checkout session. Please try again.')
+      }
+    } catch (error) {
+      console.error('Checkout error:', error)
+      alert('Failed to create checkout session. Please try again.')
+    } finally {
+      setIsCheckingOut(false)
+    }
+  }
 
   const PLANS = [
     {
@@ -157,16 +217,22 @@ export default function PricingPage() {
                 ))}
               </ul>
 
-              <Link
-                href={plan.id === 'free' ? '/register' : '/register?plan=pro'}
-                className={`block w-full py-3 rounded-xl text-center font-medium transition-colors ${
+              <button
+                onClick={() => handleCheckout(plan.id)}
+                disabled={isCheckingOut}
+                className={`block w-full py-3 rounded-xl text-center font-medium transition-colors disabled:opacity-50 ${
                   plan.popular
                     ? 'bg-accent hover:bg-accent-hover text-white'
                     : 'border border-border hover:border-accent text-foreground'
                 }`}
               >
-                {plan.id === 'free' ? t('pricingGetStarted') : t('upgradeToPro')}
-              </Link>
+                {isCheckingOut ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </span>
+                ) : plan.id === 'free' ? t('pricingGetStarted') : t('upgradeToPro')}
+              </button>
             </div>
           ))}
         </div>

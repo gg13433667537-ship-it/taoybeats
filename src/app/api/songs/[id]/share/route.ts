@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { Song } from "@/lib/types"
 
 export async function POST(
   request: NextRequest,
@@ -7,9 +8,34 @@ export async function POST(
   const { id } = await params
 
   try {
-    // Generate a unique share token if not exists
-    // In production, check if song exists and user owns it
+    // Find the song
+    const songsMap = global.songs as Map<string, Song> | undefined
+    if (!songsMap) {
+      return NextResponse.json({ error: "Song not found" }, { status: 404 })
+    }
+
+    const song = songsMap.get(id)
+    if (!song) {
+      return NextResponse.json({ error: "Song not found" }, { status: 404 })
+    }
+
+    // If song already has a shareToken, return it
+    if (song.shareToken) {
+      const shareUrl = `${request.nextUrl.origin}/song/${song.shareToken}`
+      return NextResponse.json({
+        id,
+        shareToken: song.shareToken,
+        shareUrl,
+        message: "Share link retrieved successfully",
+      })
+    }
+
+    // Generate a new share token if not exists
     const shareToken = generateShareToken()
+
+    // Update the song with the new shareToken
+    const updatedSong = { ...song, shareToken }
+    songsMap.set(id, updatedSong)
 
     const shareUrl = `${request.nextUrl.origin}/song/${shareToken}`
 

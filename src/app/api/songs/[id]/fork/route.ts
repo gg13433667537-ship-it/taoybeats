@@ -9,14 +9,7 @@ export async function POST(
 
   try {
     const body = await request.json()
-    const { apiKey, modifications } = body
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "API key is required" },
-        { status: 400 }
-      )
-    }
+    const { modifications } = body
 
     // Fetch original song from storage
     const songsMap = global.songs as Map<string, Song> | undefined
@@ -46,6 +39,7 @@ export async function POST(
       referenceSong: modifications?.referenceSong ?? originalSong.referenceSong,
       userNotes: modifications?.userNotes ?? originalSong.userNotes,
       status: "PENDING",
+      moderationStatus: "APPROVED", // Auto-approve for MVP
       shareToken,
       createdAt: now,
       updatedAt: now,

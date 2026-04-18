@@ -39,7 +39,14 @@ export default function SongSharePage() {
   useEffect(() => {
     const fetchSong = async () => {
       try {
-        const res = await fetch(`/api/songs/${songId}`)
+        // Check if songId looks like a shareToken (8 alphanumeric chars)
+        const isShareToken = /^[a-z0-9]{8}$/i.test(songId)
+
+        const endpoint = isShareToken
+          ? `/api/songs/by-share/${songId}`
+          : `/api/songs/${songId}`
+
+        const res = await fetch(endpoint)
         if (res.ok) {
           const data = await res.json()
           setSong(data)
@@ -198,19 +205,12 @@ export default function SongSharePage() {
   const handleRemix = async () => {
     if (!song) return
 
-    // Get API key from localStorage or prompt user
-    const apiKey = localStorage.getItem('minimax_api_key')
-    if (!apiKey) {
-      setSongError('请先在生成页面设置 MiniMax API Key')
-      return
-    }
-
     setIsRemixing(true)
     try {
       const res = await fetch(`/api/songs/${songId}/fork`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey }),
+        body: JSON.stringify({}),
       })
 
       if (res.ok) {
