@@ -10,6 +10,7 @@ import AudioPlayer from "@/components/AudioPlayer"
 import LyricsAssistantModal from "@/components/LyricsAssistantModal"
 import LoginGuideModal from "@/components/LoginGuideModal"
 import SelectorDrawer, { SelectOption } from "@/components/SelectorDrawer"
+import { usePresets } from "@/lib/usePresets"
 import VoiceSelector from "@/components/VoiceSelector"
 import PersonaSelector from "@/components/PersonaSelector"
 import AdvancedOptions from "@/components/AdvancedOptions"
@@ -177,6 +178,9 @@ export default function GeneratePage() {
     }
     return false
   })()
+
+  // Cloud sync presets
+  const { presets: cloudPresets, isLoading: presetsLoading, createPreset: savePresetToCloud, deletePreset: deletePresetFromCloud } = usePresets()
 
   // Generation state
   const [generationStage, setGenerationStage] = useState<GenerationStage>('idle')
@@ -508,21 +512,20 @@ export default function GeneratePage() {
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-sm font-semibold text-foreground">{t('quickGenerate')}</h2>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         const name = prompt('Preset name:')
                         if (name) {
-                          const newPreset: GenerationPreset = {
-                            id: `custom-${Date.now()}`,
+                          const result = await savePresetToCloud({
                             name,
                             genre: selectedGenres,
                             mood,
                             instruments: selectedInstruments,
                             isInstrumental,
                             duration,
+                          })
+                          if (!result.success) {
+                            alert(result.error || 'Failed to save preset')
                           }
-                          const currentPresets = loadPresets()
-                          const updated = [...currentPresets, newPreset]
-                          localStorage.setItem('taoybeats-presets', JSON.stringify(updated))
                         }
                       }}
                       className="text-xs px-2 py-1 rounded bg-accent/20 text-accent hover:bg-accent/30 transition-colors"
@@ -560,7 +563,7 @@ export default function GeneratePage() {
                   </div>
 
                   <div className="flex gap-2 flex-wrap">
-                    {loadPresets().map(preset => (
+                    {cloudPresets.map(preset => (
                       <button
                         key={preset.id}
                         onClick={() => {

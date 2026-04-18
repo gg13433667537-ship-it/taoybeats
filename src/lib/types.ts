@@ -71,3 +71,17 @@ export interface Playlist {
   createdAt: string
   updatedAt: string
 }
+
+export interface Preset {
+  id: string
+  userId: string
+  name: string
+  genre: string[]
+  mood: string
+  instruments: string[]
+  isInstrumental: boolean
+  duration: number
+  shareToken?: string
+  createdAt: string
+  updatedAt: string
+}
