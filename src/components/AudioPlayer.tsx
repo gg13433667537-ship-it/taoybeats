@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward } from "lucide-react"
+import WaveSurfer from "wavesurfer.js"
 
 interface AudioPlayerProps {
   src?: string
@@ -11,50 +12,85 @@ interface AudioPlayerProps {
 }
 
 export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayerProps) {
-  const audioRef = useRef<HTMLAudioElement>(null)
+  const waveformRef = useRef<HTMLDivElement>(null)
+  const wavesurferRef = useRef<WaveSurfer | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
+  const [isReady, setIsReady] = useState(false)
+
+  // Initialize WaveSurfer
+  useEffect(() => {
+    if (!waveformRef.current || !src) return
+
+    const wavesurfer = WaveSurfer.create({
+      container: waveformRef.current,
+      waveColor: '#4a4a4a',
+      progressColor: '#a855f7',
+      cursorColor: '#ec4899',
+      barWidth: 2,
+      barRadius: 2,
+      cursorWidth: 1,
+      height: 48,
+      barGap: 2,
+    })
+
+    wavesurferRef.current = wavesurfer
+
+    wavesurfer.on('ready', () => {
+      setDuration(wavesurfer.getDuration())
+      setIsReady(true)
+    })
+
+    wavesurfer.on('audioprocess', () => {
+      setCurrentTime(wavesurfer.getCurrentTime())
+    })
+
+    wavesurfer.on('timeupdate', () => {
+      setCurrentTime(wavesurfer.getCurrentTime())
+    })
+
+    wavesurfer.on('play', () => setIsPlaying(true))
+    wavesurfer.on('pause', () => setIsPlaying(false))
+    wavesurfer.on('finish', () => {
+      setIsPlaying(false)
+      onEnded?.()
+    })
+
+    wavesurfer.load(src)
+
+    return () => {
+      wavesurfer.destroy()
+    }
+  }, [src, onEnded])
 
   const togglePlay = useCallback(() => {
-    if (!audioRef.current || !src) return
-    if (isPlaying) {
-      audioRef.current.pause()
-    } else {
-      audioRef.current.play()
-    }
-    setIsPlaying(!isPlaying)
-  }, [isPlaying, src])
+    if (!wavesurferRef.current || !isReady) return
+    wavesurferRef.current.playPause()
+  }, [isReady])
 
   const toggleMute = useCallback(() => {
-    if (!audioRef.current) return
-    audioRef.current.muted = !isMuted
+    if (!wavesurferRef.current) return
+    wavesurferRef.current.setMuted(!isMuted)
     setIsMuted(!isMuted)
   }, [isMuted])
 
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value)
-    if (audioRef.current) {
-      audioRef.current.volume = newVolume
+    if (wavesurferRef.current) {
+      wavesurferRef.current.setVolume(newVolume)
     }
     setVolume(newVolume)
     setIsMuted(newVolume === 0)
   }, [])
 
-  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value)
-    if (audioRef.current) {
-      audioRef.current.currentTime = time
-    }
-    setCurrentTime(time)
-  }, [])
-
   const skip = useCallback((seconds: number) => {
-    if (!audioRef.current) return
-    audioRef.current.currentTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds))
-  }, [duration])
+    if (!wavesurferRef.current) return
+    const newTime = wavesurferRef.current.getCurrentTime() + seconds
+    wavesurferRef.current.seekTo(newTime / wavesurferRef.current.getDuration())
+  }, [])
 
   const formatTime = (time: number): string => {
     const mins = Math.floor(time / 60)
@@ -80,44 +116,12 @@ export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayer
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [src, togglePlay, skip])
 
-  // Audio event handlers
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime)
-    const onDurationChange = () => setDuration(audio.duration || 0)
-    const onEnded = () => {
-      setIsPlaying(false)
-      setCurrentTime(0)
-      onEnded?.()
-    }
-    const onPlay = () => setIsPlaying(true)
-    const onPause = () => setIsPlaying(false)
-
-    audio.addEventListener('timeupdate', onTimeUpdate)
-    audio.addEventListener('durationchange', onDurationChange)
-    audio.addEventListener('ended', onEnded)
-    audio.addEventListener('play', onPlay)
-    audio.addEventListener('pause', onPause)
-
-    return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate)
-      audio.removeEventListener('durationchange', onDurationChange)
-      audio.removeEventListener('ended', onEnded)
-      audio.removeEventListener('play', onPlay)
-      audio.removeEventListener('pause', onPause)
-    }
-  }, [onEnded])
-
   if (!src) return null
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
     <div className="flex items-center gap-4 p-4 rounded-xl bg-surface border border-border">
-      <audio ref={audioRef} src={src} preload="metadata" />
-
       {/* Play/Pause */}
       <button
         onClick={togglePlay}
@@ -153,20 +157,9 @@ export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayer
         <p className="text-xs text-text-muted truncate">{artist || 'TaoyBeats'}</p>
       </div>
 
-      {/* Progress */}
+      {/* Waveform Progress */}
       <div className="flex-1 min-w-0">
-        <input
-          type="range"
-          min={0}
-          max={duration || 100}
-          value={currentTime}
-          onChange={handleSeek}
-          aria-label={`Progress: ${formatTime(currentTime)} of ${formatTime(duration)}`}
-          className="w-full h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent"
-          style={{
-            background: `linear-gradient(to right, #a855f7 ${progress}%, #2a2a2a ${progress}%)`,
-          }}
-        />
+        <div ref={waveformRef} className="w-full cursor-pointer" />
         <div className="flex justify-between mt-1">
           <span className="text-xs text-text-muted">{formatTime(currentTime)}</span>
           <span className="text-xs text-text-muted">{formatTime(duration)}</span>
