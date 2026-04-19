@@ -55,8 +55,10 @@ export default function DashboardPage() {
   const [newPlaylistName, setNewPlaylistName] = useState('')
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('')
   const [addingToPlaylist, setAddingToPlaylist] = useState(false)
+  const [showSongOptions, setShowSongOptions] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const playlistDropdownRef = useRef<HTMLDivElement>(null)
+  const songOptionsRef = useRef<HTMLDivElement>(null)
 
   // Handle download
   const handleDownload = (song: Song) => {
@@ -122,6 +124,10 @@ export default function DashboardPage() {
 
       if (playlistDropdownRef.current && !playlistDropdownRef.current.contains(event.target as Node)) {
         setShowPlaylistDropdown(null)
+      }
+
+      if (songOptionsRef.current && !songOptionsRef.current.contains(event.target as Node)) {
+        setShowSongOptions(null)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -200,6 +206,19 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error("Error deleting playlist:", error)
+    }
+  }
+
+  // Delete song
+  const handleDeleteSong = async (songId: string) => {
+    try {
+      const res = await fetch(`/api/songs/${songId}`, { method: "DELETE" })
+      if (res.ok) {
+        setSongs(songs.filter(s => s.id !== songId))
+        setShowSongOptions(null)
+      }
+    } catch (error) {
+      console.error("Error deleting song:", error)
     }
   }
 

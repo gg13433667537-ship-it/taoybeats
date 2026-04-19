@@ -264,11 +264,24 @@ export default function SongSharePage() {
     setShowShareMenu(false)
   }
 
-  const handleDownload = () => {
-    if (song?.audioUrl) {
-      window.open(song.audioUrl, "_blank")
+  const handleDownload = useCallback(async () => {
+    if (!song?.audioUrl) return
+    try {
+      const response = await fetch(song.audioUrl)
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = song.title || 'audio'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error('Download failed:', error)
+      setSongError(t('downloadFailed'))
     }
-  }
+  }, [song?.audioUrl, song?.title, t])
 
   const handleRemix = async () => {
     if (!song) return
@@ -431,6 +444,24 @@ export default function SongSharePage() {
       }
     })
     setPlayingStem(null)
+  }
+
+  const handleStemDownload = async (stemType: string, audioUrl: string) => {
+    try {
+      const response = await fetch(audioUrl)
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = stemType
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error('Stem download failed:', error)
+      setSongError(t('downloadFailed'))
+    }
   }
 
   const isGenerating = song?.status === 'GENERATING' || song?.status === 'PENDING'
