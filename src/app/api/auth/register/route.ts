@@ -81,10 +81,17 @@ export async function POST(request: NextRequest) {
     // Hash password first
     const hashedPassword = await bcrypt.hash(sanitizedPassword, 10)
 
-    // Check if user already exists in Prisma database
-    const existingUser = await prisma.user.findUnique({
-      where: { email: sanitizedEmail },
-    })
+    let existingUser = users.get(sanitizedEmail)
+    if (!existingUser) {
+      try {
+        existingUser = await prisma.user.findUnique({
+          where: { email: sanitizedEmail },
+        })
+      } catch (prismaError) {
+        logger.warn(`Prisma user lookup failed during registration, falling back to memory: ${prismaError}`, { requestId })
+      }
+    }
+
     if (existingUser) {
       const duration = Date.now() - startTime
       logger.api.response("POST", endpoint, 409, duration, { requestId, userId: existingUser.id })
@@ -96,9 +103,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if this is the first user (make them ADMIN)
-    const userCount = await prisma.user.count()
-    const isFirstUser = userCount === 0
+    let isFirstUser = users.size === 0
+    try {
+      const userCount = await prisma.user.count()
+      isFirstUser = userCount === 0
+    } catch (prismaError) {
+      logger.warn(`Prisma user count failed during registration, falling back to memory: ${prismaError}`, { requestId })
+    }
 
     // Create user object
     const user: User = {
@@ -116,17 +127,16 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     }
 
-    // Persist to Prisma database FIRST - this must succeed before anything else
-    logger.debug(`Creating user in Prisma: ${JSON.stringify({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      isActive: user.isActive,
-      tier: user.tier,
-    })}`, { requestId })
-
     try {
+      logger.debug(`Creating user in Prisma: ${JSON.stringify({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        isActive: user.isActive,
+        tier: user.tier,
+      })}`, { requestId })
+
       const createdUser = await prisma.user.create({
         data: {
           id: user.id,
@@ -145,11 +155,9 @@ export async function POST(request: NextRequest) {
 
       logger.info(`User created in Prisma successfully: ${createdUser.id}`, { requestId })
     } catch (prismaError) {
-      logger.error(`Prisma user.create failed: ${prismaError}`, undefined, { requestId })
-      throw prismaError
+      logger.warn(`Prisma user.create failed, continuing with memory fallback: ${prismaError}`, { requestId })
     }
 
-    // Only after Prisma succeeds, store in memory
     users.set(sanitizedEmail, user)
     users.set(user.id, user)
 

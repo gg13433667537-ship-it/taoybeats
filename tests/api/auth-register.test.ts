@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { POST as registerUser } from '@/app/api/auth/register/route'
+import { prisma } from '@/lib/db'
 
 function createMockNextRequest(
   url: string,
@@ -108,6 +109,29 @@ describe('Auth Register API', () => {
       const setCookie = response.headers.get('Set-Cookie') || ''
       expect(setCookie).toContain('session-token')
       expect(setCookie).toContain('HttpOnly')
+    })
+
+    it('should fall back to memory storage when Prisma is unavailable', async () => {
+      vi.mocked(prisma.user.findUnique).mockRejectedValueOnce(new Error('db unavailable'))
+      vi.mocked(prisma.user.count).mockRejectedValueOnce(new Error('db unavailable'))
+      vi.mocked(prisma.user.create).mockRejectedValueOnce(new Error('db unavailable'))
+
+      const request = createMockNextRequest('http://localhost:3000/api/auth/register', {
+        email: 'memory-user@example.com',
+        password: 'password123',
+        name: 'Memory User',
+      })
+
+      const response = await registerUser(request as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(201)
+      expect(data.success).toBe(true)
+      expect(data.user.email).toBe('memory-user@example.com')
+      expect(global.users?.get('memory-user@example.com')).toMatchObject({
+        email: 'memory-user@example.com',
+        name: 'Memory User',
+      })
     })
   })
 })

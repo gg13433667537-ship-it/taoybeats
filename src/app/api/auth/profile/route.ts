@@ -35,12 +35,31 @@ export async function GET(request: NextRequest) {
       return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
 
-    // Get full user from database
-    const existingUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { id: true, email: true, name: true, role: true, tier: true }
-    })
-    console.log("[Profile API] DB lookup for user.id:", user.id, "result:", existingUser)
+    let existingUser = null
+    try {
+      existingUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { id: true, email: true, name: true, role: true, tier: true }
+      })
+      console.log("[Profile API] DB lookup for user.id:", user.id, "result:", existingUser)
+    } catch (dbError) {
+      console.error("[Profile API] Prisma lookup failed, falling back to memory:", dbError)
+    }
+
+    if (!existingUser) {
+      const usersMap = global.users!
+      const memoryUser = usersMap.get(user.id) || usersMap.get(user.email)
+      if (memoryUser) {
+        existingUser = {
+          id: memoryUser.id,
+          email: memoryUser.email,
+          name: memoryUser.name || null,
+          role: memoryUser.role,
+          tier: memoryUser.tier,
+        }
+      }
+    }
+
     if (!existingUser) {
       const duration = Date.now() - startTime
       logger.api.response("GET", endpoint, 404, duration, { requestId })

@@ -31,7 +31,7 @@
  * @rateLimit 20 requests per minute per user
  */
 import { NextRequest, NextResponse } from "next/server"
-import type { Song } from "@/lib/types"
+import type { Song, User } from "@/lib/types"
 import { musicProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { checkDuplicateGeneration } from "@/lib/cache"
@@ -41,10 +41,16 @@ import { uploadAudioFromUrl } from "@/lib/r2-storage"
 import crypto from "crypto"
 
 // Shared global storage - ensure initialized
+if (typeof global.users === 'undefined') global.users = new Map()
 if (typeof global.songs === 'undefined') global.songs = new Map()
 if (typeof global.adminLogs === 'undefined') global.adminLogs = new Map()
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
 if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
+
+function getUsersMap(): Map<string, User> {
+  if (!global.users) global.users = new Map()
+  return global.users
+}
 
 // Helper to get or initialize songs map
 function getSongsMap(): Map<string, Song> {
@@ -139,58 +145,115 @@ interface SessionUser {
 async function getOrCreateUserFromDB(userId: string, email?: string): Promise<SessionUser> {
   const today = getDateKey()
   const thisMonth = getMonthKey()
+  const usersMap = getUsersMap()
 
-  // Try to find user in DB
-  let user = await prisma.user.findUnique({ where: { id: userId } })
+  try {
+    let user = await prisma.user.findUnique({ where: { id: userId } })
 
-  if (!user) {
-    // Create user in DB if doesn't exist
-    user = await prisma.user.create({
-      data: {
-        id: userId,
-        email: email || null,
-        name: email?.split('@')[0] || 'User',
-        tier: 'FREE',
-        dailyUsage: 0,
-        monthlyUsage: 0,
-        dailyResetAt: today,
-        monthlyResetAt: thisMonth,
-      },
-    })
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          id: userId,
+          email: email || null,
+          name: email?.split('@')[0] || 'User',
+          tier: 'FREE',
+          dailyUsage: 0,
+          monthlyUsage: 0,
+          dailyResetAt: today,
+          monthlyResetAt: thisMonth,
+        },
+      })
+    }
+
+    if (user.dailyResetAt !== today) {
+      user = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          dailyUsage: 0,
+          dailyResetAt: today,
+        },
+      })
+    }
+
+    if (user.monthlyResetAt !== thisMonth) {
+      user = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          monthlyUsage: 0,
+          monthlyResetAt: thisMonth,
+        },
+      })
+    }
+
+    const memoryUser: User = {
+      id: user.id,
+      email: user.email || email || `${user.id}@local`,
+      name: user.name || undefined,
+      role: user.role as User['role'],
+      isActive: user.isActive,
+      tier: user.tier as User['tier'],
+      dailyUsage: user.dailyUsage,
+      monthlyUsage: user.monthlyUsage,
+      dailyResetAt: user.dailyResetAt || today,
+      monthlyResetAt: user.monthlyResetAt || thisMonth,
+      createdAt: user.createdAt.toISOString(),
+    }
+    usersMap.set(memoryUser.id, memoryUser)
+    usersMap.set(memoryUser.email, memoryUser)
+
+    return {
+      id: user.id,
+      email: user.email || undefined,
+      name: user.name || undefined,
+      role: user.role,
+      tier: user.tier,
+      dailyUsage: user.dailyUsage,
+      monthlyUsage: user.monthlyUsage,
+      dailyResetAt: user.dailyResetAt || today,
+      monthlyResetAt: user.monthlyResetAt || thisMonth,
+    }
+  } catch (dbError) {
+    console.error("Prisma user lookup failed, falling back to memory:", dbError)
   }
 
-  // Check if we need to reset daily usage
-  if (user.dailyResetAt !== today) {
-    user = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        dailyUsage: 0,
-        dailyResetAt: today,
-      },
-    })
+  const existingMemoryUser = usersMap.get(userId) || (email ? usersMap.get(email) : undefined)
+  const memoryUser: User = existingMemoryUser || {
+    id: userId,
+    email: email || `${userId}@local`,
+    name: email?.split('@')[0] || 'User',
+    role: 'USER',
+    isActive: true,
+    tier: 'FREE',
+    dailyUsage: 0,
+    monthlyUsage: 0,
+    dailyResetAt: today,
+    monthlyResetAt: thisMonth,
+    createdAt: new Date().toISOString(),
   }
 
-  // Check if we need to reset monthly usage
-  if (user.monthlyResetAt !== thisMonth) {
-    user = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        monthlyUsage: 0,
-        monthlyResetAt: thisMonth,
-      },
-    })
+  if (memoryUser.dailyResetAt !== today) {
+    memoryUser.dailyUsage = 0
+    memoryUser.dailyResetAt = today
   }
+
+  if (memoryUser.monthlyResetAt !== thisMonth) {
+    memoryUser.monthlyUsage = 0
+    memoryUser.monthlyResetAt = thisMonth
+  }
+
+  usersMap.set(memoryUser.id, memoryUser)
+  usersMap.set(memoryUser.email, memoryUser)
 
   return {
-    id: user.id,
-    email: user.email || undefined,
-    name: user.name || undefined,
-    role: user.role,
-    tier: user.tier,
-    dailyUsage: user.dailyUsage,
-    monthlyUsage: user.monthlyUsage,
-    dailyResetAt: user.dailyResetAt || today,
-    monthlyResetAt: user.monthlyResetAt || thisMonth,
+    id: memoryUser.id,
+    email: memoryUser.email,
+    name: memoryUser.name,
+    role: memoryUser.role,
+    tier: memoryUser.tier,
+    dailyUsage: memoryUser.dailyUsage,
+    monthlyUsage: memoryUser.monthlyUsage,
+    dailyResetAt: memoryUser.dailyResetAt,
+    monthlyResetAt: memoryUser.monthlyResetAt,
   }
 }
 
@@ -212,13 +275,25 @@ async function getSessionUser(request: NextRequest): Promise<SessionUser | null>
 }
 
 async function incrementUsage(userId: string): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      dailyUsage: { increment: 1 },
-      monthlyUsage: { increment: 1 },
-    },
-  })
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        dailyUsage: { increment: 1 },
+        monthlyUsage: { increment: 1 },
+      },
+    })
+  } catch (dbError) {
+    console.error("Prisma usage update failed, falling back to memory:", dbError)
+    const usersMap = getUsersMap()
+    const user = usersMap.get(userId)
+    if (user) {
+      user.dailyUsage += 1
+      user.monthlyUsage += 1
+      usersMap.set(user.id, user)
+      usersMap.set(user.email, user)
+    }
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -544,19 +619,11 @@ export async function POST(request: NextRequest) {
             originalOwnerId: song.originalOwnerId || null,
           },
         })
-        createdSongs.push({ id: songId, part: partNumber, shareToken: shareToken || '' })
       } catch (prismaError) {
-        console.error("Failed to persist song to Prisma:", prismaError)
-        // Clean up any songs already created
-        for (const created of createdSongs) {
-          songsMap.delete(created.id)
-          await prisma.song.delete({ where: { id: created.id } }).catch(() => {})
-        }
-        return NextResponse.json(
-          { error: "Failed to create song. Please try again." },
-          { status: 500 }
-        )
+        console.error("Failed to persist song to Prisma, continuing with memory fallback:", prismaError)
       }
+
+      createdSongs.push({ id: songId, part: partNumber, shareToken: shareToken || '' })
     }
 
     // Increment usage in database ONLY after all songs are successfully created

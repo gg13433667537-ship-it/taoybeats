@@ -117,6 +117,39 @@ describe('musicProvider', () => {
     })
   })
 
+  it('maps nested music_generation_info responses with status 1 to an in-progress song', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          status: 1,
+          task_id: 'task-456',
+        },
+        base_resp: {
+          status_code: 0,
+          status_msg: 'success',
+        },
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await musicProvider.getProgress(
+      'task-456',
+      'test-key',
+      'https://api.minimaxi.com'
+    )
+
+    expect(result).toEqual({
+      status: 'GENERATING',
+      progress: 50,
+      stage: 'processing',
+      audioUrl: undefined,
+      videoUrl: undefined,
+      error: undefined,
+    })
+  })
+
   it('returns nested data.audio URLs from the download helper', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

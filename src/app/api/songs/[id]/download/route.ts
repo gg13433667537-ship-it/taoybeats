@@ -3,6 +3,7 @@
  * @description Proxied audio download endpoint to handle CORS restrictions from external audio URLs
  */
 import { NextRequest, NextResponse } from "next/server"
+import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { prisma } from "@/lib/db"
 
@@ -35,10 +36,18 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get song from database
-    const song = await prisma.song.findUnique({
-      where: { id },
-    })
+    let song: { title: string; audioUrl: string | null; userId: string } | Song | null =
+      (global.songs as Map<string, Song> | undefined)?.get(id) || null
+
+    if (!song) {
+      try {
+        song = await prisma.song.findUnique({
+          where: { id },
+        })
+      } catch (dbError) {
+        console.error("Prisma lookup failed, falling back to memory:", dbError)
+      }
+    }
 
     if (!song) {
       return NextResponse.json({ error: "Song not found" }, { status: 404 })

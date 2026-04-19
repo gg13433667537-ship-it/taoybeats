@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { GET as getSongs, POST as createSong } from '@/app/api/songs/route'
 import { createSessionToken } from '@/lib/auth-utils'
+import { prisma } from '@/lib/db'
 
 // Helper to create NextRequest - keeping for potential future use
 function _createMockRequest(body: unknown, options: RequestInit = {}): Request {
@@ -197,6 +198,46 @@ describe('Songs API', () => {
 
       expect(response.status).toBe(200)
       expect(data.id).toBeDefined()
+    })
+
+    it('should fall back to memory storage when Prisma is unavailable', async () => {
+      vi.mocked(prisma.user.findUnique).mockRejectedValueOnce(new Error('db unavailable'))
+      vi.mocked(prisma.user.create).mockRejectedValueOnce(new Error('db unavailable'))
+      vi.mocked(prisma.song.create).mockRejectedValue(new Error('db unavailable'))
+      vi.mocked(prisma.user.update).mockRejectedValue(new Error('db unavailable'))
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            status: 2,
+            audio: 'https://cdn.minimax.example/song.mp3',
+          },
+          base_resp: {
+            status_code: 0,
+            status_msg: 'success',
+          },
+        }),
+      }))
+
+      const sessionToken = createTestSessionToken('memory-user', 'memory-user@example.com')
+      const request = createMockNextRequest('http://localhost:3000/api/songs', {
+        title: 'Memory Song',
+        lyrics: 'Memory lyrics',
+        genre: ['pop'],
+        mood: 'happy',
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
+      })
+
+      const response = await createSong(request as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.id).toBeDefined()
+      expect(global.songs?.get(data.id)).toMatchObject({
+        title: 'Memory Song',
+        userId: 'memory-user',
+      })
     })
 
     it('should enforce free tier daily limit', async () => {

@@ -12,6 +12,16 @@
 
 | T-001 | claude-main | src/components/CloneVoiceModal.tsx | 2026-04-18 | 麦克风权限和上传功能修复完成 | released |
 | T-002 | claude-main | src/components/UserDropdown.tsx | 2026-04-18 | 登录UI状态修复组件 | released |
+| T-040 | claude-main | .coord/CLAIMS.md | 2026-04-19 00:34 | 音乐生成链路修复所需认领登记完成 | active |
+| T-040 | claude-main | docs/superpowers/plans/2026-04-19-music-generation-stabilization.md | 2026-04-19 00:34 | 生成链路修复计划已落盘 | active |
+| T-040 | claude-main | src/lib/ai-providers.ts | 2026-04-19 00:34 | MiniMax provider 解析与请求格式修复并通过相关测试 | active |
+| T-040 | claude-main | tests/lib/ai-providers.test.ts | 2026-04-19 00:34 | provider 回归测试覆盖已补齐并通过 | active |
+| T-040 | claude-main | src/app/api/auth/register/route.ts | 2026-04-19 00:42 | 注册在 Prisma 不可用时仍可回退到内存存储 | active |
+| T-040 | claude-main | src/app/api/auth/profile/route.ts | 2026-04-19 00:42 | 资料查询在 Prisma 不可用时仍可回退到内存存储 | active |
+| T-040 | claude-main | src/app/api/songs/route.ts | 2026-04-19 00:42 | 歌曲创建在 Prisma 不可用时仍可继续生成 | active |
+| T-040 | claude-main | src/app/api/songs/[id]/download/route.ts | 2026-04-19 00:42 | 下载接口在 Prisma 不可用时可从内存读取歌曲 | active |
+| T-040 | claude-main | tests/api/auth-register.test.ts | 2026-04-19 00:42 | 注册 fallback 回归测试补齐并通过 | active |
+| T-040 | claude-main | tests/api/songs.test.ts | 2026-04-19 00:42 | 歌曲创建 fallback 回归测试补齐并通过 | active |
 
 ---
 

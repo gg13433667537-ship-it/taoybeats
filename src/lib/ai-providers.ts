@@ -16,6 +16,12 @@ export type GenerationProgress = {
   error?: string
 }
 
+export type MiniMaxModel =
+  | 'music-2.5'
+  | 'music-2.5-turbo'
+  | 'music-2.6'
+  | 'music-cover'
+
 export type SongParams = {
   title: string
   lyrics: string
@@ -28,7 +34,7 @@ export type SongParams = {
   isInstrumental?: boolean
   voiceId?: string
   referenceAudio?: string
-  model?: 'music-2.6' | 'music-cover'
+  model?: MiniMaxModel
   outputFormat?: 'mp3' | 'wav' | 'pcm'
   lyricsOptimizer?: boolean
   sampleRate?: 16000 | 24000 | 32000 | 44100
@@ -36,11 +42,65 @@ export type SongParams = {
   aigcWatermark?: boolean
 }
 
+export type ContinueParams = {
+  originalAudioUrl: string
+  prompt: string
+  model?: MiniMaxModel
+  duration?: number
+}
+
+export type StemSplitResult = Record<string, unknown> & {
+  audioUrl: string
+}
+
 export type AIProvider = {
   name: string
-  generate: (params: SongParams, apiKey: string, apiUrl: string) => Promise<string> // returns taskId
+  generate: (params: SongParams, apiKey: string, apiUrl: string) => Promise<string>
   getProgress: (taskId: string, apiKey: string, apiUrl: string) => Promise<GenerationProgress>
-  download: (taskId: string, apiKey: string, apiUrl: string) => Promise<string> // returns audio URL
+  download: (taskId: string, apiKey: string, apiUrl: string) => Promise<string>
+  continue?: (params: ContinueParams, apiKey: string, apiUrl: string) => Promise<string>
+  splitStems?: (
+    params: { audioUrl: string },
+    apiKey: string,
+    apiUrl: string
+  ) => Promise<StemSplitResult[]>
+}
+
+const MINI_MAX_ERROR_MESSAGES: Record<number, string> = {
+  1002: '请求过于频繁，请稍后再试',
+  1004: 'API鉴权失败，请检查配置',
+  1008: '账户余额不足，请充值后重试',
+  1026: '内容包含敏感词，请修改后重试',
+  2013: '请求参数错误，请检查输入',
+  2049: '无效的API Key，请检查配置',
+}
+
+interface MiniMaxBaseResponse {
+  status_code?: number | string
+  status_msg?: string
+}
+
+interface MiniMaxTaskPayload {
+  task_id?: string
+  status?: number | string
+  progress?: number
+  stage?: string
+  audio?: string
+  audio_url?: string
+  audio_download_url?: string
+  video_url?: string
+  error?: string
+  error_code?: number
+}
+
+interface MiniMaxEnvelope {
+  data?: MiniMaxTaskPayload
+  task_id?: string
+  base_resp?: MiniMaxBaseResponse
+  error?: {
+    error_code?: number | string
+    message?: string
+  } | string
 }
 
 // MiniMax Provider - Official API Implementation
@@ -51,16 +111,6 @@ export const miniMaxProvider: AIProvider = {
 
   async generate(params, apiKey, apiUrl) {
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
-    const model = params.model || 'music-2.6'
-
-    // Build prompt from song params
-    const prompt = buildPrompt(params)
-
-    // Check if instrumental - explicit flag or no lyrics
-    const isInstrumental = params.isInstrumental || !params.lyrics || params.lyrics.trim() === ''
-
-    // Determine output format
-    const outputFormat = params.outputFormat || 'mp3'
 
     const response = await fetch(`${baseUrl}/v1/music_generation`, {
       method: 'POST',
@@ -68,84 +118,22 @@ export const miniMaxProvider: AIProvider = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        prompt,
-        lyrics: isInstrumental ? undefined : params.lyrics,
-        is_instrumental: isInstrumental,
-        stream: false,
-        output_format: 'url',
-        audio_setting: {
-          sample_rate: params.sampleRate || 44100,
-          bitrate: params.bitrate || 256000,
-          format: outputFormat
-        },
-        aigc_watermark: params.aigcWatermark || false,
-        voice_id: params.voiceId,
-        reference_audio: params.referenceAudio,
-        lyrics_optimizer: params.lyricsOptimizer,
-      }),
+      body: JSON.stringify(buildGenerationRequestBody(params)),
     })
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-      const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
-      const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
-
-      // Map MiniMax error codes to user-friendly messages
-      const errorMessages: Record<number, string> = {
-        1002: '请求过于频繁，请稍后再试',
-        1004: 'API鉴权失败，请检查配置',
-        1008: '账户余额不足，请充值后重试',
-        1026: '内容包含敏感词，请修改后重试',
-        2013: '请求参数错误，请检查输入',
-        2049: '无效的API Key，请检查配置',
-      }
-
-      const userMessage = errorCode && errorMessages[errorCode]
-        ? errorMessages[errorCode]
-        : errorMessage
-
-      throw new Error(`MiniMax API error: ${userMessage}`)
+      throw buildMiniMaxError(errorData, `HTTP ${response.status}`)
     }
 
-    const data = await response.json()
-
-    // Check for API-level errors even when HTTP status is 200
-    const apiStatusCode = data.base_resp?.status_code
-    const apiStatusMsg = data.base_resp?.status_msg
-    if (apiStatusCode && apiStatusCode !== 0 && apiStatusCode !== '0' && apiStatusCode !== 'Success') {
-      const errorMessages: Record<number, string> = {
-        1002: '请求过于频繁，请稍后再试',
-        1004: 'API鉴权失败，请检查配置',
-        1008: '账户余额不足，请充值后重试',
-        1026: '内容包含敏感词，请修改后重试',
-        2013: '请求参数错误，请检查输入',
-        2049: '无效的API Key，请检查配置',
-      }
-      const userMessage = errorMessages[apiStatusCode] || apiStatusMsg || `API error: ${apiStatusCode}`
-      throw new Error(`MiniMax API error: ${userMessage}`)
-    }
-
-    // Music 2.6 may return audio directly (status=2 means completed)
-    // or return a task_id for async polling (status=1 means processing)
-    const audioUrl = data.data?.audio
-    const taskId = data.data?.task_id
-    const status = data.data?.status
-
-    if (audioUrl && status === 2) {
-      // Synchronous completion - return audio URL prefixed with 'audio:'
-      return `audio:${audioUrl}`
-    }
-
-    // Return task_id for async polling
-    return taskId || data.task_id
+    const data = await response.json() as MiniMaxEnvelope
+    assertMiniMaxSuccess(data)
+    return parseGenerationResponse(data)
   },
 
   async getProgress(taskId, apiKey, apiUrl) {
-    // Handle synchronous completion (audio URL prefixed with 'audio:')
     if (taskId.startsWith('audio:')) {
-      const audioUrl = taskId.slice(6) // Remove 'audio:' prefix
+      const audioUrl = taskId.slice(6)
       return {
         status: 'COMPLETED' as GenerationStatus,
         progress: 100,
@@ -165,34 +153,17 @@ export const miniMaxProvider: AIProvider = {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-      const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
-      const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
-
-      // Map MiniMax error codes to user-friendly messages
-      const errorMessages: Record<number, string> = {
-        1002: '请求过于频繁，请稍后再试',
-        1004: 'API鉴权失败，请检查配置',
-        1008: '账户余额不足，请充值后重试',
-        1026: '内容包含敏感词，请修改后重试',
-        2013: '请求参数错误，请检查输入',
-        2049: '无效的API Key，请检查配置',
-      }
-
-      const userMessage = errorCode && errorMessages[errorCode]
-        ? errorMessages[errorCode]
-        : errorMessage
-
-      throw new Error(`MiniMax API error: ${userMessage}`)
+      throw buildMiniMaxError(errorData, `HTTP ${response.status}`)
     }
 
-    const data = await response.json()
+    const data = await response.json() as MiniMaxEnvelope
+    assertMiniMaxSuccess(data)
     return mapMiniMaxStatus(data)
   },
 
   async download(taskId, apiKey, apiUrl) {
-    // Handle synchronous completion (audio URL prefixed with 'audio:')
     if (taskId.startsWith('audio:')) {
-      return taskId.slice(6) // Remove 'audio:' prefix and return URL
+      return taskId.slice(6)
     }
 
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
@@ -206,33 +177,40 @@ export const miniMaxProvider: AIProvider = {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-      const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
-      const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
-
-      // Map MiniMax error codes to user-friendly messages
-      const errorMessages: Record<number, string> = {
-        1002: '请求过于频繁，请稍后再试',
-        1004: 'API鉴权失败，请检查配置',
-        1008: '账户余额不足，请充值后重试',
-        1026: '内容包含敏感词，请修改后重试',
-        2013: '请求参数错误，请检查输入',
-        2049: '无效的API Key，请检查配置',
-      }
-
-      const userMessage = errorCode && errorMessages[errorCode]
-        ? errorMessages[errorCode]
-        : errorMessage
-
-      throw new Error(`MiniMax API error: ${userMessage}`)
+      throw buildMiniMaxError(errorData, `HTTP ${response.status}`)
     }
 
-    const data = await response.json()
-    // Get the audio URL from the response - MiniMax uses data.audio for URL output
-    const audioUrl = data.data?.audio || data.data?.audio_url || data.audio_url
-    if (!audioUrl) {
+    const data = await response.json() as MiniMaxEnvelope
+    assertMiniMaxSuccess(data)
+
+    const progress = mapMiniMaxStatus(data)
+    if (!progress.audioUrl) {
       throw new Error('Audio not ready yet')
     }
-    return audioUrl
+
+    return progress.audioUrl
+  },
+
+  async continue(params, apiKey, apiUrl) {
+    const baseUrl = apiUrl || 'https://api.minimaxi.com'
+
+    const response = await fetch(`${baseUrl}/v1/music_generation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(buildContinuationRequestBody(params)),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
+      throw buildMiniMaxError(errorData, `HTTP ${response.status}`)
+    }
+
+    const data = await response.json() as MiniMaxEnvelope
+    assertMiniMaxSuccess(data)
+    return parseGenerationResponse(data)
   },
 }
 
@@ -253,64 +231,116 @@ export function getProvider(name: string): AIProvider {
   return provider
 }
 
+function buildGenerationRequestBody(params: SongParams): Record<string, unknown> {
+  const model = params.model || 'music-2.6'
+  const prompt = buildPrompt(params)
+  const outputFormat = params.outputFormat || 'mp3'
+
+  const commonBody = {
+    model,
+    prompt,
+    stream: false,
+    output_format: 'url',
+    audio_setting: {
+      sample_rate: params.sampleRate || 44100,
+      bitrate: params.bitrate || 256000,
+      format: outputFormat,
+    },
+    aigc_watermark: params.aigcWatermark || false,
+  }
+
+  if (model === 'music-cover') {
+    return {
+      ...commonBody,
+      audio_url: params.referenceAudio,
+    }
+  }
+
+  const isInstrumental = params.isInstrumental || !params.lyrics || params.lyrics.trim() === ''
+
+  return {
+    ...commonBody,
+    lyrics: isInstrumental ? undefined : params.lyrics,
+    is_instrumental: isInstrumental,
+    voice_id: params.voiceId,
+    reference_audio: params.referenceAudio,
+    lyrics_optimizer: params.lyricsOptimizer,
+  }
+}
+
+function buildContinuationRequestBody(params: ContinueParams): Record<string, unknown> {
+  return {
+    model: params.model || 'music-2.6',
+    prompt: params.prompt,
+    audio_url: params.originalAudioUrl,
+    stream: false,
+    output_format: 'url',
+    duration: params.duration,
+  }
+}
+
 // Build prompt from song params for MiniMax
 function buildPrompt(params: SongParams): string {
   const parts: string[] = []
 
-  // Genre as comma-separated style tags
   if (params.genre.length > 0) {
     parts.push(params.genre.join(', '))
   }
 
-  // Mood - make it more descriptive
   if (params.mood) {
     parts.push(`Mood: ${params.mood}`)
   }
 
-  // Additional context from instruments
   if (params.instruments.length > 0) {
     parts.push(`Instruments: ${params.instruments.join(', ')}`)
   }
 
-  // Reference artist / style reference
   if (params.referenceSinger) {
     parts.push(`Style: ${params.referenceSinger}`)
   }
 
-  // Custom user notes for additional context
   if (params.userNotes) {
     parts.push(`Description: ${params.userNotes}`)
   }
 
-  // Join with proper separators
   return parts.join('; ')
 }
 
-// MiniMax API Response Types
-interface MiniMaxStatusResponse {
-  status?: string
-  progress?: number
-  stage?: string
-  audio_url?: string
-  audio_download_url?: string
-  video_url?: string
-  error?: string
-  error_code?: number
-}
-
-function mapMiniMaxStatus(data: MiniMaxStatusResponse): GenerationProgress {
-  // MiniMax status: pending, processing, completed, failed
-  const statusMap: Record<string, GenerationStatus> = {
-    pending: 'PENDING',
-    processing: 'GENERATING',
-    completed: 'COMPLETED',
-    failed: 'FAILED',
+function getMiniMaxPayload(data: MiniMaxEnvelope | MiniMaxTaskPayload): MiniMaxTaskPayload {
+  if ('data' in data && data.data) {
+    return data.data
   }
 
-  const status = statusMap[data.status || ''] || 'PENDING'
+  return data as MiniMaxTaskPayload
+}
 
-  // Calculate progress based on status
-  let progress = data.progress || 0
+function parseGenerationResponse(data: MiniMaxEnvelope): string {
+  const payload = getMiniMaxPayload(data)
+  const audioUrl = payload.audio || payload.audio_url || payload.audio_download_url
+  const status = normalizeMiniMaxStatus(payload.status, Boolean(payload.error))
+
+  if (audioUrl && status === 'COMPLETED') {
+    return `audio:${audioUrl}`
+  }
+
+  const taskId = payload.task_id || data.task_id
+  if (!taskId) {
+    throw new Error('MiniMax API error: Missing task ID in response')
+  }
+
+  return taskId
+}
+
+function mapMiniMaxStatus(data: MiniMaxEnvelope | MiniMaxTaskPayload): GenerationProgress {
+  const payload = getMiniMaxPayload(data)
+  const audioUrl = payload.audio || payload.audio_url || payload.audio_download_url
+
+  let status = normalizeMiniMaxStatus(payload.status, Boolean(payload.error))
+  if (status === 'PENDING' && audioUrl) {
+    status = 'COMPLETED'
+  }
+
+  let progress = payload.progress || 0
   if (status === 'PENDING') progress = 10
   else if (status === 'GENERATING') progress = progress || 50
   else if (status === 'COMPLETED') progress = 100
@@ -319,9 +349,103 @@ function mapMiniMaxStatus(data: MiniMaxStatusResponse): GenerationProgress {
   return {
     status,
     progress,
-    stage: data.stage || data.status,
-    audioUrl: data.audio_url || data.audio_download_url,
-    videoUrl: data.video_url,
-    error: data.error,
+    stage: payload.stage || defaultStageForStatus(status),
+    audioUrl,
+    videoUrl: payload.video_url,
+    error: payload.error,
   }
+}
+
+function normalizeMiniMaxStatus(
+  rawStatus: MiniMaxTaskPayload['status'],
+  hasError: boolean
+): GenerationStatus {
+  if (hasError) {
+    return 'FAILED'
+  }
+
+  switch (rawStatus) {
+    case 2:
+    case '2':
+    case 'completed':
+      return 'COMPLETED'
+    case 1:
+    case '1':
+    case 'processing':
+    case 'generating':
+      return 'GENERATING'
+    case -1:
+    case '-1':
+    case 'failed':
+    case 'error':
+      return 'FAILED'
+    case 0:
+    case '0':
+    case 'pending':
+      return 'PENDING'
+    default:
+      return 'PENDING'
+  }
+}
+
+function defaultStageForStatus(status: GenerationStatus): string {
+  switch (status) {
+    case 'COMPLETED':
+      return 'completed'
+    case 'GENERATING':
+      return 'processing'
+    case 'FAILED':
+      return 'failed'
+    default:
+      return 'pending'
+  }
+}
+
+function assertMiniMaxSuccess(data: MiniMaxEnvelope): void {
+  const apiStatusCode = data.base_resp?.status_code
+
+  if (
+    apiStatusCode === undefined ||
+    apiStatusCode === null ||
+    apiStatusCode === 0 ||
+    apiStatusCode === '0' ||
+    apiStatusCode === 'Success' ||
+    apiStatusCode === 'success'
+  ) {
+    return
+  }
+
+  throw buildMiniMaxError(data, `API error: ${String(apiStatusCode)}`)
+}
+
+function buildMiniMaxError(errorData: MiniMaxEnvelope, fallback: string): Error {
+  const rawCode =
+    typeof errorData.error === 'object'
+      ? errorData.error?.error_code
+      : undefined
+
+  const fallbackCode = errorData.base_resp?.status_code
+  const errorCode = rawCode ?? fallbackCode
+  const normalizedCode =
+    typeof errorCode === 'string' ? Number(errorCode) : errorCode
+
+  const mappedMessage =
+    typeof normalizedCode === 'number' && Number.isFinite(normalizedCode)
+      ? MINI_MAX_ERROR_MESSAGES[normalizedCode]
+      : undefined
+
+  const rawErrorMessage =
+    typeof errorData.error === 'object'
+      ? errorData.error?.message
+      : typeof errorData.error === 'string'
+        ? errorData.error
+        : undefined
+
+  const errorMessage =
+    mappedMessage ||
+    rawErrorMessage ||
+    errorData.base_resp?.status_msg ||
+    fallback
+
+  return new Error(`MiniMax API error: ${errorMessage}`)
 }
