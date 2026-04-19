@@ -223,6 +223,7 @@ export default function SelectorDrawer({
                   return (
                     <button
                       key={option.value}
+                      data-testid={`selector-option-${option.value}`}
                       onClick={() => handleToggle(option.value)}
                       className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                         isSelected
@@ -249,6 +250,7 @@ export default function SelectorDrawer({
         {/* Footer - Confirm button */}
         <div className="px-6 py-4 border-t border-border bg-surface/80 backdrop-blur">
           <button
+            data-testid="selector-confirm"
             onClick={handleConfirm}
             disabled={multiSelect && tempSelected.length === 0}
             className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"

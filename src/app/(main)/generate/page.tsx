@@ -268,6 +268,7 @@ export default function GeneratePage() {
     parts: { id: string; part: number }[]
   } | null>(null)
   const [playlistUrls, setPlaylistUrls] = useState<string[]>([])
+  const [playlistSongIds, setPlaylistSongIds] = useState<string[]>([])
   const [showMultiPartMessage, setShowMultiPartMessage] = useState(false)
   const [isPollingRemainingParts, setIsPollingRemainingParts] = useState(false)
 
@@ -446,6 +447,7 @@ export default function GeneratePage() {
               if (data.audioUrl) {
                 setAudioUrl(data.audioUrl)
                 setPlaylistUrls([data.audioUrl])
+                setPlaylistSongIds([newSongId])
 
                 // If multi-part song, start polling for remaining parts
                 if (multiPartInfo && multiPartInfo.isMultiPart && multiPartInfo.totalParts > 1) {
@@ -497,8 +499,7 @@ export default function GeneratePage() {
   // Poll remaining parts for multi-part songs
   const pollRemainingParts = useCallback(async (partGroupId: string, initialPartId: string, initialAudioUrl: string, totalParts: number, parts: { id: string; part: number }[]) => {
     setIsPollingRemainingParts(true)
-    const completedUrls: string[] = [initialAudioUrl]
-    const completedIds: string[] = [initialPartId]
+    const completedParts = new Map<string, string>([[initialPartId, initialAudioUrl]])
 
     const pollInterval = 5000 // 5 seconds
     const maxWaitTime = 30 * 60 * 1000 // 30 minutes max for all parts
@@ -510,15 +511,14 @@ export default function GeneratePage() {
         const partIds = parts.map(p => p.id)
 
         for (const partId of partIds) {
-          if (completedIds.includes(partId)) continue
+          if (completedParts.has(partId)) continue
 
           try {
             const res = await fetch(`/api/songs/${partId}`)
             if (res.ok) {
               const song = await res.json()
               if (song.status === 'COMPLETED' && song.audioUrl) {
-                completedUrls.push(song.audioUrl)
-                completedIds.push(partId)
+                completedParts.set(partId, song.audioUrl)
               }
             }
           } catch {
@@ -526,12 +526,15 @@ export default function GeneratePage() {
           }
         }
 
-        // Sort by part number to maintain order
-        const sortedUrls = completedUrls.length > 0 ? completedUrls : [initialAudioUrl]
-        setPlaylistUrls(sortedUrls)
+        const orderedCompletedParts = parts
+          .filter((part) => completedParts.has(part.id))
+          .sort((a, b) => a.part - b.part)
+
+        setPlaylistUrls(orderedCompletedParts.map((part) => completedParts.get(part.id) || initialAudioUrl))
+        setPlaylistSongIds(orderedCompletedParts.map((part) => part.id))
 
         // Check if we have all parts
-        if (completedIds.length >= totalParts) {
+        if (completedParts.size >= totalParts) {
           setIsPollingRemainingParts(false)
           return
         }
@@ -627,6 +630,7 @@ export default function GeneratePage() {
     setSongId(null)
     setMultiPartInfo(null)
     setPlaylistUrls([])
+    setPlaylistSongIds([])
     setShowMultiPartMessage(false)
     setIsPollingRemainingParts(false)
   }
@@ -795,6 +799,7 @@ export default function GeneratePage() {
                       {t('songTitle')} <span className="text-error">*</span>
                     </label>
                     <input
+                      data-testid="song-title-input"
                       type="text"
                       value={title}
                       onChange={(e) => {
@@ -883,6 +888,7 @@ export default function GeneratePage() {
                     )}
 
                     <textarea
+                      data-testid="lyrics-input"
                       value={lyrics}
                       onChange={(e) => {
                         setLyrics(e.target.value)
@@ -931,6 +937,7 @@ export default function GeneratePage() {
                       {t('genre')} <span className="text-error">*</span>
                     </label>
                     <button
+                      data-testid="genre-selector-trigger"
                       onClick={() => {
                         setIsGenreDrawerOpen(true)
                         if (fieldErrors.genres) {
@@ -962,6 +969,7 @@ export default function GeneratePage() {
                       {t('mood')} <span className="text-error">*</span>
                     </label>
                     <button
+                      data-testid="mood-selector-trigger"
                       onClick={() => setIsMoodDrawerOpen(true)}
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground text-left hover:border-accent transition-colors flex items-center justify-between"
                     >
@@ -1073,6 +1081,7 @@ export default function GeneratePage() {
 
               {/* Generate Button */}
               <button
+                data-testid="generate-song-button"
                 onClick={handleGenerate}
                 disabled={generationStage !== 'idle' && generationStage !== 'completed' && generationStage !== 'failed'}
                 className="w-full py-4 rounded-xl bg-accent hover:bg-accent-hover text-white font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -1133,7 +1142,9 @@ export default function GeneratePage() {
                     src={audioUrl ?? undefined}
                     title={title}
                     artist="TaoyBeats"
+                    songId={songId ?? undefined}
                     playlist={playlistUrls.length > 1 ? playlistUrls : undefined}
+                    playlistSongIds={playlistSongIds.length > 1 ? playlistSongIds : undefined}
                   />
 
                   {/* Multi-part message */}

@@ -22,6 +22,14 @@
 | T-040 | claude-main | src/app/api/songs/[id]/download/route.ts | 2026-04-19 00:42 | 下载接口在 Prisma 不可用时可从内存读取歌曲 | active |
 | T-040 | claude-main | tests/api/auth-register.test.ts | 2026-04-19 00:42 | 注册 fallback 回归测试补齐并通过 | active |
 | T-040 | claude-main | tests/api/songs.test.ts | 2026-04-19 00:42 | 歌曲创建 fallback 回归测试补齐并通过 | active |
+| T-040 | claude-main | tests/e2e/songs.spec.ts | 2026-04-19 00:49 | 浏览器端生成/播放/下载链路验证用例补齐并通过 | active |
+| T-040 | claude-main | playwright.config.ts | 2026-04-19 00:51 | 支持复用外部 dev server 的 Playwright 运行方式 | active |
+| T-040 | claude-main | src/app/(main)/generate/page.tsx | 2026-04-19 00:56 | 生成页补充稳定测试选择器以支持真实前端验证 | active |
+| T-040 | claude-main | src/components/SelectorDrawer.tsx | 2026-04-19 00:56 | 抽屉选项补充稳定测试选择器以支持真实前端验证 | active |
+| T-040 | claude-main | src/app/api/songs/[id]/audio/route.ts | 2026-04-19 01:02 | 新增同源音频代理以修复浏览器播放 CORS | active |
+| T-040 | claude-main | src/components/AudioPlayer.tsx | 2026-04-19 01:02 | 播放器改为优先使用同源音频代理和下载代理 | active |
+| T-040 | claude-main | src/app/song/[id]/page.tsx | 2026-04-19 01:02 | 歌曲详情页改为使用同源音频代理播放和下载 | active |
+| T-040 | claude-main | .gitignore | 2026-04-19 07:03 | 忽略根目录 Playwright 测试产物避免污染部署提交 | active |
 
 ---
 

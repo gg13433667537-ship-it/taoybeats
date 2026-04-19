@@ -2,22 +2,24 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Songs', () => {
   test.beforeEach(async ({ page }) => {
-    // Login first
     const timestamp = Date.now()
     const email = `songtest${timestamp}@example.com`
 
-    // Register
     await page.goto('/register')
-    await page.fill('input[name="email"]', email)
-    await page.fill('input[name="password"]', 'password123')
+    await page.fill('#email', email)
+    await page.fill('#password', 'password123')
+    await page.fill('#confirmPassword', 'password123')
     await page.click('button[type="submit"]')
-    await page.waitForURL(/^(?!.*\/register)/, { timeout: 10000 }).catch(() => {
-      // If already registered, try login
-      page.goto('/login')
-      page.fill('input[name="email"]', email)
-      page.fill('input[name="password"]', 'password123')
-      page.click('button[type="submit"]')
-    })
+
+    try {
+      await page.waitForURL('**/dashboard', { timeout: 10000 })
+    } catch {
+      await page.goto('/login')
+      await page.fill('#email', email)
+      await page.fill('#password', 'password123')
+      await page.click('button[type="submit"]')
+      await page.waitForURL('**/dashboard', { timeout: 10000 })
+    }
   })
 
   test('should navigate to generate page', async ({ page }) => {
@@ -49,8 +51,39 @@ test.describe('Songs', () => {
   test('should display user songs', async ({ page }) => {
     await page.goto('/playlists')
 
-    // Should show playlists or empty state
     const content = page.locator('body')
     await expect(content).toBeVisible()
+  })
+
+  test('should generate a song and allow playback and download', async ({ page }) => {
+    test.skip(!process.env.REAL_MUSIC_E2E, 'Real MiniMax browser test is opt-in')
+    test.slow()
+    test.setTimeout(180000)
+
+    await page.goto('/generate')
+
+    await page.getByTestId('song-title-input').fill('Frontend Smoke Song')
+    await page.getByTestId('lyrics-input').fill('This is a frontend smoke test song for TaoyBeats.')
+
+    await page.getByTestId('genre-selector-trigger').click()
+    await page.getByTestId('selector-option-Pop').click()
+    await page.getByTestId('selector-confirm').click()
+
+    await page.getByTestId('mood-selector-trigger').click()
+    await page.getByTestId('selector-option-Happy').click()
+
+    await page.getByTestId('generate-song-button').click()
+
+    const playButton = page.locator('button[aria-label="Play"]')
+    await expect(playButton).toBeVisible({ timeout: 120000 })
+
+    await playButton.click()
+    await expect(page.locator('button[aria-label="Pause"]')).toBeVisible({ timeout: 10000 })
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 30000 })
+    await page.locator('button[aria-label="Download"]').first().click()
+    const download = await downloadPromise
+
+    expect(download.suggestedFilename()).toBeTruthy()
   })
 })

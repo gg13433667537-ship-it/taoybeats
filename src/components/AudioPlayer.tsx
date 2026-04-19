@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Download, AlertCircle, Loader2 } from "lucide-react"
-import WaveSurfer from "wavesurfer.js"
 
 interface AudioPlayerProps {
   src?: string
@@ -10,7 +9,9 @@ interface AudioPlayerProps {
   artist?: string
   onEnded?: () => void
   filename?: string
+  songId?: string
   playlist?: string[]
+  playlistSongIds?: string[]
   playlistTitles?: string[]
   playlistArtists?: string[]
 }
@@ -21,12 +22,14 @@ export default function AudioPlayer({
   artist,
   onEnded,
   filename,
+  songId,
   playlist,
+  playlistSongIds,
   playlistTitles,
   playlistArtists,
 }: AudioPlayerProps) {
-  const waveformRef = useRef<HTMLDivElement>(null)
-  const wavesurferRef = useRef<WaveSurfer | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const pendingAutoplayRef = useRef(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -35,12 +38,17 @@ export default function AudioPlayer({
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0)
-  const [isPlaylistActive, setIsPlaylistActive] = useState(false)
 
-  // Determine effective src (playlist or single track)
-  const effectiveSrc = playlist && playlist.length > 0 ? playlist[currentTrackIndex] : src
+  const effectiveSongId = playlistSongIds && playlistSongIds.length > 0
+    ? playlistSongIds[currentTrackIndex]
+    : songId
+  const effectiveSrc = effectiveSongId
+    ? `/api/songs/${effectiveSongId}/audio`
+    : (playlist && playlist.length > 0 ? playlist[currentTrackIndex] : src)
   const totalTracks = playlist?.length || 1
   const isMultiPart = totalTracks > 1
+  const isPlaylistActive = Boolean(playlist && playlist.length > 1)
+  const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0
 
   // Get current track info (from playlist arrays or fall back to props)
   const currentTitle = isMultiPart && playlistTitles?.[currentTrackIndex]
@@ -50,122 +58,158 @@ export default function AudioPlayer({
     ? playlistArtists[currentTrackIndex]
     : artist
 
-  // Handle track finished - play next in playlist or call onEnded
   const handleTrackFinished = useCallback(() => {
     setIsPlaying(false)
+    setCurrentTime(0)
     if (playlist && playlist.length > 1 && currentTrackIndex < playlist.length - 1) {
+      pendingAutoplayRef.current = true
       setCurrentTrackIndex((prev) => prev + 1)
     } else {
       onEnded?.()
     }
   }, [playlist, currentTrackIndex, onEnded])
 
-  // Initialize WaveSurfer
   useEffect(() => {
-    if (!waveformRef.current || !effectiveSrc) return
+    if (!effectiveSrc) return
 
-    // Reset state when src changes
     setIsPlaying(false)
     setCurrentTime(0)
     setDuration(0)
     setIsLoading(true)
     setLoadError(null)
-    setIsPlaylistActive(playlist && playlist.length > 1)
+    const audio = audioRef.current
+    if (!audio) return
 
-    const wavesurfer = WaveSurfer.create({
-      container: waveformRef.current,
-      waveColor: '#4a4a4a',
-      progressColor: '#a855f7',
-      cursorColor: '#ec4899',
-      barWidth: 2,
-      barRadius: 2,
-      cursorWidth: 1,
-      height: 48,
-      barGap: 2,
-    })
-
-    wavesurferRef.current = wavesurfer
-
-    wavesurfer.on('ready', () => {
-      const dur = wavesurfer.getDuration()
-      setDuration(dur)
-      setIsLoading(false)
-    })
-
-    wavesurfer.on('audioprocess', () => {
-      setCurrentTime(wavesurfer.getCurrentTime())
-    })
-
-    wavesurfer.on('timeupdate', () => {
-      setCurrentTime(wavesurfer.getCurrentTime())
-    })
-
-    wavesurfer.on('play', () => setIsPlaying(true))
-    wavesurfer.on('pause', () => setIsPlaying(false))
-    wavesurfer.on('finish', handleTrackFinished)
-
-    wavesurfer.on('error', (err) => {
-      console.error('WaveSurfer error:', err)
-      setIsLoading(false)
-      setLoadError(err instanceof Error ? err.message : 'Failed to load audio')
-    })
-
-    wavesurfer.load(effectiveSrc)
+    audio.pause()
+    audio.load()
 
     return () => {
-      wavesurfer.destroy()
-      wavesurferRef.current = null
+      audio.pause()
     }
-  }, [effectiveSrc, onEnded, handleTrackFinished, playlist])
+  }, [effectiveSrc])
 
-  const togglePlay = useCallback(() => {
-    if (!wavesurferRef.current) return
-    // Check if wavesurfer is ready by checking if it has a duration
-    const duration = wavesurferRef.current.getDuration()
-    if (!duration || duration === 0) {
-      console.warn('WaveSurfer not ready yet')
-      return
+  const getMediaErrorMessage = useCallback(() => {
+    const mediaError = audioRef.current?.error
+    switch (mediaError?.code) {
+      case MediaError.MEDIA_ERR_ABORTED:
+        return 'Audio playback was aborted'
+      case MediaError.MEDIA_ERR_NETWORK:
+        return 'Audio network request failed'
+      case MediaError.MEDIA_ERR_DECODE:
+        return 'Failed to decode audio'
+      case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+        return 'Audio format is not supported'
+      default:
+        return 'Failed to load audio'
     }
-    wavesurferRef.current.playPause()
   }, [])
 
+  const togglePlay = useCallback(async () => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    if (isPlaying) {
+      audio.pause()
+      return
+    }
+
+    try {
+      await audio.play()
+    } catch (error) {
+      console.error('Playback failed:', error)
+      setLoadError(error instanceof Error ? error.message : 'Failed to play audio')
+    }
+  }, [isPlaying])
+
   const toggleMute = useCallback(() => {
-    if (!wavesurferRef.current) return
-    wavesurferRef.current.setMuted(!isMuted)
-    setIsMuted(!isMuted)
+    const audio = audioRef.current
+    if (!audio) return
+
+    const nextMuted = !isMuted
+    audio.muted = nextMuted
+    setIsMuted(nextMuted)
   }, [isMuted])
 
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value)
-    if (wavesurferRef.current) {
-      wavesurferRef.current.setVolume(newVolume)
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume
+      audioRef.current.muted = newVolume === 0
     }
     setVolume(newVolume)
     setIsMuted(newVolume === 0)
   }, [])
 
   const skip = useCallback((seconds: number) => {
-    if (!wavesurferRef.current) return
-    const duration = wavesurferRef.current.getDuration()
-    if (!duration || duration === 0) return
-    const newTime = wavesurferRef.current.getCurrentTime() + seconds
-    wavesurferRef.current.seekTo(Math.max(0, Math.min(1, newTime / duration)))
+    const audio = audioRef.current
+    if (!audio || !duration) return
+
+    const newTime = Math.max(0, Math.min(duration, audio.currentTime + seconds))
+    audio.currentTime = newTime
+    setCurrentTime(newTime)
   }, [])
 
   const goToNextTrack = useCallback(() => {
     if (!playlist || currentTrackIndex >= playlist.length - 1) return
+    pendingAutoplayRef.current = isPlaying
     setCurrentTrackIndex((prev) => prev + 1)
-  }, [playlist, currentTrackIndex])
+  }, [playlist, currentTrackIndex, isPlaying])
 
   const goToPreviousTrack = useCallback(() => {
-    // If more than 3 seconds in, restart current track instead of going to previous
-    if (currentTime > 3 && wavesurferRef.current) {
-      wavesurferRef.current.seekTo(0)
+    const audio = audioRef.current
+
+    if (currentTime > 3 && audio) {
+      audio.currentTime = 0
+      setCurrentTime(0)
       return
     }
+
     if (!playlist || currentTrackIndex <= 0) return
+    pendingAutoplayRef.current = isPlaying
     setCurrentTrackIndex((prev) => prev - 1)
-  }, [playlist, currentTrackIndex, currentTime])
+  }, [playlist, currentTrackIndex, currentTime, isPlaying])
+
+  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTime = parseFloat(e.target.value)
+    if (audioRef.current) {
+      audioRef.current.currentTime = newTime
+    }
+    setCurrentTime(newTime)
+  }, [])
+
+  const handleCanPlay = useCallback(async () => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    setIsLoading(false)
+
+    if (!pendingAutoplayRef.current) {
+      return
+    }
+
+    pendingAutoplayRef.current = false
+
+    try {
+      await audio.play()
+    } catch (error) {
+      console.error('Playback failed:', error)
+      setLoadError(error instanceof Error ? error.message : 'Failed to play audio')
+    }
+  }, [])
+
+  const handleLoadedMetadata = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+  }, [])
+
+  const handleAudioError = useCallback(() => {
+    const message = getMediaErrorMessage()
+    console.error('Audio element error:', message, audioRef.current?.error)
+    setIsLoading(false)
+    setLoadError(message)
+  }, [getMediaErrorMessage])
 
   const formatTime = (time: number): string => {
     const mins = Math.floor(time / 60)
@@ -177,6 +221,21 @@ export default function AudioPlayer({
   const handleDownload = useCallback(async () => {
     if (!effectiveSrc) return
     try {
+      if (effectiveSongId) {
+        const response = await fetch(`/api/songs/${effectiveSongId}/download`)
+        if (!response.ok) throw new Error('Download failed')
+        const blob = await response.blob()
+        const downloadUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = filename || currentTitle || 'audio'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(downloadUrl)
+        return
+      }
+
       // Extract song ID from src path to use API proxy for CORS
       const songIdMatch = effectiveSrc.match(/\/songs\/([^/]+)/)
       if (songIdMatch) {
@@ -208,7 +267,7 @@ export default function AudioPlayer({
     } catch (error) {
       console.error('Download failed:', error)
     }
-  }, [effectiveSrc, filename, currentTitle])
+  }, [effectiveSongId, effectiveSrc, filename, currentTitle])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -238,6 +297,24 @@ export default function AudioPlayer({
 
   return (
     <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 p-4 rounded-xl bg-surface border border-border">
+      <audio
+        key={effectiveSrc}
+        ref={audioRef}
+        src={effectiveSrc}
+        preload="metadata"
+        onLoadStart={() => {
+          setIsLoading(true)
+          setLoadError(null)
+        }}
+        onLoadedMetadata={handleLoadedMetadata}
+        onCanPlay={handleCanPlay}
+        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={handleTrackFinished}
+        onError={handleAudioError}
+      />
+
       {/* Top row: Play controls, track info, download */}
       <div className="flex items-center gap-3 w-full sm:w-auto">
         {/* Play/Pause */}
@@ -321,7 +398,7 @@ export default function AudioPlayer({
 
       {/* Bottom row: Waveform and Volume */}
       <div className="flex items-center gap-3 w-full">
-        {/* Waveform Progress */}
+        {/* Playback Progress */}
         <div className="flex-1 min-w-0">
           {loadError && (
             <div className="flex items-center gap-2 mb-2 text-error text-xs">
@@ -329,7 +406,24 @@ export default function AudioPlayer({
               <span>Audio error: {loadError}</span>
             </div>
           )}
-          <div ref={waveformRef} className="w-full cursor-pointer" />
+          <div className="relative h-6 flex items-center">
+            <div className="absolute inset-x-0 h-2 rounded-full bg-border/70" />
+            <div
+              className="absolute left-0 h-2 rounded-full bg-gradient-to-r from-accent to-accent-glow transition-[width]"
+              style={{ width: `${progressPercent}%` }}
+            />
+            <input
+              type="range"
+              min={0}
+              max={duration || 0}
+              step={0.1}
+              value={Math.min(currentTime, duration || 0)}
+              onChange={handleSeek}
+              disabled={!duration || !!loadError}
+              aria-label="Seek"
+              className="relative z-10 w-full appearance-none bg-transparent cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
           <div className="flex justify-between mt-1">
             <span className="text-xs text-text-muted">{formatTime(currentTime)}</span>
             <span className="text-xs text-text-muted">{formatTime(duration)}</span>

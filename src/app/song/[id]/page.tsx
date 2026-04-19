@@ -15,6 +15,7 @@ export default function SongSharePage() {
   const songId = params.id as string
 
   const [song, setSong] = useState<{
+    id?: string
     title?: string
     genre?: string[]
     mood?: string
@@ -299,7 +300,8 @@ export default function SongSharePage() {
   const handleDownload = useCallback(async () => {
     if (!song?.audioUrl) return
     try {
-      const response = await fetch(song.audioUrl)
+      const downloadSource = song.id ? `/api/songs/${song.id}/download` : song.audioUrl
+      const response = await fetch(downloadSource)
       const blob = await response.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -563,7 +565,7 @@ export default function SongSharePage() {
       {song.audioUrl && (
         <audio
           ref={audioRef}
-          src={song.audioUrl}
+          src={song.id ? `/api/songs/${song.id}/audio` : song.audioUrl}
           preload="metadata"
         />
       )}

@@ -80,7 +80,7 @@ export default function DashboardPage() {
   const handleDownload = async (song: Song) => {
     if (!song.audioUrl) return
     try {
-      const response = await fetch(song.audioUrl)
+      const response = await fetch(`/api/songs/${song.id}/download`)
       const blob = await response.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')

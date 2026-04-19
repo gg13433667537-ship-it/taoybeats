@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const disableWebServer = process.env.PLAYWRIGHT_DISABLE_WEBSERVER === '1'
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -37,10 +39,12 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  webServer: disableWebServer
+    ? undefined
+    : {
+        command: 'npm run dev',
+        url: 'http://localhost:3000',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120 * 1000,
+      },
 })
