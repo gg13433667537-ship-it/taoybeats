@@ -103,6 +103,7 @@ export default function AdminPage() {
     role: "USER",
     tier: "FREE",
     isActive: true,
+    addCredits: 0,
   })
 
   // Fetch users
@@ -167,8 +168,8 @@ export default function AdminPage() {
     fetchUsers(1, searchQuery)
   }
 
-  // Update user role/status
-  const handleUpdateUser = async (userId: string, updates: { role?: string; isActive?: boolean; tier?: string }) => {
+  // Update user role/status/credits
+  const handleUpdateUser = async (userId: string, updates: { role?: string; isActive?: boolean; tier?: string; addCredits?: number }) => {
     setActionLoading(true)
     try {
       const res = await fetch("/api/admin/users", {
@@ -444,6 +445,7 @@ export default function AdminPage() {
                                 role: user.role,
                                 tier: user.tier,
                                 isActive: user.isActive,
+                                addCredits: 0,
                               }))
                               setShowUserModal(true)
                             }}
@@ -765,6 +767,19 @@ export default function AdminPage() {
                   />
                   <span className="text-sm text-foreground">{t('active')}</span>
                 </label>
+              </div>
+
+              <div>
+                <label className="block text-sm text-text-secondary mb-2">{t('addCredits')}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editFormState.addCredits}
+                  onChange={(e) => setEditFormState({ ...editFormState, addCredits: parseInt(e.target.value) || 0 })}
+                  placeholder="0"
+                  className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground focus:outline-none focus:border-accent"
+                />
+                <p className="text-xs text-text-muted mt-1">{t('addCreditsHelp')}</p>
               </div>
 
               <div className="flex gap-3 pt-4">

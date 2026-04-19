@@ -203,6 +203,8 @@ const translations = {
     adminUpdatedUser: 'Updated user',
     adminDeletedUser: 'Deleted user',
     adminDeletedSong: 'Deleted song',
+    addCredits: 'Add Credits',
+    addCreditsHelp: 'Enter number of generations to add (reduces usage counter)',
 
     // Generate
     createNewSongPage: 'Create New Song',
@@ -831,6 +833,8 @@ const translations = {
     adminUpdatedUser: '更新了用户',
     adminDeletedUser: '删除了用户',
     adminDeletedSong: '删除了歌曲',
+    addCredits: '添加额度',
+    addCreditsHelp: '输入要添加的生成次数（会减少使用计数器）',
 
     // Generate
     createNewSongPage: '创建新歌曲',
@@ -1513,6 +1517,8 @@ const translations = {
     adminUpdatedUser: '更新了使用者',
     adminDeletedUser: '刪除了使用者',
     adminDeletedSong: '刪除了歌曲',
+    addCredits: '新增額度',
+    addCreditsHelp: '輸入要新增的生成次數（會減少使用計數器）',
 
     // Generate
     createNewSongPage: '建立新歌曲',
@@ -2126,6 +2132,8 @@ const translations = {
     adminUpdatedUser: 'ユーザーを更新しました',
     adminDeletedUser: 'ユーザーを削除しました',
     adminDeletedSong: '曲を削除しました',
+    addCredits: 'クレジットを追加',
+    addCreditsHelp: '生成回数を追加で入力（使用カウンターが減ります）',
 
     // Generate
     createNewSongPage: '新しい曲を作成',
@@ -2739,6 +2747,8 @@ const translations = {
     adminUpdatedUser: '사용자를 업데이트했습니다',
     adminDeletedUser: '사용자를 삭제했습니다',
     adminDeletedSong: '노래를 삭제했습니다',
+    addCredits: '크레딧 추가',
+    addCreditsHelp: '생성 횟수를 입력하세요(사용 카운터가 감소합니다)',
 
     // Generate
     createNewSongPage: '새 노래 만들기',

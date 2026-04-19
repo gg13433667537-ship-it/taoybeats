@@ -747,7 +747,6 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => {
-                  alert("Create Playlist button clicked!")
                   console.log("[DEBUG] Create Playlist button clicked - opening modal")
                   setShowPlaylistModal(true)
                 }}

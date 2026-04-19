@@ -2,6 +2,7 @@ export interface UserEditFormState {
   role: string
   tier: string
   isActive: boolean
+  addCredits: number
 }
 
 export function createUserEditFormState(user: UserEditFormState): UserEditFormState {
@@ -9,6 +10,7 @@ export function createUserEditFormState(user: UserEditFormState): UserEditFormSt
     role: user.role,
     tier: user.tier,
     isActive: user.isActive,
+    addCredits: user.addCredits ?? 0,
   }
 }
 
