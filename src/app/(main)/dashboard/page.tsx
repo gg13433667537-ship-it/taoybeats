@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, startTransition } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, startTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap, Shield, LogOut, User, ChevronDown, Settings, AlertCircle, X, ListMusic, FolderPlus, Trash2, Eye, EyeOff } from "lucide-react"
@@ -18,7 +18,15 @@ interface Song {
   genre?: string[]
   audioUrl?: string
   shareToken?: string
+  partGroupId?: string
+  partIndex?: number
   [key: string]: unknown
+}
+
+interface DisplayItem {
+  type: 'single' | 'grouped'
+  songs: Song[]
+  // For single type, songs[0] is the song; for grouped, contains all parts
 }
 
 interface Usage {
@@ -328,6 +336,47 @@ export default function DashboardPage() {
   }, [songs])
   // Intentionally depends on songs to re-check for GENERATING status after songs update
 
+  // Create display list by grouping multi-part songs
+  const displayItems: DisplayItem[] = useMemo(() => {
+    if (!songs.length) return []
+
+    // Group songs by partGroupId
+    const groups = new Map<string, Song[]>()
+    const singles: DisplayItem[] = []
+
+    songs.forEach(song => {
+      if (song.partGroupId) {
+        const existing = groups.get(song.partGroupId) || []
+        groups.set(song.partGroupId, [...existing, song])
+      } else {
+        singles.push({ type: 'single', songs: [song] })
+      }
+    })
+
+    // Convert groups to DisplayItems, sorted by most recent song's createdAt
+    const groupedItems: DisplayItem[] = Array.from(groups.entries()).map(([_, partSongs]) => ({
+      type: 'grouped' as const,
+      songs: partSongs.sort((a, b) => (a.partIndex ?? 0) - (b.partIndex ?? 0)),
+    }))
+
+    // Sort grouped items by most recent part's createdAt
+    groupedItems.sort((a, b) => {
+      const aDate = Math.max(...a.songs.map(s => new Date(s.createdAt).getTime()))
+      const bDate = Math.max(...b.songs.map(s => new Date(s.createdAt).getTime()))
+      return bDate - aDate
+    })
+
+    // Combine and sort all items by most recent createdAt
+    const allItems = [...singles, ...groupedItems]
+    allItems.sort((a, b) => {
+      const aDate = Math.max(...a.songs.map(s => new Date(s.createdAt).getTime()))
+      const bDate = Math.max(...b.songs.map(s => new Date(s.createdAt).getTime()))
+      return bDate - aDate
+    })
+
+    return allItems
+  }, [songs])
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'COMPLETED':
@@ -557,185 +606,203 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {songs.map(song => (
-                  <div
-                    key={song.id}
-                    className="p-4 rounded-xl bg-surface border border-border hover:border-accent/50 transition-colors group"
-                  >
-                    <div className="flex items-center gap-4">
-                      {/* Play Button / Status */}
-                      <div className="relative">
-                        {song.status === 'COMPLETED' && song.audioUrl ? (
-                          <button
-                            onClick={() => router.push(`/song/${song.id}`)}
-                            aria-label={t('playSong')}
-                            className="w-12 h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors cursor-pointer"
-                          >
-                            <Play className="w-5 h-5 ml-0.5" aria-hidden="true" />
-                          </button>
-                        ) : song.status === 'GENERATING' ? (
-                          <div className="w-12 h-12 rounded-full bg-accent/10 text-accent flex items-center justify-center">
-                            <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-                          </div>
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center" aria-label="Failed status">
-                            <span className="text-sm" aria-hidden="true">!</span>
-                          </div>
-                        )}
+                {displayItems.map(item => {
+                  const primarySong = item.songs[0]
+                  const isGrouped = item.type === 'grouped'
+                  const itemKey = isGrouped ? `group-${primarySong.partGroupId}` : primarySong.id
+                  const allCompleted = item.songs.every(s => s.status === 'COMPLETED')
+                  const anyGenerating = item.songs.some(s => s.status === 'GENERATING')
+                  const allFailed = item.songs.every(s => s.status === 'FAILED')
+                  const overallStatus = allFailed ? 'FAILED' : anyGenerating ? 'GENERATING' : 'COMPLETED'
+                  const maxProgress = Math.max(...item.songs.map(s => s.progress ?? 0))
 
-                        {/* Progress ring for generating */}
-                        {song.status === 'GENERATING' && song.progress !== undefined && (
-                          <svg className="absolute inset-0 w-12 h-12 -rotate-90">
-                            <circle
-                              cx="24"
-                              cy="24"
-                              r="22"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              fill="none"
-                              className="text-accent/30"
-                            />
-                            <circle
-                              cx="24"
-                              cy="24"
-                              r="22"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              fill="none"
-                              strokeDasharray={`${2 * Math.PI * 22}`}
-                              strokeDashoffset={`${2 * Math.PI * 22 * (1 - song.progress / 100)}`}
-                              className="text-accent"
-                            />
-                          </svg>
-                        )}
-                      </div>
-
-                      {/* Song Info */}
-                      <div className="flex-1 min-w-0">
-                        <Link href={`/song/${song.id}`} className="block hover:underline">
-                          <h3 className="font-medium text-foreground truncate">{song.title}</h3>
-                        </Link>
-                        <div className="flex items-center gap-3 text-sm text-text-secondary">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(song.status)}`}>
-                            {song.status === 'COMPLETED' ? t('ready') :
-                             song.status === 'GENERATING' ? `${song.progress ?? 0}%` : t('failed')}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {formatDate(song.createdAt)}
-                          </span>
-                          {song.duration && (
-                            <span>{song.duration}</span>
+                  return (
+                    <div
+                      key={itemKey}
+                      className="p-4 rounded-xl bg-surface border border-border hover:border-accent/50 transition-colors group"
+                    >
+                      <div className="flex items-center gap-4">
+                        {/* Play Button / Status */}
+                        <div className="relative">
+                          {overallStatus === 'COMPLETED' && allCompleted ? (
+                            <button
+                              onClick={() => router.push(`/song/${primarySong.id}`)}
+                              aria-label={t('playSong')}
+                              className="w-12 h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors cursor-pointer"
+                            >
+                              <Play className="w-5 h-5 ml-0.5" aria-hidden="true" />
+                            </button>
+                          ) : overallStatus === 'GENERATING' ? (
+                            <div className="w-12 h-12 rounded-full bg-accent/10 text-accent flex items-center justify-center">
+                              <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                            </div>
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center" aria-label="Failed status">
+                              <span className="text-sm" aria-hidden="true">!</span>
+                            </div>
                           )}
-                          {song.genre && Array.isArray(song.genre) && (
-                            <span>{song.genre.join(', ')}</span>
+
+                          {/* Progress ring for generating */}
+                          {overallStatus === 'GENERATING' && (
+                            <svg className="absolute inset-0 w-12 h-12 -rotate-90">
+                              <circle
+                                cx="24"
+                                cy="24"
+                                r="22"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                fill="none"
+                                className="text-accent/30"
+                              />
+                              <circle
+                                cx="24"
+                                cy="24"
+                                r="22"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                fill="none"
+                                strokeDasharray={`${2 * Math.PI * 22}`}
+                                strokeDashoffset={`${2 * Math.PI * 22 * (1 - maxProgress / 100)}`}
+                                className="text-accent"
+                              />
+                            </svg>
                           )}
                         </div>
-                      </div>
 
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {song.status === 'COMPLETED' && (
-                          <>
+                        {/* Song Info */}
+                        <div className="flex-1 min-w-0">
+                          <Link href={`/song/${primarySong.id}`} className="block hover:underline">
+                            <h3 className="font-medium text-foreground truncate">
+                              {primarySong.title}
+                              {isGrouped && (
+                                <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent">
+                                  Multi-part ({item.songs.length})
+                                </span>
+                              )}
+                            </h3>
+                          </Link>
+                          <div className="flex items-center gap-3 text-sm text-text-secondary">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(overallStatus)}`}>
+                              {overallStatus === 'COMPLETED' ? t('ready') :
+                               overallStatus === 'GENERATING' ? `${maxProgress}%` : t('failed')}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatDate(primarySong.createdAt)}
+                            </span>
+                            {primarySong.duration && (
+                              <span>{primarySong.duration}</span>
+                            )}
+                            {primarySong.genre && Array.isArray(primarySong.genre) && (
+                              <span>{primarySong.genre.join(', ')}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {overallStatus === 'COMPLETED' && (
+                            <>
+                              <button
+                                onClick={() => handleDownload(primarySong)}
+                                aria-label={t('downloadSong')}
+                                className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors"
+                              >
+                                <Download className="w-4 h-4" aria-hidden="true" />
+                              </button>
+                              <button
+                                onClick={() => handleShare(primarySong)}
+                                aria-label={copiedSongId === primarySong.id ? t('copied') : t('shareSong')}
+                                className={`p-2 rounded-lg hover:bg-background transition-colors ${
+                                  copiedSongId === primarySong.id ? 'text-success' : 'text-text-secondary hover:text-foreground'
+                                }`}
+                              >
+                                {copiedSongId === primarySong.id ? (
+                                  <span className="text-xs font-medium">Copied</span>
+                                ) : (
+                                  <Share2 className="w-4 h-4" aria-hidden="true" />
+                                )}
+                              </button>
+                              {/* Add to Playlist */}
+                              <div className="relative" ref={playlistDropdownRef}>
+                                <button
+                                  onClick={() => {
+                                    setShowPlaylistDropdown(showPlaylistDropdown === primarySong.id ? null : primarySong.id)
+                                  }}
+                                  disabled={addingToPlaylist}
+                                  aria-label="Add to playlist"
+                                  aria-expanded={showPlaylistDropdown === primarySong.id}
+                                  className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {addingToPlaylist ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                                  ) : (
+                                    <ListMusic className="w-4 h-4" aria-hidden="true" />
+                                  )}
+                                </button>
+                                {showPlaylistDropdown === primarySong.id && (
+                                  <div className="absolute right-0 top-full mt-1 w-56 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
+                                    <div className="p-2">
+                                      <p className="px-3 py-2 text-xs font-medium text-text-muted">{t('addToPlaylist')}</p>
+                                      {playlists.length === 0 ? (
+                                        <p className="px-3 py-2 text-sm text-text-muted">{t('noPlaylists')}</p>
+                                      ) : (
+                                        playlists.map(playlist => (
+                                          <button
+                                            key={playlist.id}
+                                            onClick={() => handleAddToPlaylist(playlist.id, primarySong.id)}
+                                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-foreground hover:bg-background rounded-lg transition-colors"
+                                          >
+                                            <ListMusic className="w-4 h-4 text-text-muted" />
+                                            <span className="flex-1 text-left truncate">{playlist.name}</span>
+                                            <span className="text-xs text-text-muted">{playlist.songCount}</span>
+                                          </button>
+                                        ))
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                          <div className="relative" ref={songOptionsRef}>
                             <button
-                              onClick={() => handleDownload(song)}
-                              aria-label={t('downloadSong')}
+                              onClick={() => {
+                                console.log("[DEBUG] Three-dot menu clicked, current showSongOptions:", showSongOptions, "primarySong.id:", primarySong.id)
+                                setShowSongOptions(showSongOptions === primarySong.id ? null : primarySong.id)
+                              }}
+                              aria-label="More options"
+                              aria-expanded={showSongOptions === primarySong.id}
                               className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors"
                             >
-                              <Download className="w-4 h-4" aria-hidden="true" />
+                              <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
                             </button>
-                            <button
-                              onClick={() => handleShare(song)}
-                              aria-label={copiedSongId === song.id ? t('copied') : t('shareSong')}
-                              className={`p-2 rounded-lg hover:bg-background transition-colors ${
-                                copiedSongId === song.id ? 'text-success' : 'text-text-secondary hover:text-foreground'
-                              }`}
-                            >
-                              {copiedSongId === song.id ? (
-                                <span className="text-xs font-medium">Copied</span>
-                              ) : (
-                                <Share2 className="w-4 h-4" aria-hidden="true" />
-                              )}
-                            </button>
-                            {/* Add to Playlist */}
-                            <div className="relative" ref={playlistDropdownRef}>
-                              <button
-                                onClick={() => {
-                                  setShowPlaylistDropdown(showPlaylistDropdown === song.id ? null : song.id)
-                                }}
-                                disabled={addingToPlaylist}
-                                aria-label="Add to playlist"
-                                aria-expanded={showPlaylistDropdown === song.id}
-                                className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {addingToPlaylist ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                                ) : (
-                                  <ListMusic className="w-4 h-4" aria-hidden="true" />
-                                )}
-                              </button>
-                              {showPlaylistDropdown === song.id && (
-                                <div className="absolute right-0 top-full mt-1 w-56 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
-                                  <div className="p-2">
-                                    <p className="px-3 py-2 text-xs font-medium text-text-muted">{t('addToPlaylist')}</p>
-                                    {playlists.length === 0 ? (
-                                      <p className="px-3 py-2 text-sm text-text-muted">{t('noPlaylists')}</p>
-                                    ) : (
-                                      playlists.map(playlist => (
-                                        <button
-                                          key={playlist.id}
-                                          onClick={() => handleAddToPlaylist(playlist.id, song.id)}
-                                          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-foreground hover:bg-background rounded-lg transition-colors"
-                                        >
-                                          <ListMusic className="w-4 h-4 text-text-muted" />
-                                          <span className="flex-1 text-left truncate">{playlist.name}</span>
-                                          <span className="text-xs text-text-muted">{playlist.songCount}</span>
-                                        </button>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        )}
-                        <div className="relative" ref={songOptionsRef}>
-                          <button
-                            onClick={() => {
-                              console.log("[DEBUG] Three-dot menu clicked, current showSongOptions:", showSongOptions, "song.id:", song.id)
-                              setShowSongOptions(showSongOptions === song.id ? null : song.id)
-                            }}
-                            aria-label="More options"
-                            aria-expanded={showSongOptions === song.id}
-                            className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors"
-                          >
-                            <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
-                          </button>
-                          {showSongOptions === song.id && (
-                            <div className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
-                              <button
-                                onMouseDown={(e) => {
-                                  e.stopPropagation()
-                                  console.log("[DEBUG] Delete button onMouseDown fired for song:", song.id)
-                                  handleDeleteSong(song.id)
-                                }}
-                                disabled={deletingSongId === song.id}
-                                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-error hover:bg-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {deletingSongId === song.id ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                                ) : (
-                                  <Trash2 className="w-4 h-4" aria-hidden="true" />
-                                )}
-                                {deletingSongId === song.id ? 'Deleting...' : t('deleteSong')}
-                              </button>
-                            </div>
-                          )}
+                            {showSongOptions === primarySong.id && (
+                              <div className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
+                                <button
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation()
+                                    console.log("[DEBUG] Delete button onMouseDown fired for song:", primarySong.id)
+                                    handleDeleteSong(primarySong.id)
+                                  }}
+                                  disabled={deletingSongId === primarySong.id}
+                                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-error hover:bg-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {deletingSongId === primarySong.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" aria-hidden="true" />
+                                  )}
+                                  {deletingSongId === primarySong.id ? 'Deleting...' : t('deleteSong')}
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </section>

@@ -22,8 +22,18 @@ export default function SongSharePage() {
     instruments?: string[]
     audioUrl?: string
     status?: string
+    partGroupId?: string
+    part?: number
     [key: string]: string | string[] | boolean | number | undefined
   } | null>(null)
+  const [partGroupSongs, setPartGroupSongs] = useState<Array<{
+    id: string
+    title?: string
+    audioUrl?: string
+    part?: number
+    status?: string
+  }>>([])
+  const [currentPartIndex, setCurrentPartIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -73,6 +83,23 @@ export default function SongSharePage() {
         if (res.ok) {
           const data = await res.json()
           setSong(data)
+
+          // If song has partGroupId, fetch all parts
+          if (data.partGroupId) {
+            try {
+              const partsRes = await fetch(`/api/songs/by-part-group/${data.partGroupId}`)
+              if (partsRes.ok) {
+                const partsData = await partsRes.json()
+                setPartGroupSongs(partsData.songs || [])
+                // Set current part index based on this song's part number
+                const partIndex = (partsData.songs || []).findIndex((p: { id: string }) => p.id === songId)
+                setCurrentPartIndex(partIndex >= 0 ? partIndex : 0)
+              }
+            } catch (partsError) {
+              console.error("Error fetching part group songs:", partsError)
+            }
+          }
+
           // Generate random waveform data for visualization
           if (data.status === 'COMPLETED') {
             const bars = Array.from({ length: 64 }, () => Math.random() * 0.7 + 0.3)
@@ -452,6 +479,22 @@ export default function SongSharePage() {
     setPlayingStem(null)
   }
 
+  const handlePartChange = (partIndex: number) => {
+    if (partIndex < 0 || partIndex >= partGroupSongs.length) return
+    setCurrentPartIndex(partIndex)
+    const newSong = partGroupSongs[partIndex]
+    setSong(prev => prev ? { ...prev, ...newSong } : null)
+    setIsPlaying(false)
+    setCurrentTime(0)
+    // Update waveform data for new song
+    if (newSong.status === 'COMPLETED' && newSong.audioUrl) {
+      const bars = Array.from({ length: 64 }, () => Math.random() * 0.7 + 0.3)
+      setWaveformData(bars)
+    } else {
+      setWaveformData([])
+    }
+  }
+
   const handleStemDownload = async (stemType: string, audioUrl: string) => {
     try {
       const response = await fetch(audioUrl)
@@ -569,7 +612,14 @@ export default function SongSharePage() {
           <div className="p-8 rounded-2xl bg-surface border border-border">
             {/* Title & Genre */}
             <div className="mb-6">
-              <h1 className="text-3xl font-bold text-foreground mb-3">{song.title}</h1>
+              <div className="flex items-center gap-3 mb-3">
+                <h1 className="text-3xl font-bold text-foreground">{song.title}</h1>
+                {partGroupSongs.length > 1 && song.part && (
+                  <span className="px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-sm font-medium">
+                    Part {song.part} of {partGroupSongs.length}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-2">
                 {song.genre?.map((g: string) => (
                   <span
@@ -591,6 +641,55 @@ export default function SongSharePage() {
                 )}
               </div>
             </div>
+
+            {/* Multi-Part Playlist */}
+            {partGroupSongs.length > 1 && (
+              <div className="mb-6 p-4 rounded-xl bg-surface-elevated border border-border">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-text-secondary">All Parts</span>
+                  <span className="text-xs text-text-muted">{partGroupSongs.filter(s => s.status === 'COMPLETED').length} of {partGroupSongs.length} completed</span>
+                </div>
+                <div className="space-y-2">
+                  {partGroupSongs.map((partSong, index) => (
+                    <button
+                      key={partSong.id}
+                      onClick={() => handlePartChange(index)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left ${
+                        currentPartIndex === index
+                          ? 'bg-accent/10 border border-accent/30'
+                          : 'bg-background hover:bg-background/80 border border-transparent'
+                      }`}
+                      disabled={!partSong.audioUrl}
+                    >
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        currentPartIndex === index
+                          ? 'bg-accent text-white'
+                          : 'bg-surface-elevated text-text-muted'
+                      }`}>
+                        {partSong.status === 'COMPLETED' ? (
+                          <Play className="w-4 h-4 ml-0.5" />
+                        ) : (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${
+                          currentPartIndex === index ? 'text-accent' : 'text-foreground'
+                        }`}>
+                          Part {partSong.part}: {partSong.title || 'Untitled'}
+                        </p>
+                        <p className="text-xs text-text-muted">
+                          {partSong.status === 'COMPLETED' ? 'Ready' : partSong.status?.toLowerCase() || 'Processing'}
+                        </p>
+                      </div>
+                      {currentPartIndex === index && (
+                        <div className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Waveform Canvas */}
             <div className="h-32 rounded-xl bg-background mb-6 flex items-center justify-center overflow-hidden">

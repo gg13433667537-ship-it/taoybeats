@@ -10,9 +10,21 @@ interface AudioPlayerProps {
   artist?: string
   onEnded?: () => void
   filename?: string
+  playlist?: string[]
+  playlistTitles?: string[]
+  playlistArtists?: string[]
 }
 
-export default function AudioPlayer({ src, title, artist, onEnded, filename }: AudioPlayerProps) {
+export default function AudioPlayer({
+  src,
+  title,
+  artist,
+  onEnded,
+  filename,
+  playlist,
+  playlistTitles,
+  playlistArtists,
+}: AudioPlayerProps) {
   const waveformRef = useRef<HTMLDivElement>(null)
   const wavesurferRef = useRef<WaveSurfer | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -22,10 +34,35 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
   const [isMuted, setIsMuted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0)
+  const [isPlaylistActive, setIsPlaylistActive] = useState(false)
+
+  // Determine effective src (playlist or single track)
+  const effectiveSrc = playlist && playlist.length > 0 ? playlist[currentTrackIndex] : src
+  const totalTracks = playlist?.length || 1
+  const isMultiPart = totalTracks > 1
+
+  // Get current track info (from playlist arrays or fall back to props)
+  const currentTitle = isMultiPart && playlistTitles?.[currentTrackIndex]
+    ? playlistTitles[currentTrackIndex]
+    : (playlist && playlist.length > 0 ? title : title)
+  const currentArtist = isMultiPart && playlistArtists?.[currentTrackIndex]
+    ? playlistArtists[currentTrackIndex]
+    : artist
+
+  // Handle track finished - play next in playlist or call onEnded
+  const handleTrackFinished = useCallback(() => {
+    setIsPlaying(false)
+    if (playlist && playlist.length > 1 && currentTrackIndex < playlist.length - 1) {
+      setCurrentTrackIndex((prev) => prev + 1)
+    } else {
+      onEnded?.()
+    }
+  }, [playlist, currentTrackIndex, onEnded])
 
   // Initialize WaveSurfer
   useEffect(() => {
-    if (!waveformRef.current || !src) return
+    if (!waveformRef.current || !effectiveSrc) return
 
     // Reset state when src changes
     setIsPlaying(false)
@@ -33,6 +70,7 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
     setDuration(0)
     setIsLoading(true)
     setLoadError(null)
+    setIsPlaylistActive(playlist && playlist.length > 1)
 
     const wavesurfer = WaveSurfer.create({
       container: waveformRef.current,
@@ -64,10 +102,7 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
 
     wavesurfer.on('play', () => setIsPlaying(true))
     wavesurfer.on('pause', () => setIsPlaying(false))
-    wavesurfer.on('finish', () => {
-      setIsPlaying(false)
-      onEnded?.()
-    })
+    wavesurfer.on('finish', handleTrackFinished)
 
     wavesurfer.on('error', (err) => {
       console.error('WaveSurfer error:', err)
@@ -75,13 +110,13 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
       setLoadError(err instanceof Error ? err.message : 'Failed to load audio')
     })
 
-    wavesurfer.load(src)
+    wavesurfer.load(effectiveSrc)
 
     return () => {
       wavesurfer.destroy()
       wavesurferRef.current = null
     }
-  }, [src, onEnded])
+  }, [effectiveSrc, onEnded, handleTrackFinished, playlist])
 
   const togglePlay = useCallback(() => {
     if (!wavesurferRef.current) return
@@ -117,6 +152,21 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
     wavesurferRef.current.seekTo(Math.max(0, Math.min(1, newTime / duration)))
   }, [])
 
+  const goToNextTrack = useCallback(() => {
+    if (!playlist || currentTrackIndex >= playlist.length - 1) return
+    setCurrentTrackIndex((prev) => prev + 1)
+  }, [playlist, currentTrackIndex])
+
+  const goToPreviousTrack = useCallback(() => {
+    // If more than 3 seconds in, restart current track instead of going to previous
+    if (currentTime > 3 && wavesurferRef.current) {
+      wavesurferRef.current.seekTo(0)
+      return
+    }
+    if (!playlist || currentTrackIndex <= 0) return
+    setCurrentTrackIndex((prev) => prev - 1)
+  }, [playlist, currentTrackIndex, currentTime])
+
   const formatTime = (time: number): string => {
     const mins = Math.floor(time / 60)
     const secs = Math.floor(time % 60)
@@ -125,10 +175,10 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
 
   // Download audio file via API proxy to handle CORS from external URLs
   const handleDownload = useCallback(async () => {
-    if (!src) return
+    if (!effectiveSrc) return
     try {
       // Extract song ID from src path to use API proxy for CORS
-      const songIdMatch = src.match(/\/songs\/([^/]+)/)
+      const songIdMatch = effectiveSrc.match(/\/songs\/([^/]+)/)
       if (songIdMatch) {
         const songId = songIdMatch[1]
         const response = await fetch(`/api/songs/${songId}/download`)
@@ -137,7 +187,7 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
         const downloadUrl = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = downloadUrl
-        link.download = filename || title || 'audio'
+        link.download = filename || currentTitle || 'audio'
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -145,12 +195,12 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
         return
       }
       // Fallback: direct fetch (may fail with CORS for external URLs)
-      const response = await fetch(src)
+      const response = await fetch(effectiveSrc)
       const blob = await response.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = downloadUrl
-      link.download = filename || title || 'audio'
+      link.download = filename || currentTitle || 'audio'
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -158,27 +208,33 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
     } catch (error) {
       console.error('Download failed:', error)
     }
-  }, [src, filename, title])
+  }, [effectiveSrc, filename, currentTitle])
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-      if (e.code === 'Space' && src) {
+      if (e.code === 'Space' && effectiveSrc) {
         e.preventDefault()
         togglePlay()
       } else if (e.code === 'ArrowLeft') {
         skip(-10)
       } else if (e.code === 'ArrowRight') {
         skip(10)
+      } else if (e.code === 'ArrowUp' && isPlaylistActive) {
+        e.preventDefault()
+        goToPreviousTrack()
+      } else if (e.code === 'ArrowDown' && isPlaylistActive) {
+        e.preventDefault()
+        goToNextTrack()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [src, togglePlay, skip])
+  }, [effectiveSrc, togglePlay, skip, isPlaylistActive, goToPreviousTrack, goToNextTrack])
 
-  if (!src) return null
+  if (!effectiveSrc) return null
 
   return (
     <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 p-4 rounded-xl bg-surface border border-border">
@@ -216,10 +272,41 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
           <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
         </button>
 
+        {/* Previous/Next track buttons (playlist only) */}
+        {isPlaylistActive && (
+          <>
+            <button
+              onClick={goToPreviousTrack}
+              aria-label="Previous track"
+              disabled={currentTrackIndex === 0}
+              className="text-text-secondary hover:text-foreground transition-colors p-1 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <SkipBack className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
+              <span className="sr-only">Prev</span>
+            </button>
+            <button
+              onClick={goToNextTrack}
+              aria-label="Next track"
+              disabled={currentTrackIndex === totalTracks - 1}
+              className="text-text-secondary hover:text-foreground transition-colors p-1 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
+              <span className="sr-only">Next</span>
+            </button>
+          </>
+        )}
+
         {/* Track info */}
         <div className="flex-1 min-w-0 hidden sm:block">
-          <p className="text-sm font-medium text-foreground truncate">{title || 'Unknown'}</p>
-          <p className="text-xs text-text-muted truncate">{artist || 'TaoyBeats'}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-foreground truncate">{currentTitle || 'Unknown'}</p>
+            {isMultiPart && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent flex-shrink-0">
+                Part {currentTrackIndex + 1}/{totalTracks}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-text-muted truncate">{currentArtist || 'TaoyBeats'}</p>
         </div>
 
         {/* Download button */}

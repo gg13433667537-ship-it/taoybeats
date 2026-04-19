@@ -61,6 +61,8 @@ export async function GET(
           coverUrl: dbSong.coverUrl || undefined,
           shareToken: dbSong.shareToken || undefined,
           userId: dbSong.userId,
+          partGroupId: dbSong.partGroupId || undefined,
+          part: dbSong.part || undefined,
           createdAt: dbSong.createdAt.toISOString(),
           updatedAt: dbSong.updatedAt.toISOString(),
         }

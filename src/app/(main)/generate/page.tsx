@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Music, Loader2, Download, Share2, AlertCircle, RefreshCw, Shield, Sparkles } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
@@ -260,6 +260,17 @@ export default function GeneratePage() {
   const [stageMessage, setStageMessage] = useState<string>('')
   const [forkError, setForkError] = useState<string | null>(null)
 
+  // Multi-part song state
+  const [multiPartInfo, setMultiPartInfo] = useState<{
+    isMultiPart: boolean
+    partGroupId: string
+    totalParts: number
+    parts: { id: string; part: number }[]
+  } | null>(null)
+  const [playlistUrls, setPlaylistUrls] = useState<string[]>([])
+  const [showMultiPartMessage, setShowMultiPartMessage] = useState(false)
+  const [isPollingRemainingParts, setIsPollingRemainingParts] = useState(false)
+
   // Load forked song data if fork parameter is present
   useEffect(() => {
     if (forkedSongId) {
@@ -365,8 +376,12 @@ export default function GeneratePage() {
         throw new Error(errorData.error || 'Failed to create song')
       }
 
-      const { id: newSongId } = await createResponse.json()
+      const responseData = await createResponse.json()
+      const { id: newSongId, multiPart } = responseData
       setSongId(newSongId)
+      if (multiPart) {
+        setMultiPartInfo(multiPart)
+      }
 
       // SSE connection state
       let eventSource: EventSource | null = null
@@ -430,6 +445,14 @@ export default function GeneratePage() {
               setGenerationStage('completed')
               if (data.audioUrl) {
                 setAudioUrl(data.audioUrl)
+                setPlaylistUrls([data.audioUrl])
+
+                // If multi-part song, start polling for remaining parts
+                if (multiPartInfo && multiPartInfo.isMultiPart && multiPartInfo.totalParts > 1) {
+                  setShowMultiPartMessage(true)
+                  // Start polling for remaining parts
+                  pollRemainingParts(multiPartInfo.partGroupId, data.songId || newSongId, data.audioUrl, multiPartInfo.totalParts, multiPartInfo.parts)
+                }
               }
               closeEventSource()
               break
@@ -470,6 +493,65 @@ export default function GeneratePage() {
       setError(err instanceof Error ? err.message : 'Generation failed')
     }
   }
+
+  // Poll remaining parts for multi-part songs
+  const pollRemainingParts = useCallback(async (partGroupId: string, initialPartId: string, initialAudioUrl: string, totalParts: number, parts: { id: string; part: number }[]) => {
+    setIsPollingRemainingParts(true)
+    const completedUrls: string[] = [initialAudioUrl]
+    const completedIds: string[] = [initialPartId]
+
+    const pollInterval = 5000 // 5 seconds
+    const maxWaitTime = 30 * 60 * 1000 // 30 minutes max for all parts
+    const startTime = Date.now()
+
+    const checkParts = async () => {
+      try {
+        // Fetch songs by partGroupId - we need to check which parts are complete
+        const partIds = parts.map(p => p.id)
+
+        for (const partId of partIds) {
+          if (completedIds.includes(partId)) continue
+
+          try {
+            const res = await fetch(`/api/songs/${partId}`)
+            if (res.ok) {
+              const song = await res.json()
+              if (song.status === 'COMPLETED' && song.audioUrl) {
+                completedUrls.push(song.audioUrl)
+                completedIds.push(partId)
+              }
+            }
+          } catch {
+            // Ignore individual part fetch errors
+          }
+        }
+
+        // Sort by part number to maintain order
+        const sortedUrls = completedUrls.length > 0 ? completedUrls : [initialAudioUrl]
+        setPlaylistUrls(sortedUrls)
+
+        // Check if we have all parts
+        if (completedIds.length >= totalParts) {
+          setIsPollingRemainingParts(false)
+          return
+        }
+
+        // Check timeout
+        if (Date.now() - startTime > maxWaitTime) {
+          setIsPollingRemainingParts(false)
+          return
+        }
+
+        // Continue polling
+        setTimeout(checkParts, pollInterval)
+      } catch {
+        // On error, continue polling
+        setTimeout(checkParts, pollInterval)
+      }
+    }
+
+    checkParts()
+  }, [])
 
   // Handle download - uses API proxy to avoid CORS issues with external audio URLs
   const handleDownload = async () => {
@@ -543,6 +625,10 @@ export default function GeneratePage() {
     setError(null)
     setFieldErrors({})
     setSongId(null)
+    setMultiPartInfo(null)
+    setPlaylistUrls([])
+    setShowMultiPartMessage(false)
+    setIsPollingRemainingParts(false)
   }
 
   // Handle lyrics confirmed from modal
@@ -1030,13 +1116,36 @@ export default function GeneratePage() {
               {/* Audio Player */}
               {audioUrl && (
                 <section className="p-6 rounded-2xl bg-surface border border-border">
-                  <h2 className="text-lg font-semibold text-foreground mb-4">{title}</h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-foreground">
+                      {multiPartInfo?.isMultiPart && showMultiPartMessage
+                        ? `${title} (Part 1/${multiPartInfo.totalParts})`
+                        : title}
+                    </h2>
+                    {isPollingRemainingParts && multiPartInfo && (
+                      <span className="text-xs px-2 py-1 rounded bg-accent/20 text-accent animate-pulse">
+                        Generating parts {playlistUrls.length + 1}-{multiPartInfo.totalParts}...
+                      </span>
+                    )}
+                  </div>
 
                   <AudioPlayer
-                    src={audioUrl}
+                    src={audioUrl ?? undefined}
                     title={title}
                     artist="TaoyBeats"
+                    playlist={playlistUrls.length > 1 ? playlistUrls : undefined}
                   />
+
+                  {/* Multi-part message */}
+                  {showMultiPartMessage && multiPartInfo && (
+                    <div className="mt-4 p-3 rounded-lg bg-accent/10 border border-accent/20 text-sm text-text-secondary">
+                      <p className="font-medium text-foreground mb-1">Multi-part song detected</p>
+                      <p>This song is split into {multiPartInfo.totalParts} parts for optimal quality. All parts will play automatically in sequence.</p>
+                      {isPollingRemainingParts && (
+                        <p className="mt-1 text-xs text-accent">Waiting for remaining parts to complete...</p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Actions */}
                   <div className="flex gap-3 mt-4">
