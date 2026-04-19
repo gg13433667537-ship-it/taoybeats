@@ -1,6 +1,6 @@
 import React from "react"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const pushMock = vi.fn()
 const searchParamsMock = {
@@ -26,6 +26,10 @@ class MockEventSource {
     this.onmessage?.({
       data: JSON.stringify(data),
     } as MessageEvent<string>)
+  }
+
+  emitError() {
+    this.onerror?.(new Event("error"))
   }
 
   close() {}
@@ -169,6 +173,67 @@ vi.mock("@/components/SelectorDrawer", async () => {
 
 import GeneratePage from "@/app/(main)/generate/page"
 
+function createFetchMock() {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString()
+
+    if (url === "/api/auth/profile") {
+      return new Response(JSON.stringify({ user: { id: "user-1", role: "USER" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    if (url === "/api/songs" && init?.method === "POST") {
+      return new Response(JSON.stringify({
+        id: "song-1",
+        status: "GENERATING",
+        compression: {
+          applied: true,
+          reason: "lyrics_too_long",
+        },
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`)
+  })
+}
+
+async function startGeneration() {
+  const fetchMock = createFetchMock()
+  vi.stubGlobal("fetch", fetchMock)
+
+  render(<GeneratePage />)
+
+  fireEvent.change(screen.getByTestId("song-title-input"), {
+    target: { value: "Single Pass Song" },
+  })
+  fireEvent.change(screen.getByTestId("lyrics-input"), {
+    target: { value: Array.from({ length: 180 }, (_, index) => `Line ${index + 1} for a very long lyric`).join("\n") },
+  })
+
+  fireEvent.click(screen.getByTestId("genre-selector-trigger"))
+  fireEvent.click(screen.getByTestId("selector-option-Pop"))
+  fireEvent.click(screen.getByTestId("selector-confirm"))
+
+  fireEvent.click(screen.getByTestId("mood-selector-trigger"))
+  fireEvent.click(screen.getByTestId("selector-option-Happy"))
+
+  fireEvent.click(screen.getByTestId("generate-song-button"))
+
+  await waitFor(() => {
+    expect(MockEventSource.instances).toHaveLength(1)
+  })
+
+  expect(toastMock.showToast).toHaveBeenCalledWith(
+    "info",
+    expect.stringContaining("自动压缩")
+  )
+}
+
 describe("Generate page result card", () => {
   beforeEach(() => {
     MockEventSource.instances = []
@@ -179,62 +244,51 @@ describe("Generate page result card", () => {
     vi.stubGlobal("EventSource", MockEventSource)
   })
 
-  it("shows a compression warning and renders a single clean result card", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input.toString()
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
-      if (url === "/api/auth/profile") {
-        return new Response(JSON.stringify({ user: { id: "user-1", role: "USER" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
+  it("replaces stale progress copy when the realtime stream drops", async () => {
+    await startGeneration()
 
-      if (url === "/api/songs" && init?.method === "POST") {
-        return new Response(JSON.stringify({
-          id: "song-1",
-          status: "GENERATING",
-          compression: {
-            applied: true,
-            reason: "lyrics_too_long",
-          },
-        }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
+    expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|0|Initializing...")
 
-      throw new Error(`Unexpected fetch: ${url}`)
+    act(() => {
+      MockEventSource.instances[0].emitMessage({
+        status: "PENDING",
+        progress: 10,
+        stage: "Queued...",
+      })
     })
-
-    vi.stubGlobal("fetch", fetchMock)
-
-    render(<GeneratePage />)
-
-    fireEvent.change(screen.getByTestId("song-title-input"), {
-      target: { value: "Single Pass Song" },
-    })
-    fireEvent.change(screen.getByTestId("lyrics-input"), {
-      target: { value: Array.from({ length: 180 }, (_, index) => `Line ${index + 1} for a very long lyric`).join("\n") },
-    })
-
-    fireEvent.click(screen.getByTestId("genre-selector-trigger"))
-    fireEvent.click(screen.getByTestId("selector-option-Pop"))
-    fireEvent.click(screen.getByTestId("selector-confirm"))
-
-    fireEvent.click(screen.getByTestId("mood-selector-trigger"))
-    fireEvent.click(screen.getByTestId("selector-option-Happy"))
-
-    fireEvent.click(screen.getByTestId("generate-song-button"))
 
     await waitFor(() => {
-      expect(MockEventSource.instances).toHaveLength(1)
+      expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|10|Queued...")
     })
 
-    expect(toastMock.showToast).toHaveBeenCalledWith(
-      "info",
-      expect.stringContaining("自动压缩")
+    act(() => {
+      MockEventSource.instances[0].emitMessage({
+        status: "GENERATING",
+        progress: 52,
+        stage: "Creating your music...",
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generation-progress")).toHaveTextContent("generating|52|Creating your music...")
+    })
+
+    act(() => {
+      vi.useFakeTimers()
+      MockEventSource.instances[0].emitError()
+    })
+
+    expect(screen.getByTestId("generation-progress")).toHaveTextContent(
+      "generating|52|Realtime connection lost. Checking latest song status..."
     )
+  })
+
+  it("shows a compression warning and renders a single clean result card with a resolved duration", async () => {
+    await startGeneration()
 
     expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|0|Initializing...")
 
