@@ -26,8 +26,7 @@ export type SongParams = {
   referenceSong?: string
   userNotes?: string
   isInstrumental?: boolean
-  voiceId?: string
-  referenceAudio?: string
+    referenceAudio?: string
   model?: 'music-2.6' | 'music-cover'
   outputFormat?: 'mp3' | 'wav' | 'pcm'
   lyricsOptimizer?: boolean
@@ -99,7 +98,6 @@ export const musicProvider: AIProvider = {
         format: outputFormat
       },
       aigc_watermark: params.aigcWatermark || false,
-      voice_id: params.voiceId,
       lyrics_optimizer: params.lyricsOptimizer,
     }
 
@@ -119,14 +117,17 @@ export const musicProvider: AIProvider = {
     }
 
     // Add reference audio for music-cover model using correct parameter names
-    // Use audio_base64 for uploaded files or audio_url for URL-based reference
+    // Use reference_audio for uploaded base64 files or reference_audio_url for URL-based reference
     if (params.referenceAudio) {
-      if (params.referenceAudio.startsWith('data:') || /^[A-Za-z0-9+/=]+$/.test(params.referenceAudio.slice(0, 50))) {
-        // Looks like base64 data
-        requestBody.audio_base64 = params.referenceAudio
+      if (params.referenceAudio.startsWith('data:')) {
+        // Base64 data URI - use reference_audio
+        requestBody.reference_audio = params.referenceAudio
+      } else if (/^[A-Za-z0-9+/=]{50,}$/.test(params.referenceAudio)) {
+        // Looks like raw base64 (no data URI prefix, but long enough to be base64)
+        requestBody.reference_audio = params.referenceAudio
       } else if (params.referenceAudio.startsWith('http://') || params.referenceAudio.startsWith('https://')) {
-        // Looks like a URL
-        requestBody.audio_url = params.referenceAudio
+        // Looks like a URL - use reference_audio_url
+        requestBody.reference_audio_url = params.referenceAudio
       }
     }
 

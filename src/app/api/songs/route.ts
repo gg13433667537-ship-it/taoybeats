@@ -343,9 +343,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Genre must have at least one valid value" }, { status: 400 })
     }
 
-    // Validation - lyrics not required if instrumental
+    // Validation - lyrics not required if instrumental or if lyricsOptimizer is enabled
     const instrumental = isInstrumental === true || isInstrumental === "true"
-    if (!instrumental && lyricsSegments.length === 0) {
+    const enableLyricsOptimizer = lyricsOptimizer === true || lyricsOptimizer === "true"
+    if (!instrumental && lyricsSegments.length === 0 && !enableLyricsOptimizer) {
       return NextResponse.json(
         { error: "Missing required fields: title, lyrics, genre, mood" },
         { status: 400 }
@@ -390,14 +391,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate model enum
-    const allowedModels = ["music-2.6", "music-2.5-turbo", "music-2.5"]
+    const allowedModels = ["music-2.6", "music-2.5-turbo", "music-2.5", "music-cover"]
     const sanitizedModel = model ? sanitizeString(model) : "music-2.6"
     if (model && !allowedModels.includes(sanitizedModel)) {
       return NextResponse.json({ error: "Invalid model. Allowed: " + allowedModels.join(", ") }, { status: 400 })
     }
 
     // Validate output format enum
-    const allowedFormats = ["mp3", "wav", "flac"]
+    const allowedFormats = ["mp3", "wav", "pcm"]
     const sanitizedOutputFormat = outputFormat ? sanitizeString(outputFormat) : "mp3"
     if (outputFormat && !allowedFormats.includes(sanitizedOutputFormat)) {
       return NextResponse.json({ error: "Invalid output format. Allowed: " + allowedFormats.join(", ") }, { status: 400 })
@@ -485,9 +486,12 @@ export async function POST(request: NextRequest) {
     const createdSongs: Array<{ id: string; part: number; shareToken: string }> = []
     const now = new Date().toISOString()
 
+    // If no lyrics segments (empty lyrics with lyricsOptimizer enabled), create a single song
+    const segmentsToCreate = lyricsSegments.length > 0 ? lyricsSegments : ['']
+
     // Create song records for each segment
-    for (let partIndex = 0; partIndex < lyricsSegments.length; partIndex++) {
-      const segmentLyrics = lyricsSegments[partIndex]
+    for (let partIndex = 0; partIndex < segmentsToCreate.length; partIndex++) {
+      const segmentLyrics = segmentsToCreate[partIndex]
       const partNumber = partIndex + 1
       const songId = crypto.randomUUID()
       const shareToken = partNumber === 1 ? crypto.randomUUID().slice(0, 8) : undefined // Only first part gets shareToken
@@ -642,7 +646,6 @@ async function generateMusic(
       referenceSong: song.referenceSong,
       userNotes: song.userNotes,
       isInstrumental: song.isInstrumental,
-      voiceId: song.voiceId,
       referenceAudio: song.referenceAudio || song.referenceAudioUrl,
       model: song.model || 'music-2.6',
       outputFormat: song.outputFormat,

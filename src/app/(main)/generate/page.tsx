@@ -28,14 +28,6 @@ const MOODS = [
   "Festive", "Celebration", "Chill", "Uplifting", "Melancholic", "Intense"
 ]
 
-// Duration options
-const DURATIONS = [
-  { value: 30 },
-  { value: 120 },
-  { value: 180 },
-  { value: 300 },
-]
-
 // Grouped instruments (English values for API)
 const INSTRUMENT_GROUPS: Record<string, string[]> = {
   'Strings': ['Guitar', 'Violin', 'Cello', 'Harp', 'Banjo', 'Ukulele', 'Mandolin'],
@@ -138,17 +130,6 @@ const getInstrumentGroupLabel = (group: string, t: (key: string) => string): str
   return labels[group] || group
 }
 
-// Helper to get translated duration label
-const getDurationLabel = (value: number, t: (key: string) => string): { label: string; description: string } => {
-  const durations: Record<number, { label: string; description: string }> = {
-    30: { label: t('durationShort'), description: t('durationShortDesc') },
-    120: { label: t('durationStandard'), description: t('durationStandardDesc') },
-    180: { label: t('durationExtended3'), description: t('durationExtended3Desc') },
-    300: { label: t('durationExtended5'), description: t('durationExtended5Desc') },
-  }
-  return durations[value] || { label: `${value}s`, description: '' }
-}
-
 // Selector drawer options factory
 const createGenreOptions = (t: (key: string) => string): SelectOption[] =>
   GENRES.map(g => ({ value: g, label: getGenreLabel(g, t) }))
@@ -211,9 +192,7 @@ export default function GeneratePage() {
   const [referenceSong, setReferenceSong] = useState("")
   const [userNotes, setUserNotes] = useState("")
   const [isInstrumental, setIsInstrumental] = useState(false)
-  const [beatMakerMode, setBeatMakerMode] = useState(false)
   const [songId, setSongId] = useState<string | null>(null)
-  const [duration, setDuration] = useState(60) // Default 1 minute
 
   // Voice state
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('')
@@ -305,19 +284,7 @@ export default function GeneratePage() {
     }
   }, [forkedSongId])
 
-  // Beat Maker mode effect - enables instrumental and pre-selects beat instruments
-  useEffect(() => {
-    if (beatMakerMode) {
-      /* eslint-disable react-hooks/set-state-in-effect */
-      // Intentionally updating form state based on beatMakerMode toggle
-      setIsInstrumental(true)
-      setSelectedInstruments(['Drum', 'Bass', 'Synth'])
-      setSelectedGenres(['Electronic', 'Hip-Hop'])
-      setMood('Energetic')
-      /* eslint-enable react-hooks/set-state-in-effect */
-    }
-  }, [beatMakerMode])
-
+  
   // Handle generation
   const handleGenerate = async () => {
     // Clear previous errors
@@ -329,7 +296,7 @@ export default function GeneratePage() {
     if (!title.trim()) {
       errors.title = "Please enter a song title"
     }
-    if (!isInstrumental && !lyrics.trim()) {
+    if (!isInstrumental && !lyrics.trim() && !lyricsOptimizer) {
       errors.lyrics = "Lyrics are required for song generation"
     }
     if (selectedGenres.length === 0) {
@@ -367,7 +334,6 @@ export default function GeneratePage() {
           isInstrumental,
           voiceId: selectedVoiceId,
           referenceAudio,
-          duration,
           model,
           outputFormat,
           lyricsOptimizer,
@@ -548,8 +514,7 @@ export default function GeneratePage() {
     setReferenceSong("")
     setUserNotes("")
     setIsInstrumental(false)
-    setBeatMakerMode(false)
-    setSelectedVoiceId('')
+        setSelectedVoiceId('')
     setReferenceAudio(null)
     setAudioOptions({
       timbreSimilarity: 0.7,
@@ -564,7 +529,6 @@ export default function GeneratePage() {
     setSampleRate(44100)
     setBitrate(256000)
     setAigcWatermark(false)
-    setDuration(60)
     setGenerationStage('idle')
     setProgress(0)
     setAudioUrl(null)
@@ -696,7 +660,6 @@ export default function GeneratePage() {
                             mood,
                             instruments: selectedInstruments,
                             isInstrumental,
-                            duration,
                           })
                           if (!result.success) {
                             alert(result.error || 'Failed to save preset')
@@ -709,34 +672,7 @@ export default function GeneratePage() {
                     </button>
                   </div>
 
-                  {/* Beat Maker Mode Toggle */}
-                  <div className="flex items-center gap-3 mb-3 p-3 rounded-lg bg-surface border border-border">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={beatMakerMode}
-                      onClick={() => setBeatMakerMode(!beatMakerMode)}
-                      className={`relative w-12 h-6 rounded-full transition-colors ${
-                        beatMakerMode ? 'bg-purple-500' : 'bg-border'
-                      }`}
-                    >
-                      <div
-                        className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                          beatMakerMode ? 'translate-x-7' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">{t('beatMakerMode')}</p>
-                      <p className="text-xs text-text-muted">{t('beatMakerModeDesc')}</p>
-                    </div>
-                    {beatMakerMode && (
-                      <span className="px-2 py-1 rounded bg-purple-500/10 text-purple-400 text-xs font-medium">
-                        {t('plusDrumsBassSynth')}
-                      </span>
-                    )}
-                  </div>
-
+                  
                   <div className="flex gap-2 flex-wrap">
                     {cloudPresets.map(preset => (
                       <button
@@ -746,7 +682,6 @@ export default function GeneratePage() {
                           setMood(preset.mood)
                           setSelectedInstruments(preset.instruments)
                           setIsInstrumental(preset.isInstrumental)
-                          setDuration(preset.duration)
                         }}
                         className="px-3 py-2 rounded-lg text-xs font-medium bg-surface border border-border hover:border-accent transition-colors"
                       >
@@ -839,7 +774,7 @@ export default function GeneratePage() {
                     {/* Quick Structure Tags */}
                     {!isInstrumental && (
                       <div className="flex flex-wrap gap-1.5 mb-2">
-                        {['[Verse]', '[Chorus]', '[Bridge]', '[Pre-Chorus]', '[Intro]', '[Outro]'].map(tag => (
+                        {['[Verse]', '[Chorus]', '[Bridge]', '[Pre-Chorus]', '[Intro]', '[Outro]', '[Interlude]', '[Post Chorus]', '[Transition]', '[Break]', '[Hook]', '[Build Up]', '[Inst]', '[Solo]'].map(tag => (
                           <button
                             key={tag}
                             type="button"
@@ -925,31 +860,6 @@ export default function GeneratePage() {
                         {fieldErrors.genres}
                       </p>
                     )}
-                  </div>
-
-                  {/* Duration */}
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">
-                      {t('duration')}
-                    </label>
-                    <div className="flex gap-2">
-                      {DURATIONS.map(d => {
-                        const durationInfo = getDurationLabel(d.value, t)
-                        return (
-                        <button
-                          key={d.value}
-                          onClick={() => setDuration(d.value)}
-                          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            duration === d.value
-                              ? 'bg-accent text-white'
-                              : 'bg-background border border-border text-text-secondary hover:border-accent'
-                          }`}
-                          title={durationInfo.description}
-                        >
-                          {durationInfo.label}
-                        </button>
-                      )})}
-                    </div>
                   </div>
 
                   {/* Mood */}

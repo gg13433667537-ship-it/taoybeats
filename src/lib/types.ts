@@ -98,7 +98,6 @@ export interface Preset {
   mood: string
   instruments: string[]
   isInstrumental: boolean
-  duration: number
   shareToken?: string
   createdAt: string
   updatedAt: string

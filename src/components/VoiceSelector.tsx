@@ -163,7 +163,7 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
       <div className="relative">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          aria-label="Select voice"
+          aria-label="选择语音音色 (用于语音合成)"
           aria-expanded={isOpen}
           className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border hover:border-accent transition-colors"
         >
@@ -178,7 +178,7 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
 
             <div className="absolute top-full left-0 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-96 overflow-y-auto bg-surface border border-border rounded-xl shadow-xl z-20">
               <div className="p-3 border-b border-border flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">选择音色</span>
+                <span className="text-sm font-medium text-foreground">选择音色 (语音合成)</span>
                 <button
                   onClick={() => {
                     setIsCloneModalOpen(true)
