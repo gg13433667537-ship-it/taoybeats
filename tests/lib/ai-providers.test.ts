@@ -83,6 +83,66 @@ describe('musicProvider', () => {
     expect(result).toBe('audio:https://cdn.minimax.example/song.mp3')
   })
 
+  it('maps nested music_generation_info responses with data.audio to a completed song', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          status: 2,
+          audio: 'https://cdn.minimax.example/poll-result.mp3',
+          video_url: 'https://cdn.minimax.example/poll-result.mp4',
+        },
+        base_resp: {
+          status_code: 0,
+          status_msg: 'success',
+        },
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await musicProvider.getProgress(
+      'task-456',
+      'test-key',
+      'https://api.minimaxi.com'
+    )
+
+    expect(result).toEqual({
+      status: 'COMPLETED',
+      progress: 100,
+      stage: 'completed',
+      audioUrl: 'https://cdn.minimax.example/poll-result.mp3',
+      videoUrl: 'https://cdn.minimax.example/poll-result.mp4',
+      error: undefined,
+    })
+  })
+
+  it('returns nested data.audio URLs from the download helper', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          status: 2,
+          audio: 'https://cdn.minimax.example/download-result.mp3',
+        },
+        base_resp: {
+          status_code: 0,
+          status_msg: 'success',
+        },
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await musicProvider.download(
+      'task-789',
+      'test-key',
+      'https://api.minimaxi.com'
+    )
+
+    expect(result).toBe('https://cdn.minimax.example/download-result.mp3')
+  })
+
   it('uses audio_url for continuation requests and handles synchronous completions', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
