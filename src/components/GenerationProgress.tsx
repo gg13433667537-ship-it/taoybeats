@@ -20,11 +20,13 @@ export default function GenerationProgress({
   const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationRef = useRef<number | undefined>(undefined)
+  const isWaitingState = stage === 'initializing' || stage === 'generating' || stage === 'finalizing'
+  const normalizedProgress = Math.max(0, Math.min(progress, 100))
 
   // Waveform animation
   useEffect(() => {
     // Clear canvas when not generating
-    if (stage !== 'generating' && stage !== 'finalizing' && stage !== 'initializing') {
+    if (!isWaitingState) {
       const canvas = canvasRef.current
       if (canvas) {
         const ctx = canvas.getContext('2d')
@@ -64,8 +66,16 @@ export default function GenerationProgress({
 
         // Gradient effect
         const gradient = ctx.createLinearGradient(0, y, 0, y + barHeight * 0.2)
-        gradient.addColorStop(0, '#a855f7')
-        gradient.addColorStop(1, '#ec4899')
+        if (stage === 'finalizing') {
+          gradient.addColorStop(0, '#14b8a6')
+          gradient.addColorStop(1, '#22c55e')
+        } else if (stage === 'initializing') {
+          gradient.addColorStop(0, '#6366f1')
+          gradient.addColorStop(1, '#8b5cf6')
+        } else {
+          gradient.addColorStop(0, '#a855f7')
+          gradient.addColorStop(1, '#ec4899')
+        }
 
         ctx.fillStyle = gradient
         ctx.beginPath()
@@ -84,7 +94,67 @@ export default function GenerationProgress({
         cancelAnimationFrame(animationRef.current)
       }
     }
-  }, [stage])
+  }, [isWaitingState, stage])
+
+  const stageMeta = (() => {
+    switch (stage) {
+      case 'initializing':
+        return {
+          badge: t('queued'),
+          title: t('queuedStageTitle'),
+          description: stageMessage || t('queuedStageBody'),
+        }
+      case 'generating':
+        return {
+          badge: t('creatingMusic'),
+          title: t('generatingStageTitle'),
+          description: stageMessage || t('generatingStageBody'),
+        }
+      case 'finalizing':
+        return {
+          badge: t('almostDone'),
+          title: t('finalizingStageTitle'),
+          description: stageMessage || t('finalizingStageBody'),
+        }
+      case 'completed':
+        return {
+          badge: t('complete'),
+          title: t('yourSongReady'),
+          description: t('completedStageBody'),
+        }
+      case 'failed':
+        return {
+          badge: t('failed'),
+          title: t('generationFailed'),
+          description: error || t('failedStageBody'),
+        }
+      default:
+        return {
+          badge: t('processing'),
+          title: t('generationProgress'),
+          description: stageMessage || t('pleaseWait'),
+        }
+    }
+  })()
+
+  const milestones = [
+    { key: 'queued', label: t('queued') },
+    { key: 'generating', label: t('creatingMusic') },
+    { key: 'finalizing', label: t('almostDone') },
+  ] as const
+
+  const getMilestoneState = (key: typeof milestones[number]['key']) => {
+    if (stage === 'failed') return 'idle'
+    if (stage === 'completed') return 'done'
+    if (stage === 'initializing') return key === 'queued' ? 'active' : 'idle'
+    if (stage === 'generating') {
+      return key === 'queued' ? 'done' : key === 'generating' ? 'active' : 'idle'
+    }
+    if (stage === 'finalizing') {
+      return key === 'finalizing' ? 'active' : 'done'
+    }
+    return 'idle'
+  }
 
   const getStatusIcon = () => {
     switch (stage) {
@@ -115,84 +185,89 @@ export default function GenerationProgress({
     }
   }
 
-  const getStageLabel = () => {
-    switch (stage) {
-      case 'initializing':
-        return t('initializing')
-      case 'generating':
-        return t('creatingYourMusic')
-      case 'finalizing':
-        return t('almostDone')
-      case 'completed':
-        return t('complete')
-      case 'failed':
-        return t('generationFailed')
-      default:
-        return t('processing')
-    }
-  }
-
   return (
-    <div className="p-6 rounded-2xl bg-surface border border-border">
-      <h2 className="text-lg font-semibold text-foreground mb-4">{t('generationProgress')}</h2>
-
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="h-3 rounded-full bg-background overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-accent to-accent-glow transition-all duration-500 ease-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <div className="flex justify-between mt-2">
-          <p className="text-sm text-text-secondary">{stageMessage || getStageLabel()}</p>
-          <p className="text-sm text-text-muted font-mono">{progress}%</p>
+    <div className="overflow-hidden rounded-[28px] border border-border bg-surface">
+      <div className="border-b border-border/80 bg-gradient-to-r from-accent/10 via-accent-glow/10 to-transparent px-6 py-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center rounded-full border border-accent/20 bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+              {stageMeta.badge}
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-foreground">{stageMeta.title}</h2>
+              <p className="mt-1 max-w-2xl text-sm text-text-secondary">{stageMeta.description}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            {getStatusIcon()}
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-[0.2em] text-text-muted">{t('generationProgress')}</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">{normalizedProgress}%</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Waveform Visualization */}
-      {stage !== 'completed' && stage !== 'failed' && (
-        <div className="mb-6 p-4 rounded-xl bg-background">
-          <canvas
-            ref={canvasRef}
-            width={400}
-            height={60}
-            className="w-full h-16"
-          />
-          <p className="text-xs text-text-muted text-center mt-2">
-            {stage === 'initializing' && t('initializing')}
-            {stage === 'generating' && t('creatingYourMusic')}
-            {stage === 'finalizing' && t('almostDone')}
-          </p>
-        </div>
-      )}
+      <div className="space-y-6 px-6 py-6">
+        <div className="grid gap-2 sm:grid-cols-3">
+          {milestones.map((milestone) => {
+            const milestoneState = getMilestoneState(milestone.key)
+            const stateClasses =
+              milestoneState === 'done'
+                ? 'border-success/30 bg-success/10 text-success'
+                : milestoneState === 'active'
+                  ? 'border-accent/30 bg-accent/10 text-accent'
+                  : 'border-border bg-background/60 text-text-muted'
 
-      {/* Status Indicator */}
-      <div className="flex items-center gap-4">
-        {getStatusIcon()}
+            return (
+              <div
+                key={milestone.key}
+                className={`rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${stateClasses}`}
+              >
+                {milestone.label}
+              </div>
+            )
+          })}
+        </div>
+
         <div>
-          <p className="font-medium text-foreground capitalize">
-            {stage === 'completed' ? t('yourSongReady') :
-             stage === 'failed' ? t('pleaseTryAgain') :
-             getStageLabel()}
-          </p>
-          <p className="text-sm text-text-secondary">
-            {stage === 'completed' && t('clickPlayToPreview')}
-            {stage === 'failed' && (error || t('generationFailed'))}
-            {stage === 'generating' && `${progress}% ${t('complete').toLowerCase()}`}
-            {(stage === 'initializing' || stage === 'finalizing') && t('pleaseWait')}
-          </p>
+          <div className="h-3 overflow-hidden rounded-full bg-background">
+            <div
+              className="h-full bg-gradient-to-r from-accent to-accent-glow transition-all duration-500 ease-out"
+              style={{ width: `${normalizedProgress}%` }}
+            />
+          </div>
+          <div className="mt-2 flex justify-between gap-4">
+            <p className="text-sm text-text-secondary">{stageMessage || stageMeta.description}</p>
+            <p className="text-sm font-mono text-text-muted">{normalizedProgress}%</p>
+          </div>
         </div>
-      </div>
 
-      {/* Tips during generation */}
-      {stage === 'generating' && (
-        <div className="mt-6 p-4 rounded-xl bg-accent/5 border border-accent/20">
-          <p className="text-sm text-text-secondary">
-            <span className="font-medium text-accent">Tip:</span> Generation usually takes 2-5 minutes depending on the complexity of your request.
-          </p>
-        </div>
-      )}
+        {isWaitingState && (
+          <div className="rounded-2xl border border-border bg-background/70 p-4">
+            <canvas
+              ref={canvasRef}
+              width={400}
+              height={60}
+              className="h-16 w-full"
+            />
+          </div>
+        )}
+
+        {stage === 'generating' && (
+          <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4">
+            <p className="text-sm text-text-secondary">
+              <span className="font-medium text-accent">{t('tipLabel')}</span> {t('tip4')}
+            </p>
+          </div>
+        )}
+
+        {stage === 'failed' && error && (
+          <div className="rounded-2xl border border-error/20 bg-error/5 p-4 text-sm text-error">
+            {error}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

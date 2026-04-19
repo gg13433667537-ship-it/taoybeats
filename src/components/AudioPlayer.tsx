@@ -8,6 +8,7 @@ interface AudioPlayerProps {
   title?: string
   artist?: string
   onEnded?: () => void
+  onDurationResolved?: (seconds: number) => void
   filename?: string
   songId?: string
   playlist?: string[]
@@ -21,6 +22,7 @@ export default function AudioPlayer({
   title,
   artist,
   onEnded,
+  onDurationResolved,
   filename,
   songId,
   playlist,
@@ -181,7 +183,11 @@ export default function AudioPlayer({
     const audio = audioRef.current
     if (!audio) return
 
-    setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    const nextDuration = Number.isFinite(audio.duration) ? audio.duration : 0
+    setDuration(nextDuration)
+    if (nextDuration > 0) {
+      onDurationResolved?.(nextDuration)
+    }
     setIsLoading(false)
 
     if (!pendingAutoplayRef.current) {
@@ -196,14 +202,18 @@ export default function AudioPlayer({
       console.error('Playback failed:', error)
       setLoadError(error instanceof Error ? error.message : 'Failed to play audio')
     }
-  }, [])
+  }, [onDurationResolved])
 
   const handleLoadedMetadata = useCallback(() => {
     const audio = audioRef.current
     if (!audio) return
-    setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    const nextDuration = Number.isFinite(audio.duration) ? audio.duration : 0
+    setDuration(nextDuration)
+    if (nextDuration > 0) {
+      onDurationResolved?.(nextDuration)
+    }
     setIsLoading(false)
-  }, [])
+  }, [onDurationResolved])
 
   const handleAudioError = useCallback(() => {
     const message = getMediaErrorMessage()
@@ -297,7 +307,7 @@ export default function AudioPlayer({
   if (!effectiveSrc) return null
 
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 p-4 rounded-xl bg-surface border border-border">
+    <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4">
       <audio
         key={effectiveSrc}
         ref={audioRef}
@@ -317,7 +327,7 @@ export default function AudioPlayer({
       />
 
       {/* Top row: Play controls, track info, download */}
-      <div className="flex items-center gap-3 w-full sm:w-auto">
+      <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:gap-4">
         {/* Play/Pause */}
         <button
           onClick={togglePlay}
@@ -375,7 +385,7 @@ export default function AudioPlayer({
         )}
 
         {/* Track info */}
-        <div className="flex-1 min-w-0 hidden sm:block">
+        <div className="hidden min-w-0 flex-1 sm:block">
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium text-foreground truncate">{currentTitle || 'Unknown'}</p>
             {isMultiPart && (
@@ -398,9 +408,9 @@ export default function AudioPlayer({
       </div>
 
       {/* Bottom row: Waveform and Volume */}
-      <div className="flex items-center gap-3 w-full">
+      <div className="flex w-full min-w-0 flex-wrap items-end gap-4">
         {/* Playback Progress */}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1 basis-full">
           {loadError && (
             <div className="flex items-center gap-2 mb-2 text-error text-xs">
               <AlertCircle className="w-3 h-3" />
@@ -432,7 +442,7 @@ export default function AudioPlayer({
         </div>
 
         {/* Volume */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <button
             onClick={toggleMute}
             aria-label={isMuted ? "Unmute" : "Mute"}
@@ -452,7 +462,7 @@ export default function AudioPlayer({
             value={isMuted ? 0 : volume}
             onChange={handleVolumeChange}
             aria-label={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
-            className="w-16 sm:w-20 h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent"
+            className="h-1 w-full max-w-full flex-1 rounded-full bg-border appearance-none cursor-pointer accent-accent sm:w-24 sm:flex-none md:w-28"
           />
         </div>
       </div>

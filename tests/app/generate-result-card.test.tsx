@@ -255,7 +255,7 @@ describe("Generate page result card", () => {
 
     const initialProgress = readGenerationProgress()
     expect(initialProgress.stage).toBe("initializing")
-    expect(initialProgress.progress).toBe(0)
+    expect(initialProgress.progress).toBe(8)
     expect(initialProgress.stageMessage).toBeTruthy()
     let pendingStageMessage = ""
     let generatingStageMessage = ""

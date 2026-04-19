@@ -150,9 +150,67 @@ const createInstrumentOptions = (t: TranslateFn): SelectOption[] =>
   )
 
 type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | 'completed' | 'failed'
+type BackendGenerationStatus = 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED'
 
 const CLIENT_MAX_SINGLE_PASS_LYRICS_LENGTH = 1800
 const CLIENT_MAX_SINGLE_PASS_LINE_COUNT = 64
+
+function mapGenerationPresentation(
+  status: BackendGenerationStatus,
+  progress: number,
+  stage?: string,
+  options?: { hasAudio?: boolean }
+): { stage: Exclude<GenerationStage, 'idle'>; progress: number; message: string } {
+  if (status === 'PENDING') {
+    return {
+      stage: 'initializing',
+      progress: Math.max(progress, 8),
+      message: stage || 'Queued. Preparing your song...',
+    }
+  }
+
+  if (status === 'GENERATING') {
+    return {
+      stage: 'generating',
+      progress: Math.max(progress, 35),
+      message: stage || 'Generating the full song...',
+    }
+  }
+
+  if (status === 'COMPLETED' && options?.hasAudio === false) {
+    return {
+      stage: 'finalizing',
+      progress: Math.max(progress, 92),
+      message: stage || 'Finalizing your song...',
+    }
+  }
+
+  if (status === 'COMPLETED') {
+    return {
+      stage: 'completed',
+      progress: 100,
+      message: 'Song ready',
+    }
+  }
+
+  return {
+    stage: 'failed',
+    progress: 0,
+    message: 'Generation failed',
+  }
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '--:--'
+  }
+
+  const totalSeconds = Math.round(seconds)
+  const minutes = Math.floor(totalSeconds / 60)
+  const remainingSeconds = totalSeconds % 60
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+}
 
 function shouldWarnForLyricsCompression(rawLyrics: string): boolean {
   const trimmedLyrics = rawLyrics.trim()
@@ -277,7 +335,7 @@ export default function GeneratePage() {
   const [generationStage, setGenerationStage] = useState<GenerationStage>('idle')
   const [progress, setProgress] = useState(0)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
-  const [resultDurationLabel] = useState<string | null>(null)
+  const [resultDurationLabel, setResultDurationLabel] = useState('--:--')
   const [error, setError] = useState<string | null>(null)
   const [stageMessage, setStageMessage] = useState<string>('')
   const [forkError, setForkError] = useState<string | null>(null)
@@ -288,6 +346,30 @@ export default function GeneratePage() {
   const [playlistSongIds, setPlaylistSongIds] = useState<string[]>([])
   const [showMultiPartMessage, setShowMultiPartMessage] = useState(false)
   const [isPollingRemainingParts, setIsPollingRemainingParts] = useState(false)
+
+  const applyGenerationPresentation = useCallback(
+    (
+      status: BackendGenerationStatus,
+      nextProgress: number,
+      nextStage?: string,
+      options?: { hasAudio?: boolean; error?: string | null }
+    ) => {
+      const presentation = mapGenerationPresentation(status, nextProgress, nextStage, options)
+
+      setGenerationStage(presentation.stage)
+      setProgress(presentation.progress)
+      setStageMessage(presentation.message)
+
+      if (status === 'FAILED') {
+        setError(options?.error || presentation.message)
+        return presentation
+      }
+
+      setError(null)
+      return presentation
+    },
+    []
+  )
 
   // Load forked song data if fork parameter is present
   useEffect(() => {
@@ -347,15 +429,14 @@ export default function GeneratePage() {
       return
     }
 
-    setGenerationStage('initializing')
-    setProgress(0)
+    applyGenerationPresentation('PENDING', 0)
     setAudioUrl(null)
+    setResultDurationLabel('--:--')
     setMultiPartInfo(null)
     setPlaylistUrls([])
     setPlaylistSongIds([])
     setShowMultiPartMessage(false)
     setIsPollingRemainingParts(false)
-    setStageMessage('Initializing...')
 
     if (!isInstrumental && shouldWarnForLyricsCompression(lyrics)) {
       showToast("info", "歌词过长，系统会先自动压缩到适合 5 分钟内生成的版本，再开始生成。")
@@ -446,38 +527,43 @@ export default function GeneratePage() {
       }
 
       const handleCompletedSong = (completedSongId: string, completedAudioUrl: string) => {
-        setError(null)
-        setGenerationStage('completed')
+        applyGenerationPresentation('COMPLETED', 100)
+        setSongId(completedSongId)
         setAudioUrl(completedAudioUrl)
         setPlaylistUrls([completedAudioUrl])
         setPlaylistSongIds([completedSongId])
         clearStatusPollingTimeout()
       }
 
-      const applyPolledSongStatus = (song: { id?: string; status?: string; audioUrl?: string | null; error?: string | null }) => {
+      const applyPolledSongStatus = (song: {
+        id?: string
+        status?: BackendGenerationStatus
+        audioUrl?: string | null
+        error?: string | null
+        progress?: number
+        stage?: string
+      }) => {
         switch (song.status) {
           case 'PENDING':
-            setError(null)
-            setGenerationStage('initializing')
-            setStageMessage('Queued. Waiting for generation to begin...')
+            applyGenerationPresentation('PENDING', song.progress ?? 0, song.stage)
             return false
           case 'GENERATING':
-            setError(null)
-            setGenerationStage('generating')
-            setStageMessage('Realtime connection lost. Still checking generation status...')
+            applyGenerationPresentation(
+              'GENERATING',
+              song.progress ?? 0,
+              song.stage || 'Realtime connection lost. Still checking generation status...'
+            )
             return false
           case 'COMPLETED':
             if (song.audioUrl) {
               handleCompletedSong(song.id || newSongId, song.audioUrl)
               return true
             }
-            setGenerationStage('finalizing')
-            setStageMessage('Generation finished. Finalizing audio...')
+            applyGenerationPresentation('COMPLETED', song.progress ?? 100, song.stage, { hasAudio: false })
             return false
           case 'FAILED':
             clearStatusPollingTimeout()
-            setGenerationStage('failed')
-            setError(song.error || 'Generation failed')
+            applyGenerationPresentation('FAILED', song.progress ?? 0, song.stage, { error: song.error })
             return true
           default:
             return false
@@ -501,8 +587,7 @@ export default function GeneratePage() {
 
           statusPollingAttempts++
           if (statusPollingAttempts >= maxStatusPollingAttempts) {
-            setGenerationStage('failed')
-            setError('Unable to confirm generation status. Please refresh and check again.')
+            applyGenerationPresentation('FAILED', 0, 'Unable to confirm generation status. Please refresh and check again.')
             return
           }
 
@@ -512,13 +597,11 @@ export default function GeneratePage() {
         } catch {
           statusPollingAttempts++
           if (statusPollingAttempts >= maxStatusPollingAttempts) {
-            setGenerationStage('failed')
-            setError('Unable to confirm generation status. Please refresh and check again.')
+            applyGenerationPresentation('FAILED', 0, 'Unable to confirm generation status. Please refresh and check again.')
             return
           }
 
-          setGenerationStage('generating')
-          setStageMessage('Realtime connection lost. Retrying status check...')
+          applyGenerationPresentation('GENERATING', 0, 'Realtime connection lost. Retrying status check...')
           statusPollingTimeout = setTimeout(() => {
             void pollSongStatus()
           }, statusPollingIntervalMs)
@@ -527,9 +610,7 @@ export default function GeneratePage() {
 
       const fallbackToStatusPolling = () => {
         closeEventSource()
-        setError(null)
-        setGenerationStage('generating')
-        setStageMessage('Realtime connection lost. Checking latest song status...')
+        applyGenerationPresentation('GENERATING', 0, 'Realtime connection lost. Checking latest song status...')
         void pollSongStatus()
       }
 
@@ -553,31 +634,34 @@ export default function GeneratePage() {
           clearConnectionTimeout() // Clear timeout on any message received
           clearStatusPollingTimeout()
 
-          const data = JSON.parse(event.data)
-          setProgress(data.progress || 0)
-
-          if (data.stage) {
-            setStageMessage(data.stage)
+          const data = JSON.parse(event.data) as {
+            status?: BackendGenerationStatus | 'UNKNOWN'
+            progress?: number
+            stage?: string
+            audioUrl?: string
+            songId?: string
+            error?: string | null
           }
 
           switch (data.status) {
             case 'PENDING':
-              setError(null)
-              setGenerationStage('initializing')
+              applyGenerationPresentation('PENDING', data.progress ?? 0, data.stage)
               break
             case 'GENERATING':
-              setError(null)
-              setGenerationStage('generating')
+              applyGenerationPresentation('GENERATING', data.progress ?? 0, data.stage)
               break
             case 'COMPLETED':
               if (data.audioUrl) {
                 handleCompletedSong(data.songId || newSongId, data.audioUrl)
+                closeEventSource()
+                break
               }
+              applyGenerationPresentation('COMPLETED', data.progress ?? 100, data.stage, { hasAudio: false })
               closeEventSource()
+              void pollSongStatus()
               break
             case 'FAILED':
-              setGenerationStage('failed')
-              setError(data.error || 'Generation failed')
+              applyGenerationPresentation('FAILED', data.progress ?? 0, data.stage, { error: data.error })
               closeEventSource()
               break
             case 'UNKNOWN':
@@ -607,8 +691,12 @@ export default function GeneratePage() {
 
       connectSSE()
     } catch (err) {
-      setGenerationStage('failed')
-      setError(err instanceof Error ? err.message : 'Generation failed')
+      applyGenerationPresentation(
+        'FAILED',
+        0,
+        err instanceof Error ? err.message : 'Generation failed',
+        { error: err instanceof Error ? err.message : 'Generation failed' }
+      )
     }
   }
 
@@ -741,7 +829,9 @@ export default function GeneratePage() {
     setGenerationStage('idle')
     setProgress(0)
     setAudioUrl(null)
+    setResultDurationLabel('--:--')
     setError(null)
+    setStageMessage('')
     setFieldErrors({})
     setSongId(null)
     setMultiPartInfo(null)
@@ -1243,37 +1333,49 @@ export default function GeneratePage() {
 
               {/* Audio Player */}
               {audioUrl && (
-                <section className="p-6 rounded-2xl bg-surface border border-border">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+                <section className="rounded-[28px] border border-border bg-surface p-6 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)]">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent/80">
+                        {t('generationComplete')}
+                      </p>
+                      <h2 className="mt-2 text-2xl font-semibold text-foreground break-words">
+                        {title}
+                      </h2>
+                      <p className="mt-2 text-sm text-text-secondary">
+                        {t('completedStageBody')}
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3 lg:w-auto lg:min-w-[340px]">
+                      <div className="rounded-2xl border border-border bg-background/60 p-4">
+                        <p className="text-xs uppercase tracking-wide text-text-muted">{t('status')}</p>
+                        <p className="mt-2 text-sm font-medium text-foreground">{t('ready')}</p>
+                      </div>
+                      <div className="rounded-2xl border border-border bg-background/60 p-4">
+                        <p className="text-xs uppercase tracking-wide text-text-muted">{t('formatLabel')}</p>
+                        <p className="mt-2 text-sm font-medium text-foreground">{outputFormat.toUpperCase()}</p>
+                      </div>
+                      <div className="rounded-2xl border border-border bg-background/60 p-4">
+                        <p className="text-xs uppercase tracking-wide text-text-muted">{t('duration')}</p>
+                        <p className="mt-2 text-sm font-medium text-foreground">{resultDurationLabel}</p>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                    <div className="rounded-xl border border-border bg-background/60 p-3">
-                      <p className="text-xs text-text-muted mb-1">状态</p>
-                      <p className="text-sm font-medium text-foreground">已完成</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-background/60 p-3">
-                      <p className="text-xs text-text-muted mb-1">格式</p>
-                      <p className="text-sm font-medium text-foreground">{outputFormat.toUpperCase()}</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-background/60 p-3">
-                      <p className="text-xs text-text-muted mb-1">时长</p>
-                      <p className="text-sm font-medium text-foreground">{resultDurationLabel || '加载后显示'}</p>
-                    </div>
+                  <div className="mt-5 rounded-2xl bg-background/70 p-4">
+                    <AudioPlayer
+                      src={audioUrl ?? undefined}
+                      title={title}
+                      artist="TaoyBeats"
+                      songId={songId ?? undefined}
+                      playlist={playlistUrls.length > 1 ? playlistUrls : undefined}
+                      playlistSongIds={playlistSongIds.length > 1 ? playlistSongIds : undefined}
+                      onDurationResolved={(seconds) => setResultDurationLabel(formatDuration(seconds))}
+                    />
                   </div>
 
-                  <AudioPlayer
-                    src={audioUrl ?? undefined}
-                    title={title}
-                    artist="TaoyBeats"
-                    songId={songId ?? undefined}
-                    playlist={playlistUrls.length > 1 ? playlistUrls : undefined}
-                    playlistSongIds={playlistSongIds.length > 1 ? playlistSongIds : undefined}
-                  />
-
-                  {/* Actions */}
-                  <div className="flex gap-3 mt-4">
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                     <button
                       onClick={handleDownload}
                       className="flex-1 py-3 rounded-xl border border-border hover:border-accent text-foreground font-medium transition-colors flex items-center justify-center gap-2"
