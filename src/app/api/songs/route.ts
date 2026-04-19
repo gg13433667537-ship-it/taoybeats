@@ -713,6 +713,14 @@ async function generateMusic(
 
       if (progress.status === 'FAILED') {
         console.error(`[Generate] Song ${songId} failed:`, progress.error)
+        // Store the error message
+        const currentSongAfterFail = songsMap.get(songId)
+        if (currentSongAfterFail) {
+          await updateSongStatus(songId, {
+            status: 'FAILED',
+            error: progress.error || 'MiniMax generation failed',
+          }, currentSongAfterFail)
+        }
         return // Explicit failure
       }
     }
