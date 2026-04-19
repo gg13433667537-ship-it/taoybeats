@@ -313,6 +313,10 @@ describe("Generate page result card", () => {
     })
 
     await waitFor(() => {
+      expect(screen.getByTestId("audio-player")).toHaveTextContent("https://cdn.example.com/song-1.mp3")
+    })
+
+    await waitFor(() => {
       expect(screen.getByText("3:07")).toBeVisible()
       expect(screen.queryByText("加载后显示")).not.toBeInTheDocument()
     })
