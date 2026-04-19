@@ -211,8 +211,8 @@ export const miniMaxProvider: AIProvider = {
     }
 
     const data = await response.json()
-    // Get the audio URL from the response
-    const audioUrl = data.data?.audio_url || data.audio_url
+    // Get the audio URL from the response - MiniMax uses data.audio for URL output
+    const audioUrl = data.data?.audio || data.data?.audio_url || data.audio_url
     if (!audioUrl) {
       throw new Error('Audio not ready yet')
     }
