@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import { Music, Plus, Loader2, Trash2, Edit2, ListMusic, Lock, Globe, X, Check } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
+import PlaylistDrawer from "@/components/PlaylistDrawer"
+import { downloadSongFile } from "@/lib/song-download"
 
 interface Playlist {
   id: string
@@ -15,6 +17,13 @@ interface Playlist {
   createdAt: string
   updatedAt: string
   songCount: number
+}
+
+interface PlaylistSong {
+  id: string
+  title?: string
+  status?: string
+  audioUrl?: string | null
 }
 
 export default function PlaylistsPage() {
@@ -29,6 +38,9 @@ export default function PlaylistsPage() {
   const [newPlaylistPublic, setNewPlaylistPublic] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null)
+  const [drawerSongs, setDrawerSongs] = useState<PlaylistSong[]>([])
+  const [drawerLoading, setDrawerLoading] = useState(false)
 
   const fetchPlaylists = useCallback(async () => {
     try {
@@ -144,6 +156,70 @@ export default function PlaylistsPage() {
     return new Date(dateString).toLocaleDateString()
   }
 
+  const activePlaylist = playlists.find((playlist) => playlist.id === activePlaylistId) || null
+
+  const openPlaylistDrawer = useCallback(async (playlist: Playlist) => {
+    setActivePlaylistId(playlist.id)
+    setDrawerLoading(true)
+
+    try {
+      const response = await fetch(`/api/playlists/${playlist.id}/songs`)
+      if (!response.ok) {
+        throw new Error("Failed to load playlist songs")
+      }
+
+      const data = await response.json()
+      setDrawerSongs(data.songs || [])
+    } catch (err) {
+      console.error("Failed to load playlist songs:", err)
+      setDrawerSongs([])
+    } finally {
+      setDrawerLoading(false)
+    }
+  }, [])
+
+  const closePlaylistDrawer = useCallback(() => {
+    setActivePlaylistId(null)
+    setDrawerSongs([])
+    setDrawerLoading(false)
+  }, [])
+
+  const handleRemoveSongFromPlaylist = useCallback(async (songId: string) => {
+    if (!activePlaylistId) return
+
+    try {
+      const response = await fetch(`/api/playlists/${activePlaylistId}/songs?songId=${encodeURIComponent(songId)}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to remove song from playlist")
+      }
+
+      setDrawerSongs((current) => current.filter((song) => song.id !== songId))
+      fetchPlaylists()
+    } catch (err) {
+      console.error("Failed to remove song from playlist:", err)
+    }
+  }, [activePlaylistId, fetchPlaylists])
+
+  const handleOpenSong = useCallback((songId: string) => {
+    router.push(`/song/${songId}`)
+  }, [router])
+
+  const handleDownloadSong = useCallback(async (song: PlaylistSong) => {
+    if (!song.id) return
+
+    try {
+      await downloadSongFile({
+        songId: song.id,
+        fallbackFilename: song.title || "audio",
+      })
+    } catch (err) {
+      console.error("Failed to download playlist song:", err)
+    }
+  }, [])
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -212,7 +288,10 @@ export default function PlaylistsPage() {
               {playlists.map((playlist) => (
                 <div
                   key={playlist.id}
-                  className="p-6 rounded-2xl bg-surface border border-border hover:border-accent/50 transition-all"
+                  className="cursor-pointer p-6 rounded-2xl bg-surface border border-border hover:border-accent/50 transition-all"
+                  onClick={() => {
+                    void openPlaylistDrawer(playlist)
+                  }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
@@ -245,14 +324,20 @@ export default function PlaylistsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => openEditModal(playlist)}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          openEditModal(playlist)
+                        }}
                         className="p-2 rounded-lg hover:bg-surface-elevated text-text-muted hover:text-foreground transition-colors"
                         aria-label="Edit playlist"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDeletePlaylist(playlist.id)}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          handleDeletePlaylist(playlist.id)
+                        }}
                         className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
                         aria-label="Delete playlist"
                       >
@@ -354,6 +439,21 @@ export default function PlaylistsPage() {
           </div>
         </div>
       )}
+
+      <PlaylistDrawer
+        isOpen={Boolean(activePlaylist)}
+        playlist={activePlaylist ? {
+          id: activePlaylist.id,
+          name: activePlaylist.name,
+          description: activePlaylist.description,
+        } : null}
+        songs={drawerSongs}
+        loading={drawerLoading}
+        onClose={closePlaylistDrawer}
+        onRemoveSong={handleRemoveSongFromPlaylist}
+        onOpenSong={handleOpenSong}
+        onDownloadSong={handleDownloadSong}
+      />
     </div>
   )
 }

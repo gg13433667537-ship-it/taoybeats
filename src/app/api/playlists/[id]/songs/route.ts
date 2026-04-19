@@ -3,6 +3,7 @@ import type { Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { playlistCache } from "@/lib/cache"
 import { validateUUID, applySecurityHeaders } from "@/lib/security"
+import { prisma } from "@/lib/db"
 
 
 if (!global.users) global.users = new Map()
@@ -21,6 +22,54 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
     }
   } catch {
     return null
+  }
+}
+
+// GET /api/playlists/[id]/songs - Resolve playlist songs from cache plus Prisma
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = getSessionUser(request)
+  if (!user) {
+    return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
+  }
+
+  const { id } = await params
+  const playlist = global.playlists?.get(id) as Playlist | undefined
+
+  if (!playlist) {
+    return applySecurityHeaders(NextResponse.json({ error: "Playlist not found" }, { status: 404 }))
+  }
+
+  if (playlist.userId !== user.id && user.role !== "ADMIN") {
+    return applySecurityHeaders(NextResponse.json({ error: "Forbidden" }, { status: 403 }))
+  }
+
+  try {
+    const cachedSongs = playlist.songIds
+      .map((songId) => global.songs?.get(songId))
+      .filter((song): song is NonNullable<typeof song> => Boolean(song))
+    const cachedSongIds = new Set(cachedSongs.map((song) => song.id))
+    const missingIds = playlist.songIds.filter((songId) => !cachedSongIds.has(songId))
+    const dbSongs = missingIds.length
+      ? await prisma.song.findMany({
+          where: { id: { in: missingIds } },
+        })
+      : []
+
+    const songsById = new Map<string, unknown>()
+    cachedSongs.forEach((song) => songsById.set(song.id, song))
+    dbSongs.forEach((song) => songsById.set(song.id, song))
+
+    const songs = playlist.songIds
+      .map((songId) => songsById.get(songId))
+      .filter(Boolean)
+
+    return applySecurityHeaders(NextResponse.json({ songs }))
+  } catch (error) {
+    console.error("Get playlist songs error:", error)
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to load playlist songs" }, { status: 500 }))
   }
 }
 
@@ -59,8 +108,15 @@ export async function POST(
       return applySecurityHeaders(NextResponse.json({ error: songIdError }, { status: 400 }))
     }
 
+    const cachedSong = global.songs?.get(songId)
+    const dbSong = cachedSong
+      ? null
+      : await prisma.song.findUnique({
+          where: { id: songId },
+        })
+
     // Check if song exists
-    if (!global.songs?.has(songId)) {
+    if (!cachedSong && !dbSong) {
       return applySecurityHeaders(NextResponse.json({ error: "Song not found" }, { status: 404 }))
     }
 
