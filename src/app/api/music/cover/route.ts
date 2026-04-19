@@ -8,7 +8,6 @@ const API_URL = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
 const API_TIMEOUT_MS = 30000 // 30 second timeout
 
 // Validation constants
-const MAX_TITLE_LENGTH = 200
 const MAX_LYRICS_LENGTH = 10000
 const MAX_GENRE_COUNT = 5
 const MAX_INSTRUMENTS_COUNT = 10
@@ -58,17 +57,7 @@ function isValidAudioUrl(url: string): boolean {
   }
 }
 
-// Structured reference lyrics for learning songwriting style
-interface ReferenceLyrics {
-  text: string
-  startTime?: number // Optional timestamp in seconds
-  endTime?: number // Optional timestamp in seconds
-  section?: string // e.g., "[Verse]", "[Chorus]"
-}
-
-// Enhanced cover generation parameters
 interface CoverGenerationParams {
-  title?: string
   lyrics?: string
   genre?: string[]
   mood?: string
@@ -80,16 +69,9 @@ interface CoverGenerationParams {
   voiceId?: string
   referenceAudio?: string
   referenceAudioUrl?: string
-  referenceAudioId?: string
-  // Enhanced Audio-to-Audio parameters
-  timbreSimilarity?: number // 0.0 - 1.0, controls how similar the generated timbre is to reference
-  mixMode?: boolean // When true, mixes vocals from reference with new background
-  mixModeVocalVolume?: number // 0.0 - 1.0, volume of vocals in mix mode
-  referenceLyrics?: ReferenceLyrics[] // Structured reference lyrics for style learning
   // Audio settings
-  model?: 'music-2.6' | 'music-cover'
+  model?: 'music-cover' | 'music-cover-free'
   outputFormat?: 'mp3' | 'wav' | 'pcm'
-  lyricsOptimizer?: boolean
   sampleRate?: 16000 | 24000 | 32000 | 44100
   bitrate?: 32000 | 64000 | 128000 | 256000
   aigcWatermark?: boolean
@@ -103,10 +85,6 @@ interface ValidationError {
 
 function validateParams(params: CoverGenerationParams): ValidationError[] {
   const errors: ValidationError[] = []
-
-  if (params.title && params.title.length > MAX_TITLE_LENGTH) {
-    errors.push({ field: 'title', message: `Title must be ${MAX_TITLE_LENGTH} characters or less` })
-  }
 
   if (params.lyrics && params.lyrics.length > MAX_LYRICS_LENGTH) {
     errors.push({ field: 'lyrics', message: `Lyrics must be ${MAX_LYRICS_LENGTH} characters or less` })
@@ -124,12 +102,8 @@ function validateParams(params: CoverGenerationParams): ValidationError[] {
     errors.push({ field: 'referenceAudioUrl', message: 'Invalid reference audio URL format' })
   }
 
-  if (params.timbreSimilarity !== undefined && (params.timbreSimilarity < 0 || params.timbreSimilarity > 1)) {
-    errors.push({ field: 'timbreSimilarity', message: 'timbreSimilarity must be between 0 and 1' })
-  }
-
-  if (params.mixModeVocalVolume !== undefined && (params.mixModeVocalVolume < 0 || params.mixModeVocalVolume > 1)) {
-    errors.push({ field: 'mixModeVocalVolume', message: 'mixModeVocalVolume must be between 0 and 1' })
+  if (!params.referenceAudio && !params.referenceAudioUrl) {
+    errors.push({ field: 'referenceAudio', message: 'Reference audio is required for cover generation' })
   }
 
   return errors
@@ -171,7 +145,6 @@ export async function POST(request: NextRequest) {
     }
 
     const {
-      title,
       lyrics,
       genre,
       mood,
@@ -179,11 +152,6 @@ export async function POST(request: NextRequest) {
       referenceSinger,
       referenceAudio,
       referenceAudioUrl,
-      referenceAudioId,
-      timbreSimilarity,
-      mixMode,
-      mixModeVocalVolume,
-      referenceLyrics,
       model,
       outputFormat,
       sampleRate,
@@ -197,7 +165,10 @@ export async function POST(request: NextRequest) {
     if (mood) promptParts.push(mood)
     if (instruments && instruments.length > 0) promptParts.push(`Instruments: ${instruments.join(', ')}`)
     if (referenceSinger) promptParts.push(`Reference Artist: ${referenceSinger}`)
-    const prompt = promptParts.join(', ')
+    const rawPrompt = promptParts.join(', ').trim()
+    const prompt = rawPrompt.length >= 10
+      ? rawPrompt
+      : 'Create a cover inspired by the provided reference audio.'
 
     // Check if instrumental
     const isInstrumental = !lyrics || lyrics.trim() === ''
@@ -224,39 +195,13 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         ))
       }
-      payload.reference_audio = referenceAudio
+      payload.audio_base64 = referenceAudio.startsWith('data:')
+        ? referenceAudio.split(',', 2)[1] || ''
+        : referenceAudio
     } else if (referenceAudioUrl) {
       // URL-based reference audio - validated above
-      payload.reference_audio_url = referenceAudioUrl
+      payload.audio_url = referenceAudioUrl
     }
-    if (referenceAudioId) {
-      payload.reference_audio_id = referenceAudioId
-    }
-
-    // Enhanced Audio-to-Audio: Timbre similarity control (0.0 - 1.0)
-    if (timbreSimilarity !== undefined) {
-      payload.timbre_similarity = timbreSimilarity
-    }
-
-    // Enhanced Audio-to-Audio: Mix mode for vocal + background music combination
-    if (mixMode === true) {
-      payload.mix_mode = true
-      if (mixModeVocalVolume !== undefined) {
-        payload.mix_mode_vocal_volume = mixModeVocalVolume
-      }
-    }
-
-    // Enhanced Audio-to-Audio: Reference lyrics for structured style learning
-    if (referenceLyrics && referenceLyrics.length > 0) {
-      payload.reference_lyrics = referenceLyrics.map(rl => ({
-        text: rl.text,
-        start_time: rl.startTime,
-        end_time: rl.endTime,
-        section: rl.section,
-      }))
-    }
-
-    if (title) payload.title = title
 
     // Audio quality settings
     payload.audio_setting = {
@@ -305,6 +250,18 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json()
+
+    const audioUrl = typeof data.data?.audio === 'string' && data.data.audio.startsWith('http')
+      ? data.data.audio
+      : undefined
+
+    if (data.data?.status === 2 && audioUrl) {
+      return applySecurityHeaders(NextResponse.json({
+        task_id: `audio:${audioUrl}`,
+        status: 'COMPLETED',
+        audioUrl,
+      }))
+    }
 
     // Return task_id for polling
     const taskId = data.data?.task_id || data.task_id

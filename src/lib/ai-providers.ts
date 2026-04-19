@@ -27,7 +27,7 @@ export type SongParams = {
   userNotes?: string
   isInstrumental?: boolean
     referenceAudio?: string
-  model?: 'music-2.6' | 'music-cover'
+  model?: 'music-2.6' | 'music-cover' | 'music-2.6-free' | 'music-cover-free'
   outputFormat?: 'mp3' | 'wav' | 'pcm'
   lyricsOptimizer?: boolean
   sampleRate?: 16000 | 24000 | 32000 | 44100
@@ -50,7 +50,7 @@ export type ContinueParams = {
   originalAudioUrl: string
   prompt?: string
   duration?: number
-  model?: 'music-2.6' | 'music-cover'
+  model?: 'music-2.6' | 'music-cover' | 'music-2.6-free' | 'music-cover-free'
 }
 
 export type StemsParams = {
@@ -74,9 +74,10 @@ export const musicProvider: AIProvider = {
   async generate(params, apiKey, apiUrl) {
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
     const model = params.model || 'music-2.6'
+    const coverModel = isCoverModel(model)
 
     // Build prompt from song params
-    const prompt = buildPrompt(params)
+    const prompt = normalizePrompt(buildPrompt(params), coverModel)
 
     // Check if instrumental - explicit flag or no lyrics
     const isInstrumental = params.isInstrumental || !params.lyrics || params.lyrics.trim() === ''
@@ -101,34 +102,11 @@ export const musicProvider: AIProvider = {
       lyrics_optimizer: params.lyricsOptimizer,
     }
 
-    // Add title to prompt if provided
-    if (params.title) {
-      requestBody.title = params.title
-    }
-
-    // Add reference singer as separate parameter if provided
-    if (params.referenceSinger) {
-      requestBody.reference_singer = params.referenceSinger
-    }
-
-    // Add reference song if provided
-    if (params.referenceSong) {
-      requestBody.reference_song = params.referenceSong
-    }
-
-    // Add reference audio for music-cover model using correct parameter names
-    // Use reference_audio for uploaded base64 files or reference_audio_url for URL-based reference
-    if (params.referenceAudio) {
-      if (params.referenceAudio.startsWith('data:')) {
-        // Base64 data URI - use reference_audio
-        requestBody.reference_audio = params.referenceAudio
-      } else if (/^[A-Za-z0-9+/=]{50,}$/.test(params.referenceAudio)) {
-        // Looks like raw base64 (no data URI prefix, but long enough to be base64)
-        requestBody.reference_audio = params.referenceAudio
-      } else if (params.referenceAudio.startsWith('http://') || params.referenceAudio.startsWith('https://')) {
-        // Looks like a URL - use reference_audio_url
-        requestBody.reference_audio_url = params.referenceAudio
+    if (coverModel) {
+      if (!params.referenceAudio) {
+        throw new Error('MiniMax cover generation requires a reference audio input')
       }
+      addReferenceAudio(requestBody, params.referenceAudio)
     }
 
     const response = await fetch(`${baseUrl}/v1/music_generation`, {
@@ -189,7 +167,7 @@ export const musicProvider: AIProvider = {
     // Music 2.6 may return audio directly (status=2 means completed)
     // or return a task_id for async polling (status=1 means processing)
     // IMPORTANT: MiniMax returns "audio" field with URL, NOT "audio_url"!
-    const audioUrl = data.data?.audio || data.data?.audio_url
+    const audioUrl = getAudioUrlFromResponse(data)
     const taskId = data.data?.task_id
     const status = data.data?.status
 
@@ -357,10 +335,9 @@ export const musicProvider: AIProvider = {
     // Build request body with all parameters
     const requestBody: Record<string, unknown> = {
       model,
-      prompt: params.prompt || 'Continue the song naturally',
+      prompt: normalizePrompt(params.prompt || 'Continue the song naturally', isCoverModel(model)),
       stream: false,
       output_format: 'url',
-      reference_audio: params.originalAudioUrl,
       audio_setting: {
         sample_rate: 44100,
         bitrate: 256000,
@@ -368,6 +345,7 @@ export const musicProvider: AIProvider = {
       },
       aigc_watermark: false,
     }
+    addReferenceAudio(requestBody, params.originalAudioUrl)
 
     // Add duration if provided (may use this as guidance)
     if (params.duration) {
@@ -422,7 +400,7 @@ export const musicProvider: AIProvider = {
       throw new Error(`MiniMax API error: ${userMessage}`)
     }
 
-    const audioUrl = data.data?.audio_url
+    const audioUrl = getAudioUrlFromResponse(data)
     const taskId = data.data?.task_id
     const status = data.data?.status
 
@@ -486,6 +464,10 @@ function buildPrompt(params: SongParams): string {
     parts.push(`Style: ${params.referenceSinger}`)
   }
 
+  if (params.referenceSong) {
+    parts.push(`Reference track: ${params.referenceSong}`)
+  }
+
   // Custom user notes for additional context
   if (params.userNotes) {
     parts.push(`Description: ${params.userNotes}`)
@@ -493,6 +475,62 @@ function buildPrompt(params: SongParams): string {
 
   // Join with proper separators
   return parts.join('; ')
+}
+
+function isCoverModel(model: string): boolean {
+  return model === 'music-cover' || model === 'music-cover-free'
+}
+
+function normalizePrompt(prompt: string, requireMinLength: boolean): string {
+  const trimmed = prompt.trim()
+  if (!trimmed) {
+    return requireMinLength
+      ? 'Create a cover inspired by the provided reference audio.'
+      : 'Generate an original song.'
+  }
+
+  if (requireMinLength && trimmed.length < 10) {
+    return `${trimmed} cover version`
+  }
+
+  return trimmed
+}
+
+function addReferenceAudio(requestBody: Record<string, unknown>, referenceAudio: string): void {
+  if (referenceAudio.startsWith('data:')) {
+    const [, base64Payload = ''] = referenceAudio.split(',', 2)
+    requestBody.audio_base64 = base64Payload
+    return
+  }
+
+  if (/^[A-Za-z0-9+/=]{50,}$/.test(referenceAudio)) {
+    requestBody.audio_base64 = referenceAudio
+    return
+  }
+
+  if (referenceAudio.startsWith('http://') || referenceAudio.startsWith('https://')) {
+    requestBody.audio_url = referenceAudio
+    return
+  }
+
+  throw new Error('Reference audio must be an http(s) URL or base64 payload')
+}
+
+function getAudioUrlFromResponse(data: { data?: { audio?: unknown; audio_url?: unknown }; audio?: unknown; audio_url?: unknown }): string | undefined {
+  const candidates = [
+    data.data?.audio,
+    data.data?.audio_url,
+    data.audio,
+    data.audio_url,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.startsWith('http')) {
+      return candidate
+    }
+  }
+
+  return undefined
 }
 
 // Music API Response Types - nested structure from MiniMax API
@@ -547,7 +585,7 @@ function mapMusicStatus(data: MusicStatusResponse): GenerationProgress {
   if (typeof apiStatus === 'number') {
     if (apiStatus === 2) status = 'COMPLETED'
     else if (apiStatus === 1) status = 'GENERATING'
-    else if (apiStatus === 3 || apiStatus === 'failed') status = 'FAILED'
+    else if (apiStatus === 3) status = 'FAILED'
   } else if (typeof apiStatus === 'string') {
     const statusMap: Record<string, GenerationStatus> = {
       pending: 'PENDING',
