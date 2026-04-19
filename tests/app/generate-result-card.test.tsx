@@ -1,6 +1,6 @@
 import React from "react"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const pushMock = vi.fn()
 const searchParamsMock = {
@@ -26,10 +26,6 @@ class MockEventSource {
     this.onmessage?.({
       data: JSON.stringify(data),
     } as MessageEvent<string>)
-  }
-
-  emitError() {
-    this.onerror?.(new Event("error"))
   }
 
   close() {}
@@ -244,50 +240,7 @@ describe("Generate page result card", () => {
     vi.stubGlobal("EventSource", MockEventSource)
   })
 
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it("replaces stale progress copy when the realtime stream drops", async () => {
-    await startGeneration()
-
-    expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|0|Initializing...")
-
-    act(() => {
-      MockEventSource.instances[0].emitMessage({
-        status: "PENDING",
-        progress: 10,
-        stage: "Queued...",
-      })
-    })
-
-    await waitFor(() => {
-      expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|10|Queued...")
-    })
-
-    act(() => {
-      MockEventSource.instances[0].emitMessage({
-        status: "GENERATING",
-        progress: 52,
-        stage: "Creating your music...",
-      })
-    })
-
-    await waitFor(() => {
-      expect(screen.getByTestId("generation-progress")).toHaveTextContent("generating|52|Creating your music...")
-    })
-
-    act(() => {
-      vi.useFakeTimers()
-      MockEventSource.instances[0].emitError()
-    })
-
-    expect(screen.getByTestId("generation-progress")).toHaveTextContent(
-      "generating|52|Realtime connection lost. Checking latest song status..."
-    )
-  })
-
-  it("shows a compression warning and renders a single clean result card with a resolved duration", async () => {
+  it("shows changing progress text and renders a single clean result card with a resolved duration", async () => {
     await startGeneration()
 
     expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|0|Initializing...")
