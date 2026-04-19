@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { miniMaxProvider } from "@/lib/ai-providers"
+import { musicProvider } from "@/lib/ai-providers"
 
 // Global storage shared from songs route
 
@@ -180,12 +180,12 @@ async function generateContinuation(
   try {
     songsMap.set(songId, { ...song, status: "GENERATING", updatedAt: new Date().toISOString() })
 
-    // Use miniMaxProvider.continue() for proper track continuation with reference audio
-    if (!miniMaxProvider.continue) {
+    // Use musicProvider.continue() for proper track continuation with reference audio
+    if (!musicProvider.continue) {
       throw new Error('Continue not supported by this provider')
     }
 
-    const taskId = await miniMaxProvider.continue({
+    const taskId = await musicProvider.continue({
       originalAudioUrl,
       prompt,
       model: song.model,
@@ -199,7 +199,7 @@ async function generateContinuation(
     while (Date.now() - startTime < maxWaitTime) {
       await new Promise(resolve => setTimeout(resolve, pollInterval))
 
-      const progress = await miniMaxProvider.getProgress(taskId, apiKey, apiUrl)
+      const progress = await musicProvider.getProgress(taskId, apiKey, apiUrl)
 
       const currentSong = songsMap.get(songId)
       if (!currentSong) break

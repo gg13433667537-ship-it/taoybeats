@@ -32,7 +32,7 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 import type { User, Song } from "@/lib/types"
-import { miniMaxProvider } from "@/lib/ai-providers"
+import { musicProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { checkDuplicateGeneration } from "@/lib/cache"
 import { prisma } from "@/lib/db"
@@ -203,6 +203,7 @@ export async function POST(request: NextRequest) {
       isInstrumental,
       voiceId,
       referenceAudio,
+      referenceAudioUrl,
       model,
       outputFormat,
       lyricsOptimizer,
@@ -264,6 +265,23 @@ export async function POST(request: NextRequest) {
     const sanitizedUserNotes = userNotes ? sanitizeString(userNotes) : undefined
     const sanitizedVoiceId = voiceId ? sanitizeString(voiceId) : undefined
 
+    // Validate referenceAudioUrl - must be a valid URL if provided
+    let sanitizedReferenceAudioUrl: string | undefined
+    if (referenceAudioUrl) {
+      if (typeof referenceAudioUrl !== 'string') {
+        return NextResponse.json({ error: "Reference audio URL must be a string" }, { status: 400 })
+      }
+      try {
+        const url = new URL(referenceAudioUrl)
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          return NextResponse.json({ error: "Reference audio URL must use HTTP or HTTPS protocol" }, { status: 400 })
+        }
+        sanitizedReferenceAudioUrl = referenceAudioUrl.trim()
+      } catch {
+        return NextResponse.json({ error: "Invalid reference audio URL format" }, { status: 400 })
+      }
+    }
+
     // Validate numeric fields
     const validatedSampleRate = sampleRate ? validateNumber(sampleRate, 8000, 192000, "Sample rate") : 44100
     const validatedBitrate = bitrate ? validateNumber(bitrate, 32000, 512000, "Bitrate") : 256000
@@ -304,7 +322,7 @@ export async function POST(request: NextRequest) {
     // Validate API key is configured
     if (!apiKey) {
       return NextResponse.json(
-        { error: "API key not configured. Please set MINIMAX_API_KEY environment variable." },
+        { error: "API key not configured. Please set API_KEY environment variable." },
         { status: 500 }
       )
     }
@@ -338,10 +356,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Increment usage
-    user.dailyUsage++
-    user.monthlyUsage++
-
     // Create song record with sanitized values
     const songId = crypto.randomUUID()
     const now = new Date().toISOString()
@@ -361,6 +375,7 @@ export async function POST(request: NextRequest) {
       isInstrumental: instrumental,
       voiceId: sanitizedVoiceId,
       referenceAudio,
+      referenceAudioUrl: sanitizedReferenceAudioUrl,
       model: sanitizedModel as 'music-2.6' | 'music-cover',
       outputFormat: sanitizedOutputFormat as 'mp3' | 'wav' | 'pcm',
       lyricsOptimizer: lyricsOptimizer === true || lyricsOptimizer === "true",
@@ -406,6 +421,10 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Increment usage ONLY after song is successfully created in database
+    user.dailyUsage++
+    user.monthlyUsage++
 
     // Start real generation in background
     generateMusic(songId, song, apiKey, apiUrl).catch((err) => {
@@ -471,7 +490,7 @@ async function generateMusic(
     await updateSongStatus(songId, { status: "GENERATING" }, song)
 
     // Call MiniMax API
-    const taskId = await miniMaxProvider.generate({
+    const taskId = await musicProvider.generate({
       title: song.title,
       lyrics: song.lyrics || '',
       genre: song.genre,
@@ -482,7 +501,7 @@ async function generateMusic(
       userNotes: song.userNotes,
       isInstrumental: song.isInstrumental,
       voiceId: song.voiceId,
-      referenceAudio: song.referenceAudio,
+      referenceAudio: song.referenceAudio || song.referenceAudioUrl,
       model: song.model || 'music-2.6',
       outputFormat: song.outputFormat,
       lyricsOptimizer: song.lyricsOptimizer,
@@ -499,7 +518,7 @@ async function generateMusic(
     while (Date.now() - startTime < maxWaitTime) {
       await new Promise(resolve => setTimeout(resolve, pollInterval))
 
-      const progress = await miniMaxProvider.getProgress(taskId, apiKey, apiUrl || 'https://api.minimaxi.com')
+      const progress = await musicProvider.getProgress(taskId, apiKey, apiUrl || 'https://api.minimaxi.com')
 
       // Update song with latest status in both memory and DB
       const currentSong = songsMap.get(songId)

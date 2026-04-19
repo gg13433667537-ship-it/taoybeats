@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { miniMaxProvider } from "@/lib/ai-providers"
+import { musicProvider } from "@/lib/ai-providers"
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
   const sessionToken = request.cookies.get('session-token')?.value
@@ -22,11 +22,17 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
 
 
 /**
- * Extended Generation API
+ * Extended Generation API (EXPERIMENTAL)
  *
- * Generates an extended version of a song (1-5 minutes) by chaining
- * multiple generation segments using the continue API with reference_audio
+ * WARNING: This is a workaround implementation using reference_audio chaining.
+ * MiniMax does not have a native extend API. This endpoint generates segments
+ * and chains them together using the continue endpoint with reference_audio
  * to maintain style consistency.
+ *
+ * This feature is EXPERIMENTAL and may:
+ * - Produce inconsistent audio quality across segments
+ * - Have longer generation times (each segment takes 1-2 minutes)
+ * - Consume more API credits (multiple API calls per extension)
  *
  * POST /api/songs/[id]/extend
  * Body: { targetDuration?: number; prompt?: string }
@@ -132,6 +138,8 @@ export async function POST(
       message: "Extended version generation started. Use the stream endpoint to track progress.",
       streamUrl: `/api/songs/${songId}/stream`,
       redirectUrl: `/song/${songId}`,
+      warning: "EXPERIMENTAL: This feature uses audio chaining workaround and may produce inconsistent results across segments.",
+      experimental: true,
     })
   } catch (error) {
     console.error("Extend error:", error)
@@ -241,7 +249,7 @@ async function generateInitialSegment(
   apiUrl: string
 ): Promise<string | null> {
   try {
-    const taskId = await miniMaxProvider.generate({
+    const taskId = await musicProvider.generate({
       title: song.title,
       lyrics: song.lyrics || '',
       genre: song.genre,
@@ -262,7 +270,7 @@ async function generateInitialSegment(
     while (Date.now() - startTime < maxWaitTime) {
       await new Promise(resolve => setTimeout(resolve, pollInterval))
 
-      const progress = await miniMaxProvider.getProgress(taskId, apiKey, apiUrl)
+      const progress = await musicProvider.getProgress(taskId, apiKey, apiUrl)
 
       if (progress.status === 'COMPLETED' && progress.audioUrl) {
         return progress.audioUrl
@@ -292,11 +300,11 @@ async function continueSong(
   apiUrl: string
 ): Promise<string | null> {
   try {
-    if (!miniMaxProvider.continue) {
-      console.error('[Extend] miniMaxProvider.continue is not available')
+    if (!musicProvider.continue) {
+      console.error('[Extend] musicProvider.continue is not available')
       return null
     }
-    const taskId = await miniMaxProvider.continue({
+    const taskId = await musicProvider.continue({
       originalAudioUrl: referenceAudioUrl,
       prompt,
       duration,
@@ -319,7 +327,7 @@ async function continueSong(
     while (Date.now() - startTime < maxWaitTime) {
       await new Promise(resolve => setTimeout(resolve, pollInterval))
 
-      const progress = await miniMaxProvider.getProgress(taskId, apiKey, apiUrl)
+      const progress = await musicProvider.getProgress(taskId, apiKey, apiUrl)
 
       if (progress.status === 'COMPLETED' && progress.audioUrl) {
         return progress.audioUrl

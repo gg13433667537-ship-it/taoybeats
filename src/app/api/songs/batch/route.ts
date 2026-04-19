@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User, Song } from "@/lib/types"
-import { miniMaxProvider } from "@/lib/ai-providers"
+import { musicProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { } from "@/lib/security"
 import crypto from "crypto"
@@ -230,7 +230,7 @@ async function generateMusic(
   try {
     songsMap.set(songId, { ...song, status: "GENERATING", updatedAt: new Date().toISOString() })
 
-    const taskId = await miniMaxProvider.generate({
+    const taskId = await musicProvider.generate({
       title: song.title,
       lyrics: song.lyrics || '',
       genre: song.genre,
@@ -251,7 +251,7 @@ async function generateMusic(
     while (Date.now() - startTime < maxWaitTime) {
       await new Promise(resolve => setTimeout(resolve, pollInterval))
 
-      const progress = await miniMaxProvider.getProgress(taskId, apiKey, apiUrl || 'https://api.minimaxi.com')
+      const progress = await musicProvider.getProgress(taskId, apiKey, apiUrl || 'https://api.minimaxi.com')
 
       const currentSong = songsMap.get(songId)
       if (!currentSong) break

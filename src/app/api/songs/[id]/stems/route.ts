@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song, User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { miniMaxProvider } from "@/lib/ai-providers"
+import { musicProvider } from "@/lib/ai-providers"
 
 // Global storage is shared from main songs route
 
@@ -118,7 +118,7 @@ export async function POST(
     // Call MiniMax stem splitting API
     let stems: StemResult[] = []
     try {
-      stems = await miniMaxProvider.splitStems!(
+      stems = await musicProvider.splitStems!(
         { audioUrl: song.audioUrl! },
         apiKey,
         apiUrl

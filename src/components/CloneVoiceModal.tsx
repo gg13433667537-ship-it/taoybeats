@@ -37,6 +37,8 @@ interface ModalState {
   isDesigning: boolean
   trialAudioUrl: string | null
   designedVoiceId: string | null
+  // Retry button for permission errors
+  retryButton: boolean
 }
 
 const initialState: ModalState = {
@@ -52,6 +54,7 @@ const initialState: ModalState = {
   isDesigning: false,
   trialAudioUrl: null,
   designedVoiceId: null,
+  retryButton: false,
 }
 
 // Helper to generate unique voice ID
@@ -230,7 +233,7 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { activeTab, isCloning, isRecording, recordingTime, error, success, audioBlob, selectedPreset, customPrompt, isDesigning, trialAudioUrl, designedVoiceId } = state
+  const { activeTab, isCloning, isRecording, recordingTime, error, success, audioBlob, selectedPreset, customPrompt, isDesigning, trialAudioUrl, designedVoiceId, retryButton } = state
 
   // Cleanup on unmount
   const cleanup = useCallback(() => {
@@ -296,6 +299,47 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
     setState(s => ({ ...s, audioBlob: file, error: null }))
   }
 
+  // Request microphone permission with retry
+  const requestMicrophonePermission = async (retries = 2): Promise<MediaStream> => {
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        // For iOS Safari, we need to resume AudioContext if suspended
+        if (typeof AudioContext !== 'undefined' && AudioContext.prototype.resume) {
+          const audioContext = new AudioContext()
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume()
+          }
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 44100,
+          }
+        })
+        return stream
+      } catch (error) {
+        const err = error as Error & { name?: string; message?: string }
+        lastError = err
+
+        // If this was the last attempt, throw with details
+        if (attempt === retries) {
+          throw error
+        }
+
+        // Brief delay before retry (helps with transient permission issues)
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+      }
+    }
+
+    throw lastError
+  }
+
   // Start recording
   const startRecording = async () => {
     // Check if getUserMedia is supported
@@ -304,14 +348,10 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
       return
     }
 
+    setState(s => ({ ...s, error: null }))
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
-        }
-      })
+      const stream = await requestMicrophonePermission()
       const mediaRecorder = new MediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
@@ -341,20 +381,22 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
         })
       }, 1000)
     } catch (error: unknown) {
-      const err = error as Error & { name?: string }
+      const err = error as Error & { name?: string; message?: string }
       let errorMessage = '无法访问麦克风，请检查权限设置'
+      let retryButton = false
 
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        errorMessage = '麦克风权限被拒绝，请在浏览器设置中允许麦克风访问，然后刷新页面重试'
+        errorMessage = '麦克风权限被拒绝，请点击下方按钮重新请求权限'
+        retryButton = true
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         errorMessage = '未找到麦克风设备，请确保已连接麦克风'
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
         errorMessage = '麦克风正在被其他应用使用，请关闭其他使用麦克风的程序后重试'
-      } else if (err.name === 'SecurityError' || err.name === 'SecurityError') {
+      } else if (err.name === 'SecurityError') {
         errorMessage = '麦克风访问被安全策略阻止，请确保使用 HTTPS 或 localhost'
       }
 
-      setState(s => ({ ...s, error: errorMessage }))
+      setState(s => ({ ...s, error: errorMessage, retryButton }))
     }
   }
 
@@ -425,10 +467,15 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
         setState(s => ({ ...s, trialAudioUrl: `data:audio/wav;base64,${cloneData.demo_audio}` }))
       }
 
-      timeoutRef.current = setTimeout(() => {
-        onSuccess(cloneData.voice_id)
-        onClose()
-      }, 1500)
+      // Wait for onSuccess to complete (which triggers loadVoices) before closing
+      // This ensures the voice list is refreshed before the modal closes
+      try {
+        await onSuccess(cloneData.voice_id)
+      } catch {
+        setState(s => ({ ...s, error: '刷新音色列表失败，请重试' }))
+        return
+      }
+      onClose()
     } catch (err) {
       setState(s => ({ ...s, error: err instanceof Error ? err.message : '克隆失败，请重试' }))
     } finally {
@@ -463,12 +510,16 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
     setState(s => ({ ...s, isDesigning: true, error: null, success: null }))
 
     try {
+      // Generate a proper voice_id so MiniMax persists the voice
+      const voiceId = generateVoiceId()
+
       const response = await fetch('/api/voice/design', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt,
           preview_text: PREVIEW_TEXT,
+          voice_id: voiceId,
         }),
       })
 
@@ -509,8 +560,8 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
     }
   }
 
-  // Save designed voice - the voice_id from design API should be usable directly
-  // but we need to verify it appears in the voice list
+  // Save designed voice - the voice_id from design API is now persisted
+  // so we just need to verify it appears in the voice list
   const handleSaveDesignedVoice = async () => {
     if (!state.designedVoiceId) return
 
@@ -532,27 +583,24 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
       )
 
       if (voiceExists) {
-        // Voice is already in the list, just use it
-        setState(s => ({ ...s, success: '音色已在列表中！' }))
-        setTimeout(() => {
-          onSuccess(state.designedVoiceId!)
-          onClose()
-        }, 800)
+        // Voice is in the list - save was successful
+        // Wait for onSuccess to complete (which triggers loadVoices) before closing
+        setState(s => ({ ...s, isDesigning: false, success: '音色保存成功！' }))
+        try {
+          await onSuccess(state.designedVoiceId!)
+        } catch {
+          setState(s => ({ ...s, error: '刷新音色列表失败，请重试' }))
+          return
+        }
+        onClose()
       } else {
-        // Voice not in list - this is expected for design preview
-        // Show info that this is a preview and user needs to use clone to save it
+        // Voice not in list - this shouldn't happen now that we pass voice_id
+        // But handle it gracefully
         setState(s => ({
           ...s,
           isDesigning: false,
-          error: null,
+          error: '音色保存失败，请重试',
         }))
-        // The designed voice can still be used directly even if not in list
-        // MiniMax's design API returns a usable voice_id
-        setState(s => ({ ...s, success: '音色已生成（预览），可直接使用！' }))
-        setTimeout(() => {
-          onSuccess(state.designedVoiceId!)
-          onClose()
-        }, 800)
       }
     } catch (err) {
       setState(s => ({
@@ -592,9 +640,19 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
 
         <div className="p-6 space-y-6">
           {error && (
-            <div className="p-4 rounded-xl bg-error/10 border border-error/20 text-error flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              {error}
+            <div className="p-4 rounded-xl bg-error/10 border border-error/20 text-error flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+              {retryButton && (
+                <button
+                  onClick={startRecording}
+                  className="self-start px-4 py-2 rounded-lg bg-error/20 hover:bg-error/30 text-error text-sm font-medium transition-colors"
+                >
+                  重新请求权限
+                </button>
+              )}
             </div>
           )}
 
