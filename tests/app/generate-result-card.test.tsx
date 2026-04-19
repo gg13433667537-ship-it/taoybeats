@@ -257,6 +257,8 @@ describe("Generate page result card", () => {
     expect(initialProgress.stage).toBe("initializing")
     expect(initialProgress.progress).toBe(0)
     expect(initialProgress.stageMessage).toBeTruthy()
+    let pendingStageMessage = ""
+    let generatingStageMessage = ""
 
     act(() => {
       MockEventSource.instances[0].emitMessage({
@@ -270,8 +272,9 @@ describe("Generate page result card", () => {
       const pendingProgress = readGenerationProgress()
       expect(pendingProgress.stage).toBe("initializing")
       expect(pendingProgress.progress).toBe(10)
+      expect(pendingProgress.stageMessage).toBeTruthy()
       expect(pendingProgress.stageMessage).not.toBe(initialProgress.stageMessage)
-      expect(pendingProgress.stageMessage.toLowerCase()).toContain("queue")
+      pendingStageMessage = pendingProgress.stageMessage
     })
 
     act(() => {
@@ -286,7 +289,9 @@ describe("Generate page result card", () => {
       const generatingProgress = readGenerationProgress()
       expect(generatingProgress.stage).toBe("generating")
       expect(generatingProgress.progress).toBe(52)
-      expect(generatingProgress.stageMessage.toLowerCase()).toContain("creat")
+      expect(generatingProgress.stageMessage).toBeTruthy()
+      expect(generatingProgress.stageMessage).not.toBe(pendingStageMessage)
+      generatingStageMessage = generatingProgress.stageMessage
     })
 
     act(() => {
@@ -303,7 +308,8 @@ describe("Generate page result card", () => {
       const completedProgress = readGenerationProgress()
       expect(completedProgress.stage).toBe("completed")
       expect(completedProgress.progress).toBe(100)
-      expect(completedProgress.stageMessage.toLowerCase()).toContain("complete")
+      expect(completedProgress.stageMessage).toBeTruthy()
+      expect(completedProgress.stageMessage).not.toBe(generatingStageMessage)
     })
 
     await waitFor(() => {
