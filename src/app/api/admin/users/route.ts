@@ -4,6 +4,7 @@ import { verifySessionToken } from "@/lib/auth-utils"
 import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 import { sanitizeString, validateEnum } from "@/lib/security"
 import { prisma } from "@/lib/db"
+import { ensureCurrentAdminVisible } from "./visibility"
 
 interface SessionUser {
   id: string
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
     } : {}
 
     // Fetch users from Prisma with pagination
-    const [allUsers, total] = await Promise.all([
+    const [allUsers, total, currentAdmin] = await Promise.all([
       prisma.user.findMany({
         where,
         skip: offset,
@@ -84,10 +85,32 @@ export async function GET(request: NextRequest) {
         },
       }),
       prisma.user.count({ where }),
+      page === 1
+        ? prisma.user.findUnique({
+            where: { id: user.id },
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              role: true,
+              isActive: true,
+              tier: true,
+              dailyUsage: true,
+              monthlyUsage: true,
+              createdAt: true,
+            },
+          })
+        : Promise.resolve(null),
     ])
 
     return NextResponse.json({
-      users: allUsers,
+      users: ensureCurrentAdminVisible({
+        users: allUsers,
+        currentUser: currentAdmin,
+        page,
+        limit,
+        search,
+      }),
       pagination: {
         page,
         limit,
