@@ -24,6 +24,8 @@ export default function SongSharePage() {
     genre?: string[]
     mood?: string
     lyrics?: string
+    originalLyrics?: string
+    lyricsCompressionApplied?: boolean
     instruments?: string[]
     audioUrl?: string
     status?: string
@@ -812,6 +814,15 @@ export default function SongSharePage() {
                 <h3 className="text-sm font-medium text-text-secondary mb-2">{t('lyrics')}</h3>
                 <p className="text-foreground whitespace-pre-wrap text-sm leading-relaxed">
                   {song.lyrics}
+                </p>
+              </div>
+            )}
+
+            {song.originalLyrics && song.originalLyrics !== song.lyrics && (
+              <div className="mb-6 p-4 rounded-xl bg-background border border-border">
+                <h3 className="text-sm font-medium text-text-secondary mb-2">{t('originalLyrics')}</h3>
+                <p className="text-foreground whitespace-pre-wrap text-sm leading-relaxed">
+                  {song.originalLyrics}
                 </p>
               </div>
             )}

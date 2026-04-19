@@ -36,6 +36,7 @@ import { musicProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { checkDuplicateGeneration } from "@/lib/cache"
 import { prisma } from "@/lib/db"
+import { prepareLyricsForModel } from "@/lib/minimax-music"
 import { rateLimitMiddleware, DEFAULT_RATE_LIMIT, sanitizeString, validateRequiredString, validateOptionalString, validateStringArray, validateNumber, MAX_LENGTHS } from "@/lib/security"
 import { uploadAudioFromUrl } from "@/lib/r2-storage"
 import crypto from "crypto"
@@ -62,87 +63,8 @@ function getSongsMap(): Map<string, Song> {
 const FREE_DAILY_LIMIT = 3
 const FREE_MONTHLY_LIMIT = 10
 
-const MAX_SINGLE_PASS_LYRICS_LENGTH = 1800
-const MAX_SINGLE_PASS_LINE_COUNT = 64
-const MAX_SINGLE_PASS_LINE_LENGTH = 80
-
 function getDateKey(): string {
   return new Date().toISOString().split('T')[0]
-}
-
-function truncateLine(line: string): string {
-  const trimmed = line.trim()
-  if (trimmed.length <= MAX_SINGLE_PASS_LINE_LENGTH) {
-    return trimmed
-  }
-
-  return `${trimmed.slice(0, MAX_SINGLE_PASS_LINE_LENGTH - 1).trimEnd()}…`
-}
-
-function compressLyricsForSinglePass(lyrics: string | undefined): {
-  lyrics: string
-  applied: boolean
-  originalLength: number
-  compressedLength: number
-} {
-  if (!lyrics) {
-    return {
-      lyrics: '',
-      applied: false,
-      originalLength: 0,
-      compressedLength: 0,
-    }
-  }
-
-  const normalizedLines = lyrics
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-
-  const withinSinglePassBudget =
-    lyrics.length <= MAX_SINGLE_PASS_LYRICS_LENGTH &&
-    normalizedLines.length <= MAX_SINGLE_PASS_LINE_COUNT
-
-  if (withinSinglePassBudget) {
-    return {
-      lyrics,
-      applied: false,
-      originalLength: lyrics.length,
-      compressedLength: lyrics.length,
-    }
-  }
-
-  if (normalizedLines.length === 0) {
-    return {
-      lyrics: '',
-      applied: false,
-      originalLength: lyrics.length,
-      compressedLength: 0,
-    }
-  }
-
-  const step = Math.max(1, Math.ceil(normalizedLines.length / MAX_SINGLE_PASS_LINE_COUNT))
-  const selectedLines = normalizedLines
-    .filter((_, index) => index % step === 0)
-    .map(truncateLine)
-
-  let compressedLyrics = selectedLines.join('\n')
-
-  while (compressedLyrics.length > MAX_SINGLE_PASS_LYRICS_LENGTH && selectedLines.length > 1) {
-    selectedLines.pop()
-    compressedLyrics = selectedLines.join('\n')
-  }
-
-  if (compressedLyrics.length > MAX_SINGLE_PASS_LYRICS_LENGTH) {
-    compressedLyrics = compressedLyrics.slice(0, MAX_SINGLE_PASS_LYRICS_LENGTH).trimEnd()
-  }
-
-  return {
-    lyrics: compressedLyrics,
-    applied: compressedLyrics !== lyrics,
-    originalLength: lyrics.length,
-    compressedLength: compressedLyrics.length,
-  }
 }
 
 function getMonthKey(): string {
@@ -339,6 +261,7 @@ export async function GET(request: NextRequest) {
       id: s.id,
       title: s.title,
       lyrics: s.lyrics || undefined,
+      originalLyrics: s.originalLyrics || undefined,
       genre: s.genre,
       mood: s.mood || undefined,
       instruments: s.instruments,
@@ -348,6 +271,10 @@ export async function GET(request: NextRequest) {
       isInstrumental: false,
       status: s.status,
       moderationStatus: "APPROVED" as const,
+      lyricsCompressionApplied: s.lyricsCompressionApplied,
+      lyricsCompressionReason: s.lyricsCompressionReason || undefined,
+      lyricsCompressionModel: s.lyricsCompressionModel || undefined,
+      lyricsCompressionLimit: s.lyricsCompressionLimit || undefined,
       providerTaskId: s.providerTaskId || undefined,
       audioUrl: s.audioUrl || undefined,
       coverUrl: s.coverUrl || undefined,
@@ -431,9 +358,6 @@ export async function POST(request: NextRequest) {
 
     const sanitizedTitle = sanitizeString(title)
     const sanitizedLyricsInput = lyrics ? sanitizeString(lyrics) : undefined
-
-    const compressedLyrics = compressLyricsForSinglePass(sanitizedLyricsInput)
-
     const sanitizedMood = sanitizeString(mood)
     const sanitizedGenre = genre.map((g: string) => sanitizeString(g)).filter((g: string) => g.length > 0)
 
@@ -441,15 +365,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Genre must have at least one valid value" }, { status: 400 })
     }
 
-    // Validation - lyrics not required if instrumental or if lyricsOptimizer is enabled
     const instrumental = isInstrumental === true || isInstrumental === "true"
     const enableLyricsOptimizer = lyricsOptimizer === true || lyricsOptimizer === "true"
-    if (!instrumental && !compressedLyrics.lyrics.trim() && !enableLyricsOptimizer) {
-      return NextResponse.json(
-        { error: "Missing required fields: title, lyrics, genre, mood" },
-        { status: 400 }
-      )
-    }
 
     // Validate optional fields
     const sanitizedInstruments = instruments
@@ -493,6 +410,19 @@ export async function POST(request: NextRequest) {
     const sanitizedModel = model ? sanitizeString(model) : "music-2.6"
     if (model && !allowedModels.includes(sanitizedModel)) {
       return NextResponse.json({ error: "Invalid model. Allowed: " + allowedModels.join(", ") }, { status: 400 })
+    }
+
+    const preparedLyrics = prepareLyricsForModel({
+      lyrics: sanitizedLyricsInput,
+      model: sanitizedModel as 'music-2.6' | 'music-2.5' | 'music-2.5-turbo' | 'music-cover',
+      isInstrumental: instrumental,
+    })
+
+    if (!instrumental && !preparedLyrics.lyrics.trim() && !enableLyricsOptimizer) {
+      return NextResponse.json(
+        { error: "Missing required fields: title, lyrics, genre, mood" },
+        { status: 400 }
+      )
     }
 
     // Validate output format enum
@@ -568,7 +498,7 @@ export async function POST(request: NextRequest) {
       voiceId: sanitizedVoiceId,
       referenceAudio,
       referenceAudioUrl: sanitizedReferenceAudioUrl,
-      model: sanitizedModel as 'music-2.6' | 'music-cover',
+      model: sanitizedModel as 'music-2.6' | 'music-2.5' | 'music-2.5-turbo' | 'music-cover',
       outputFormat: sanitizedOutputFormat as 'mp3' | 'wav' | 'pcm',
       lyricsOptimizer: lyricsOptimizer === true || lyricsOptimizer === "true",
       sampleRate: (validatedSampleRate || 44100) as 16000 | 24000 | 32000 | 44100,
@@ -586,8 +516,13 @@ export async function POST(request: NextRequest) {
     const song: Song = {
       id: songId,
       ...commonSongProps,
-      lyrics: compressedLyrics.lyrics || undefined,
+      lyrics: preparedLyrics.lyrics || undefined,
+      originalLyrics: preparedLyrics.originalLyrics,
       status: "PENDING",
+      lyricsCompressionApplied: preparedLyrics.applied,
+      lyricsCompressionReason: preparedLyrics.reason || undefined,
+      lyricsCompressionModel: preparedLyrics.model,
+      lyricsCompressionLimit: preparedLyrics.maxLength,
       providerTaskId: undefined,
       errorMessage: undefined,
       audioUrl: undefined,
@@ -606,6 +541,7 @@ export async function POST(request: NextRequest) {
           id: songId,
           title: song.title,
           lyrics: song.lyrics || null,
+          originalLyrics: song.originalLyrics || null,
           genre: song.genre,
           mood: song.mood || null,
           instruments: song.instruments,
@@ -613,6 +549,10 @@ export async function POST(request: NextRequest) {
           referenceSong: song.referenceSong || null,
           userNotes: song.userNotes || null,
           status: "PENDING",
+          lyricsCompressionApplied: song.lyricsCompressionApplied || false,
+          lyricsCompressionReason: song.lyricsCompressionReason || null,
+          lyricsCompressionModel: song.lyricsCompressionModel || null,
+          lyricsCompressionLimit: song.lyricsCompressionLimit || null,
           providerTaskId: null,
           errorMessage: null,
           audioUrl: null,
@@ -649,10 +589,13 @@ export async function POST(request: NextRequest) {
         monthly: { used: user.monthlyUsage + 1, limit: FREE_MONTHLY_LIMIT },
       },
       compression: {
-        applied: compressedLyrics.applied,
-        reason: compressedLyrics.applied ? 'lyrics_too_long' : null,
-        originalLength: compressedLyrics.originalLength,
-        compressedLength: compressedLyrics.compressedLength,
+        applied: preparedLyrics.applied,
+        reason: preparedLyrics.reason,
+        originalLength: preparedLyrics.originalLength,
+        compressedLength: preparedLyrics.compressedLength,
+        maxLength: preparedLyrics.maxLength,
+        model: preparedLyrics.model,
+        usedLyrics: preparedLyrics.lyrics,
       },
     })
   } catch (error) {

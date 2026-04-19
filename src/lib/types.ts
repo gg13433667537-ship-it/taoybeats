@@ -27,6 +27,7 @@ export interface Song {
   id: string
   title: string
   lyrics?: string
+  originalLyrics?: string
   genre: string[]
   mood?: string
   instruments: string[]
@@ -42,7 +43,7 @@ export interface Song {
   mixMode?: boolean
   mixModeVocalVolume?: number // 0.0 - 1.0
   referenceLyrics?: ReferenceLyrics[]
-  model?: 'music-2.6' | 'music-cover'
+  model?: 'music-2.6' | 'music-2.5' | 'music-2.5-turbo' | 'music-cover'
   outputFormat?: 'mp3' | 'wav' | 'pcm'
   lyricsOptimizer?: boolean
   sampleRate?: 16000 | 24000 | 32000 | 44100
@@ -50,6 +51,10 @@ export interface Song {
   aigcWatermark?: boolean
   status: SongStatus
   moderationStatus: ModerationStatus
+  lyricsCompressionApplied?: boolean
+  lyricsCompressionReason?: string
+  lyricsCompressionModel?: string
+  lyricsCompressionLimit?: number
   providerTaskId?: string
   audioUrl?: string
   videoUrl?: string

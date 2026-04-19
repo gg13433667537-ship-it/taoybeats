@@ -145,7 +145,7 @@ describe("POST /api/songs initiation flow", () => {
     vi.spyOn(musicProvider, "generate").mockResolvedValueOnce("task-single-pass")
 
     const sessionToken = createTestSessionToken("worker1-multipart-user", "worker1-multipart@example.com")
-    const longLyrics = Array.from({ length: 120 }, (_, index) => `Line ${index + 1} should be compressed for single-pass generation.`).join("\n")
+    const longLyrics = Array.from({ length: 110 }, (_, index) => `Line ${index + 1} should compress for MiniMax limit.`).join("\n")
     const request = createMockNextRequest("http://localhost:3000/api/songs", {
       title: "Long Song",
       lyrics: longLyrics,
@@ -162,13 +162,18 @@ describe("POST /api/songs initiation flow", () => {
     expect(data.multiPart).toBeUndefined()
     expect(data.compression).toMatchObject({
       applied: true,
-      reason: "lyrics_too_long",
+      reason: "lyrics_over_model_limit",
+      maxLength: 3500,
     })
 
     const createdSong = global.songs?.get(data.id) as any
 
     expect(createdSong.status).toBe("GENERATING")
     expect(createdSong.providerTaskId).toBe("task-single-pass")
+    expect(createdSong.originalLyrics).toBe(longLyrics)
+    expect(createdSong.lyricsCompressionApplied).toBe(true)
+    expect(createdSong.lyrics.length).toBeLessThanOrEqual(3500)
+    expect(createdSong.lyrics.length).toBeGreaterThan(3200)
     expect(createdSong.partGroupId).toBeUndefined()
     expect(vi.mocked(musicProvider.generate).mock.calls).toHaveLength(1)
   })

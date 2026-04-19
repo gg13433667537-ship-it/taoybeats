@@ -14,6 +14,7 @@ import VoiceSelector from "@/components/VoiceSelector"
 import PersonaSelector from "@/components/PersonaSelector"
 import AdvancedOptions from "@/components/AdvancedOptions"
 import GenerationProgress from "@/components/GenerationProgress"
+import { getLyricsLimitForModel } from "@/lib/minimax-music"
 import { useToast } from "@/components/Toast"
 import type { MultiPartInfo } from "@/lib/song-multipart"
 import { downloadSongFile } from "@/lib/song-download"
@@ -153,9 +154,6 @@ const createInstrumentOptions = (t: TranslateFn): SelectOption[] =>
 type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | 'completed' | 'failed'
 type BackendGenerationStatus = 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED'
 
-const CLIENT_MAX_SINGLE_PASS_LYRICS_LENGTH = 1800
-const CLIENT_MAX_SINGLE_PASS_LINE_COUNT = 64
-
 function mapGenerationPresentation(
   status: BackendGenerationStatus,
   progress: number,
@@ -213,19 +211,13 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
 }
 
-function shouldWarnForLyricsCompression(rawLyrics: string): boolean {
+function shouldWarnForLyricsCompression(rawLyrics: string, maxLength: number): boolean {
   const trimmedLyrics = rawLyrics.trim()
   if (!trimmedLyrics) {
     return false
   }
 
-  const lineCount = trimmedLyrics
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .length
-
-  return trimmedLyrics.length > CLIENT_MAX_SINGLE_PASS_LYRICS_LENGTH || lineCount > CLIENT_MAX_SINGLE_PASS_LINE_COUNT
+  return trimmedLyrics.length > maxLength
 }
 
 export default function GeneratePage() {
@@ -340,6 +332,12 @@ export default function GeneratePage() {
   const [error, setError] = useState<string | null>(null)
   const [stageMessage, setStageMessage] = useState<string>('')
   const [forkError, setForkError] = useState<string | null>(null)
+  const [lyricsCompressionSummary, setLyricsCompressionSummary] = useState<{
+    applied: boolean
+    originalLength: number
+    compressedLength: number
+    maxLength: number
+  } | null>(null)
 
   // Multi-part song state
   const [multiPartInfo, setMultiPartInfo] = useState<MultiPartInfo | null>(null)
@@ -384,6 +382,7 @@ export default function GeneratePage() {
           if (song) {
             setTitle(song.title || '')
             setLyrics(song.lyrics || '')
+            setLyricsCompressionSummary(null)
             setSelectedGenres(song.genre || [])
             setMood(song.mood || '')
             setSelectedInstruments(song.instruments || [])
@@ -438,9 +437,12 @@ export default function GeneratePage() {
     setPlaylistSongIds([])
     setShowMultiPartMessage(false)
     setIsPollingRemainingParts(false)
+    setLyricsCompressionSummary(null)
 
-    if (!isInstrumental && shouldWarnForLyricsCompression(lyrics)) {
-      showToast("info", "歌词过长，系统会先自动压缩到适合 5 分钟内生成的版本，再开始生成。")
+    const lyricsLimit = getLyricsLimitForModel(model, isInstrumental)
+
+    if (!isInstrumental && shouldWarnForLyricsCompression(lyrics, lyricsLimit)) {
+      showToast("info", `歌词超过 MiniMax 当前模型支持的上限，系统会在提交时自动压缩到最长 ${lyricsLimit} 字符以内。`)
     }
 
     try {
@@ -490,7 +492,18 @@ export default function GeneratePage() {
       setSongId(newSongId)
 
       if (compression?.applied) {
-        showToast("info", "歌词已自动压缩，当前生成使用的是适合 5 分钟内完成的版本。")
+        if (typeof compression.usedLyrics === "string") {
+          setLyrics(compression.usedLyrics)
+        }
+        setLyricsCompressionSummary({
+          applied: true,
+          originalLength: compression.originalLength || 0,
+          compressedLength: compression.compressedLength || 0,
+          maxLength: compression.maxLength || lyricsLimit,
+        })
+        showToast("info", `歌词已自动压缩到 MiniMax 模型支持的最长范围内，当前生成使用的是 ${compression.compressedLength}/${compression.maxLength} 字符版本。`)
+      } else {
+        setLyricsCompressionSummary(null)
       }
 
       // SSE connection state
@@ -796,6 +809,7 @@ export default function GeneratePage() {
   const handleReset = () => {
     setTitle("")
     setLyrics("")
+    setLyricsCompressionSummary(null)
     setSelectedGenres([])
     setMood("")
     setSelectedInstruments([])
@@ -836,6 +850,7 @@ export default function GeneratePage() {
   // Handle lyrics confirmed from modal
   const handleLyricsConfirmed = (confirmedLyrics: string, confirmedTitle?: string, styleTags?: string[]) => {
     setLyrics(confirmedLyrics)
+    setLyricsCompressionSummary(null)
     if (confirmedTitle) {
       setTitle(confirmedTitle)
     }
@@ -1090,6 +1105,9 @@ export default function GeneratePage() {
                       value={lyrics}
                       onChange={(e) => {
                         setLyrics(e.target.value)
+                        if (lyricsCompressionSummary) {
+                          setLyricsCompressionSummary(null)
+                        }
                         if (fieldErrors.lyrics) {
                           setFieldErrors(prev => ({ ...prev, lyrics: "" }))
                         }
@@ -1109,6 +1127,11 @@ export default function GeneratePage() {
                         <AlertCircle className="w-3 h-3" />
                         {fieldErrors.lyrics}
                       </p>
+                    )}
+                    {lyricsCompressionSummary?.applied && !isInstrumental && (
+                      <div className="mt-2 rounded-xl border border-accent/20 bg-accent/5 px-3 py-2 text-xs text-text-secondary">
+                        当前输入已按 MiniMax 模型上限压缩保存。本次生成使用的是 {lyricsCompressionSummary.compressedLength}/{lyricsCompressionSummary.maxLength} 字符版本，原始输入为 {lyricsCompressionSummary.originalLength} 字符。
+                      </div>
                     )}
                     {isInstrumental ? (
                       <p className="mt-1 text-xs text-accent">{t('lyricsDisabledBecauseInstrumental')}</p>

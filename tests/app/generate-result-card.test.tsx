@@ -186,7 +186,11 @@ function createFetchMock() {
         status: "GENERATING",
         compression: {
           applied: true,
-          reason: "lyrics_too_long",
+          reason: "lyrics_over_model_limit",
+          maxLength: 3500,
+          originalLength: 4800,
+          compressedLength: 3488,
+          usedLyrics: "[Verse]\nCompressed lyrics used for MiniMax generation.",
         },
       }), {
         status: 200,
@@ -226,8 +230,10 @@ async function startGeneration() {
 
   expect(toastMock.showToast).toHaveBeenCalledWith(
     "info",
-    expect.stringContaining("自动压缩")
+    expect.stringContaining("3500")
   )
+
+  expect(screen.getByTestId("lyrics-input")).toHaveValue("[Verse]\nCompressed lyrics used for MiniMax generation.")
 }
 
 function readGenerationProgress() {

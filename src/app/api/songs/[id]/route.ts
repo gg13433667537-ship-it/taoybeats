@@ -36,6 +36,7 @@ function toSongRecord(dbSong: Record<string, any>): SongRecord {
     id: dbSong.id,
     title: dbSong.title,
     lyrics: dbSong.lyrics || undefined,
+    originalLyrics: dbSong.originalLyrics || undefined,
     genre: dbSong.genre,
     mood: dbSong.mood || undefined,
     instruments: dbSong.instruments,
@@ -45,6 +46,10 @@ function toSongRecord(dbSong: Record<string, any>): SongRecord {
     isInstrumental: false,
     status: dbSong.status as Song["status"],
     moderationStatus: "APPROVED",
+    lyricsCompressionApplied: dbSong.lyricsCompressionApplied || false,
+    lyricsCompressionReason: dbSong.lyricsCompressionReason || undefined,
+    lyricsCompressionModel: dbSong.lyricsCompressionModel || undefined,
+    lyricsCompressionLimit: dbSong.lyricsCompressionLimit || undefined,
     providerTaskId: dbSong.providerTaskId || undefined,
     audioUrl: dbSong.audioUrl || undefined,
     coverUrl: dbSong.coverUrl || undefined,
@@ -288,6 +293,11 @@ export async function PATCH(
         return NextResponse.json({ error: lyricsError }, { status: 400 })
       }
       allowedUpdates.lyrics = body.lyrics ? sanitizeString(body.lyrics) : undefined
+      allowedUpdates.originalLyrics = undefined
+      allowedUpdates.lyricsCompressionApplied = false
+      allowedUpdates.lyricsCompressionReason = undefined
+      allowedUpdates.lyricsCompressionModel = undefined
+      allowedUpdates.lyricsCompressionLimit = undefined
     }
 
     if ('genre' in body) {
@@ -370,6 +380,7 @@ export async function PATCH(
         data: {
           title: updatedSong.title,
           lyrics: updatedSong.lyrics,
+          originalLyrics: updatedSong.originalLyrics,
           genre: updatedSong.genre,
           mood: updatedSong.mood,
           instruments: updatedSong.instruments,
@@ -377,6 +388,10 @@ export async function PATCH(
           referenceSong: updatedSong.referenceSong,
           userNotes: updatedSong.userNotes,
           status: updatedSong.status,
+          lyricsCompressionApplied: updatedSong.lyricsCompressionApplied || false,
+          lyricsCompressionReason: updatedSong.lyricsCompressionReason || null,
+          lyricsCompressionModel: updatedSong.lyricsCompressionModel || null,
+          lyricsCompressionLimit: updatedSong.lyricsCompressionLimit || null,
         },
       })
     } catch (dbError) {

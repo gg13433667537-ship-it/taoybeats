@@ -1,0 +1,5 @@
+ALTER TABLE "Song" ADD COLUMN IF NOT EXISTS "originalLyrics" TEXT;
+ALTER TABLE "Song" ADD COLUMN IF NOT EXISTS "lyricsCompressionApplied" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Song" ADD COLUMN IF NOT EXISTS "lyricsCompressionReason" TEXT;
+ALTER TABLE "Song" ADD COLUMN IF NOT EXISTS "lyricsCompressionModel" TEXT;
+ALTER TABLE "Song" ADD COLUMN IF NOT EXISTS "lyricsCompressionLimit" INTEGER;

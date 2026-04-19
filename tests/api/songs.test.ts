@@ -203,9 +203,37 @@ describe('Songs API', () => {
       expect(data.id).toBeDefined()
     })
 
+    it('should not compress lyrics that are within the official MiniMax limit even with many lines', async () => {
+      const sessionToken = createTestSessionToken('within-limit-user', 'within-limit@example.com')
+      const originalLyrics = Array.from({ length: 90 }, (_, index) => `Line ${index + 1}`).join('\n')
+      const request = createMockNextRequest('http://localhost:3000/api/songs', {
+        title: 'Within Limit Song',
+        lyrics: originalLyrics,
+        genre: ['pop'],
+        mood: 'steady',
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
+      })
+
+      const response = await createSong(request as any)
+      const data = await response.json()
+      const createdSong = global.songs?.get(data.id)
+
+      expect(response.status).toBe(200)
+      expect(data.compression).toMatchObject({
+        applied: false,
+        reason: null,
+        usedLyrics: originalLyrics,
+        maxLength: 3500,
+      })
+      expect(createdSong?.lyrics).toBe(originalLyrics)
+      expect(createdSong?.originalLyrics).toBeUndefined()
+      expect(createdSong?.lyricsCompressionApplied).toBe(false)
+    })
+
     it('should compress very long lyrics instead of creating multipart songs', async () => {
       const sessionToken = createTestSessionToken('long-user', 'long@example.com')
-      const originalLyrics = Array.from({ length: 120 }, (_, index) => `Line ${index + 1} should compress.`).join('\n')
+      const originalLyrics = Array.from({ length: 110 }, (_, index) => `Line ${index + 1} should compress for MiniMax limit.`).join('\n')
       const request = createMockNextRequest('http://localhost:3000/api/songs', {
         title: 'Long Song',
         lyrics: originalLyrics,
@@ -223,10 +251,14 @@ describe('Songs API', () => {
       expect(data.multiPart).toBeUndefined()
       expect(data.compression).toMatchObject({
         applied: true,
-        reason: 'lyrics_too_long',
+        reason: 'lyrics_over_model_limit',
+        maxLength: 3500,
       })
       expect(vi.mocked(prisma.song.create).mock.calls.length).toBe(1)
-      expect(createdSong?.lyrics?.length).toBeLessThan(originalLyrics.length)
+      expect(createdSong?.lyrics?.length).toBeLessThanOrEqual(3500)
+      expect(createdSong?.lyrics?.length).toBeGreaterThan(3200)
+      expect(createdSong?.originalLyrics).toBe(originalLyrics)
+      expect(createdSong?.lyricsCompressionApplied).toBe(true)
       expect(createdSong?.partGroupId).toBeUndefined()
     })
 

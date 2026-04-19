@@ -62,10 +62,15 @@ export type Database = {
           user_id: string
           title: string
           lyrics: string | null
+          original_lyrics: string | null
           genre: string[]
           mood: string | null
           instruments: string[]
           status: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED'
+          lyrics_compression_applied: boolean
+          lyrics_compression_reason: string | null
+          lyrics_compression_model: string | null
+          lyrics_compression_limit: number | null
           audio_url: string | null
           share_token: string | null
           created_at: string
@@ -76,20 +81,30 @@ export type Database = {
           user_id: string
           title: string
           lyrics?: string | null
+          original_lyrics?: string | null
           genre?: string[]
           mood?: string | null
           instruments?: string[]
           status?: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED'
+          lyrics_compression_applied?: boolean
+          lyrics_compression_reason?: string | null
+          lyrics_compression_model?: string | null
+          lyrics_compression_limit?: number | null
           audio_url?: string | null
           share_token?: string | null
         }
         Update: {
           title?: string
           lyrics?: string | null
+          original_lyrics?: string | null
           genre?: string[]
           mood?: string | null
           instruments?: string[]
           status?: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED'
+          lyrics_compression_applied?: boolean
+          lyrics_compression_reason?: string | null
+          lyrics_compression_model?: string | null
+          lyrics_compression_limit?: number | null
           audio_url?: string | null
         }
       }

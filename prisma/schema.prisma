@@ -91,6 +91,7 @@ model Song {
   id              String   @id @default(cuid())
   title           String
   lyrics          String?  @db.Text
+  originalLyrics  String?  @db.Text
   genre           String[]
   mood            String?
   instruments     String[]
@@ -98,6 +99,10 @@ model Song {
   referenceSong   String?
   userNotes       String?  @db.Text
   status          GenerationStatus @default(PENDING)
+  lyricsCompressionApplied Boolean @default(false)
+  lyricsCompressionReason String?
+  lyricsCompressionModel  String?
+  lyricsCompressionLimit  Int?
   providerTaskId  String?
   errorMessage    String?  @db.Text
   audioUrl        String?
