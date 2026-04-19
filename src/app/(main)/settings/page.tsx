@@ -286,7 +286,7 @@ export default function SettingsPage() {
                         className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground focus:outline-none focus:border-accent"
                       >
                         <option value="suno">Suno AI</option>
-                        <option value="minimax">MiniMax</option>
+                        <option value="minimax">Music API</option>
                         <option value="udio">Udio</option>
                         <option value="custom">Custom API</option>
                       </select>

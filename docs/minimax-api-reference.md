@@ -37,15 +37,21 @@
 ## 待查阅确认的功能
 
 ### 音乐生成相关
-- [ ] 混音 (remix)
-- [ ] 延长版/续写 (extend)
-- [ ] 分离声部 (stems/vocals separation)
-- [ ] 参考音频 (reference audio)
-- [ ] AI 水印
+- [x] AI 水印 - ✅ 已实现 (aigc_watermark参数)
+- [x] 参考音频 - ✅ 已实现 (music-cover模式下audio_base64参数)
+- [ ] 混音 (remix) - ❌ 不支持，需第三方服务
+- [ ] 延长版/续写 (extend) - ❌ 不支持
+- [ ] 分离声部 (stems/vocals separation) - ❌ 不支持，需使用Demucs/LALAL.AI
 
 ### 歌词相关
-- [ ] 智能歌词生成
-- [ ] 外部AI歌词
+- [x] 智能歌词生成 - ✅ 已实现 (lyrics_optimizer参数)
+- [ ] 外部AI歌词 - ❌ 不支持
 
 ### 音色模板
-- [ ] 内置音色模板
+- [ ] 内置音色模板 - ❌ 不支持
+
+### UI中显示但API不支持的功能（即将推出）
+- [ ] 音色相似度 (timbre_similarity) - MiniMax API不支持
+- [ ] 混音模式 (mix_mode) - MiniMax API不支持
+- [ ] 混音人声音量 (mix_mode_vocal_volume) - MiniMax API不支持
+- [ ] 参考歌词 (reference_lyrics) - MiniMax API不支持

@@ -29,26 +29,57 @@ vi.mock('@/lib/db', () => ({
   prisma: {
     user: {
       findUnique: vi.fn(({ where }: { where: { email?: string; id?: string } }) => {
-        if (where.email) return mockDb.users.get(where.email) || null
-        if (where.id) return mockDb.users.get(where.id) || null
+        // First check mockDb
+        if (where.email) {
+          const user = mockDb.users.get(where.email)
+          if (user) return user
+        }
+        if (where.id) {
+          const user = mockDb.users.get(where.id)
+          if (user) return user
+        }
+        // Fall back to global.users for test compatibility
+        if (where.id && (global as any).users) {
+          const user = (global as any).users.get(where.id)
+          if (user) return user
+        }
+        if (where.email && (global as any).users) {
+          const user = (global as any).users.get(where.email)
+          if (user) return user
+        }
         return null
       }),
       findFirst: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(mockDb.users.size),
       create: vi.fn(({ data }: { data: any }) => {
-        const user = { ...data, createdAt: new Date().toISOString() }
-        mockDb.users.set(data.email, user)
+        const user = {
+          ...data,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
         mockDb.users.set(data.id, user)
+        if (data.email) mockDb.users.set(data.email, user)
+        // Also set in global.users for test compatibility
+        if ((global as any).users) {
+          (global as any).users.set(data.id, user)
+          if (data.email) (global as any).users.set(data.email, user)
+        }
         return user
       }),
       update: vi.fn(({ where, data }: { where: { id: string }; data: any }) => {
         const user = mockDb.users.get(where.id)
         if (user) {
-          const updated = { ...user, ...data }
+          const updated = { ...user, ...data, updatedAt: new Date() }
           mockDb.users.set(where.id, updated)
           if (user.email) mockDb.users.delete(user.email)
           if (data.email) mockDb.users.set(data.email, updated)
+          // Also update global.users for test compatibility
+          if ((global as any).users) {
+            (global as any).users.set(where.id, updated)
+            if (user.email) (global as any).users.delete(user.email)
+            if (data.email) (global as any).users.set(data.email, updated)
+          }
           return updated
         }
         return null

@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       }
 
       return applySecurityHeaders(NextResponse.json(
-        { error: `MiniMax API error: ${errorMessage}` },
+        { error: `克隆音色失败: ${errorMessage}` },
         { status: response.status }
       ))
     }

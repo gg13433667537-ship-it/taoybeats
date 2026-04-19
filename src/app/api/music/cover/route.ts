@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
   // Check API key is configured
   if (!API_KEY) {
-    console.error("MINIMAX_API_KEY is not configured")
+    console.error("API_KEY is not configured")
     return applySecurityHeaders(NextResponse.json(
       { error: "Service configuration error" },
       { status: 500 }
@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
     // Check if instrumental
     const isInstrumental = !lyrics || lyrics.trim() === ''
 
-    // Build request payload - use snake_case for MiniMax API consistency
+    // Build request payload - use snake_case for API consistency
     const payload: Record<string, unknown> = {
       model: model || 'music-cover',
       prompt,
@@ -267,7 +267,7 @@ export async function POST(request: NextRequest) {
 
     payload.aigc_watermark = aigcWatermark ?? false
 
-    // Call MiniMax Music Generation API with cover model
+    // Call Music Generation API with cover model
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
 
@@ -299,7 +299,7 @@ export async function POST(request: NextRequest) {
       const errorMessage = errorData.error?.message || `HTTP ${response.status}`
 
       return applySecurityHeaders(NextResponse.json(
-        { error: `MiniMax API error: ${errorMessage}` },
+        { error: `API error: ${errorMessage}` },
         { status: response.status }
       ))
     }
@@ -309,7 +309,7 @@ export async function POST(request: NextRequest) {
     // Return task_id for polling
     const taskId = data.data?.task_id || data.task_id
     if (!taskId) {
-      console.error("MiniMax API response missing task_id:", data)
+      console.error("API response missing task_id:", data)
       return applySecurityHeaders(NextResponse.json(
         { error: "Invalid response from music generation service" },
         { status: 500 }

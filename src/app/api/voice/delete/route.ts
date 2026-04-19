@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
       const errorMessage = errorData.base_resp?.status_msg || errorData.error?.message || `HTTP ${response.status}`
 
       return applySecurityHeaders(NextResponse.json(
-        { error: `MiniMax API error: ${errorMessage}` },
+        { error: `删除音色失败: ${errorMessage}` },
         { status: response.status }
       ))
     }

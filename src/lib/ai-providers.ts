@@ -1,5 +1,5 @@
 // AI Provider Abstraction Layer
-// MiniMax Music 2.6 - Official API Integration
+// Music Generation API Integration
 
 export type GenerationStatus =
   | 'PENDING'
@@ -67,11 +67,10 @@ export type AIProvider = {
   splitStems?: (params: StemsParams, apiKey: string, apiUrl: string) => Promise<StemResult[]> // returns stems
 }
 
-// MiniMax Provider - Official API Implementation
-// API Docs: https://platform.minimaxi.com/docs/api-reference/music-generation
-// Model: music-2.6, music-cover
-export const miniMaxProvider: AIProvider = {
-  name: 'MiniMax',
+// Music Generation Provider
+// Model: standard, cover
+export const musicProvider: AIProvider = {
+  name: 'Music',
 
   async generate(params, apiKey, apiUrl) {
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
@@ -86,29 +85,37 @@ export const miniMaxProvider: AIProvider = {
     // Determine output format
     const outputFormat = params.outputFormat || 'mp3'
 
+    // Build request body with API parameters
+    const requestBody: Record<string, unknown> = {
+      model,
+      prompt,
+      lyrics: isInstrumental ? undefined : params.lyrics,
+      is_instrumental: isInstrumental,
+      stream: false,
+      output_format: 'url',
+      audio_setting: {
+        sample_rate: params.sampleRate || 44100,
+        bitrate: params.bitrate || 256000,
+        format: outputFormat
+      },
+      aigc_watermark: params.aigcWatermark || false,
+      voice_id: params.voiceId,
+      lyrics_optimizer: params.lyricsOptimizer,
+    }
+
+    // Add reference audio for music-cover model using correct parameter names
+    // Use audio_base64 for uploaded files or audio_url for URL-based reference
+    if (model === 'music-cover' && params.referenceAudio) {
+      requestBody.audio_base64 = params.referenceAudio
+    }
+
     const response = await fetch(`${baseUrl}/v1/music_generation`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        prompt,
-        lyrics: isInstrumental ? undefined : params.lyrics,
-        is_instrumental: isInstrumental,
-        stream: false,
-        output_format: 'url',
-        audio_setting: {
-          sample_rate: params.sampleRate || 44100,
-          bitrate: params.bitrate || 256000,
-          format: outputFormat
-        },
-        aigc_watermark: params.aigcWatermark || false,
-        voice_id: params.voiceId,
-        reference_audio: params.referenceAudio,
-        lyrics_optimizer: params.lyricsOptimizer,
-      }),
+      body: JSON.stringify(requestBody),
     })
 
     if (!response.ok) {
@@ -116,7 +123,7 @@ export const miniMaxProvider: AIProvider = {
       const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
       const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
 
-      // Map MiniMax error codes to user-friendly messages
+      // Map error codes to user-friendly messages
       const errorMessages: Record<number, string> = {
         1002: '请求过于频繁，请稍后再试',
         1004: 'API鉴权失败，请检查配置',
@@ -130,14 +137,14 @@ export const miniMaxProvider: AIProvider = {
         ? errorMessages[errorCode]
         : errorMessage
 
-      throw new Error(`MiniMax API error: ${userMessage}`)
+      throw new Error(`API error: ${userMessage}`)
     }
 
     const data = await response.json()
 
     // Validate response structure
     if (!data || typeof data !== 'object') {
-      throw new Error('Invalid response from MiniMax API: response is not an object')
+      throw new Error('Invalid response from API: response is not an object')
     }
 
     // Music 2.6 may return audio directly (status=2 means completed)
@@ -149,14 +156,14 @@ export const miniMaxProvider: AIProvider = {
     if (audioUrl && status === 2) {
       // Synchronous completion - return audio URL prefixed with 'audio:'
       if (typeof audioUrl !== 'string' || !audioUrl.startsWith('http')) {
-        throw new Error('Invalid audio URL in MiniMax response')
+        throw new Error('Invalid audio URL in API response')
       }
       return `audio:${audioUrl}`
     }
 
     // Return task_id for async polling
     if (!taskId && !data.task_id) {
-      throw new Error('No task_id returned from MiniMax API')
+      throw new Error('No task_id returned from API')
     }
     return taskId || data.task_id
   },
@@ -192,7 +199,7 @@ export const miniMaxProvider: AIProvider = {
       const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
       const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
 
-      // Map MiniMax error codes to user-friendly messages
+      // Map error codes to user-friendly messages
       const errorMessages: Record<number, string> = {
         1002: '请求过于频繁，请稍后再试',
         1004: 'API鉴权失败，请检查配置',
@@ -206,11 +213,11 @@ export const miniMaxProvider: AIProvider = {
         ? errorMessages[errorCode]
         : errorMessage
 
-      throw new Error(`MiniMax API error: ${userMessage}`)
+      throw new Error(`API error: ${userMessage}`)
     }
 
     const data = await response.json()
-    return mapMiniMaxStatus(data)
+    return mapMusicStatus(data)
   },
 
   async download(taskId, apiKey, apiUrl) {
@@ -238,7 +245,7 @@ export const miniMaxProvider: AIProvider = {
       const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
       const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
 
-      // Map MiniMax error codes to user-friendly messages
+      // Map error codes to user-friendly messages
       const errorMessages: Record<number, string> = {
         1002: '请求过于频繁，请稍后再试',
         1004: 'API鉴权失败，请检查配置',
@@ -252,7 +259,7 @@ export const miniMaxProvider: AIProvider = {
         ? errorMessages[errorCode]
         : errorMessage
 
-      throw new Error(`MiniMax API error: ${userMessage}`)
+      throw new Error(`API error: ${userMessage}`)
     }
 
     const data = await response.json()
@@ -266,7 +273,7 @@ export const miniMaxProvider: AIProvider = {
 
   /**
    * Continue singing - generates a continuation of an existing audio track
-   * Uses MiniMax API with reference_audio parameter to maintain style consistency
+   * Uses reference_audio parameter to maintain style consistency
    */
   async continue(params, apiKey, apiUrl) {
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
@@ -287,7 +294,7 @@ export const miniMaxProvider: AIProvider = {
       aigc_watermark: false,
     }
 
-    // Add duration if provided (MiniMax may use this as guidance)
+    // Add duration if provided (may use this as guidance)
     if (params.duration) {
       requestBody.duration = params.duration
     }
@@ -319,7 +326,7 @@ export const miniMaxProvider: AIProvider = {
         ? errorMessages[errorCode]
         : errorMessage
 
-      throw new Error(`MiniMax API error: ${userMessage}`)
+      throw new Error(`API error: ${userMessage}`)
     }
 
     const data = await response.json()
@@ -335,92 +342,18 @@ export const miniMaxProvider: AIProvider = {
   },
 
   /**
-   * Split audio into stems (vocals, drums, bass, other)
-   * Uses Demucs via MiniMax's stem separation endpoint
+   * Stem separation is NOT supported by this provider
+   * Only supports music generation, not audio source separation
+   * Use splitAudioStems() directly in the route with Demucs/LALAL.AI
    */
-  async splitStems(params, apiKey, apiUrl) {
-    const baseUrl = apiUrl || 'https://api.minimaxi.com'
-
-    // MiniMax stem separation API endpoint
-    const response = await fetch(`${baseUrl}/v1/stems`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        audio_url: params.audioUrl,
-        format: 'mp3',
-      }),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-      const errorCode = errorData.error?.error_code || errorData.base_resp?.status_code
-      const errorMessage = errorData.error?.message || errorData.error || errorData.base_resp?.status_msg || `HTTP ${response.status}`
-
-      const errorMessages: Record<number, string> = {
-        1002: '请求过于频繁，请稍后再试',
-        1004: 'API鉴权失败，请检查配置',
-        1008: '账户余额不足，请充值后重试',
-        1026: '内容包含敏感词，请修改后重试',
-        2013: '请求参数错误，请检查输入',
-        2049: '无效的API Key，请检查配置',
-      }
-
-      const userMessage = errorCode && errorMessages[errorCode]
-        ? errorMessages[errorCode]
-        : errorMessage
-
-      throw new Error(`MiniMax API error: ${userMessage}`)
-    }
-
-    const data = await response.json()
-
-    // Map MiniMax stem response to our StemResult format
-    const stemLabels: Record<string, { label: string; description: string }> = {
-      vocals: { label: 'Vocals', description: 'Lead vocals and harmonies' },
-      drums: { label: 'Drums', description: 'Drum tracks and percussion' },
-      bass: { label: 'Bass', description: 'Bass guitar and low-frequency instruments' },
-      other: { label: 'Other', description: 'Guitars, synths, strings, and other instruments' },
-    }
-
-    const stems: StemResult[] = []
-    const stemData = data.data || data.stems || {}
-
-    for (const [stemType, stemUrl] of Object.entries(stemData)) {
-      if (stemUrl && typeof stemUrl === 'string') {
-        const labelInfo = stemLabels[stemType] || { label: stemType, description: '' }
-        stems.push({
-          stem_type: stemType as StemType,
-          label: labelInfo.label,
-          description: labelInfo.description,
-          audioUrl: stemUrl,
-          format: 'mp3',
-          duration: 0,
-        })
-      }
-    }
-
-    // If no stems returned, return the original audio as a single stem
-    if (stems.length === 0) {
-      stems.push({
-        stem_type: 'other',
-        label: 'Original',
-        description: 'Original audio track',
-        audioUrl: params.audioUrl,
-        format: 'mp3',
-        duration: 0,
-      })
-    }
-
-    return stems
+  async splitStems(_params, _apiKey, _apiUrl): Promise<StemResult[]> {
+    throw new Error('Stem separation is not supported. Use Demucs or LALAL.AI API instead.')
   },
 }
 
 // Provider Registry
 export const providers: Record<string, AIProvider> = {
-  minimax: miniMaxProvider,
+  music: musicProvider,
 }
 
 // Get provider by name
@@ -432,7 +365,7 @@ export function getProvider(name: string): AIProvider {
   return provider
 }
 
-// Build prompt from song params for MiniMax
+// Build prompt from song params
 function buildPrompt(params: SongParams): string {
   const parts: string[] = []
 
@@ -465,8 +398,8 @@ function buildPrompt(params: SongParams): string {
   return parts.join('; ')
 }
 
-// MiniMax API Response Types
-interface MiniMaxStatusResponse {
+// Music API Response Types
+interface MusicStatusResponse {
   status?: string
   progress?: number
   stage?: string
@@ -477,8 +410,8 @@ interface MiniMaxStatusResponse {
   error_code?: number
 }
 
-function mapMiniMaxStatus(data: MiniMaxStatusResponse): GenerationProgress {
-  // MiniMax status: pending, processing, completed, failed
+function mapMusicStatus(data: MusicStatusResponse): GenerationProgress {
+  // Status: pending, processing, completed, failed
   const statusMap: Record<string, GenerationStatus> = {
     pending: 'PENDING',
     processing: 'GENERATING',

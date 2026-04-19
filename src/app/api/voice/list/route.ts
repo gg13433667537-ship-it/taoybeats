@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       const errorMessage = errorData.base_resp?.status_msg || errorData.error?.message || `HTTP ${response.status}`
 
       return applySecurityHeaders(NextResponse.json(
-        { error: `MiniMax API error: ${errorMessage}` },
+        { error: `获取音色列表失败: ${errorMessage}` },
         { status: response.status }
       ))
     }

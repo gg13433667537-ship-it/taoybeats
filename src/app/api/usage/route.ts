@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { applySecurityHeaders, rateLimitMiddleware, DEFAULT_RATE_LIMIT } from "@/lib/security"
-
-
-if (!global.users) global.users = new Map()
-
-const users = global.users!
+import { prisma } from "@/lib/db"
 
 function getDateKey(): string {
   return new Date().toISOString().split('T')[0] // YYYY-MM-DD
@@ -16,24 +11,53 @@ function getMonthKey(): string {
   return new Date().toISOString().slice(0, 7) // YYYY-MM
 }
 
-function getUserUsage(user: User): { daily: number; monthly: number } {
+async function getUserUsageFromDB(userId: string): Promise<{ daily: number; monthly: number; tier: string }> {
   const today = getDateKey()
   const thisMonth = getMonthKey()
 
-  // Reset if needed
-  if (user.dailyResetAt !== today) {
-    user.dailyUsage = 0
-    user.dailyResetAt = today
+  // Get or create user record in DB
+  let user = await prisma.user.findUnique({ where: { id: userId } })
+
+  if (!user) {
+    // Create user if doesn't exist
+    user = await prisma.user.create({
+      data: {
+        id: userId,
+        tier: 'FREE',
+        dailyUsage: 0,
+        monthlyUsage: 0,
+        dailyResetAt: today,
+        monthlyResetAt: thisMonth,
+      },
+    })
   }
 
+  // Check if we need to reset daily usage
+  if (user.dailyResetAt !== today) {
+    user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        dailyUsage: 0,
+        dailyResetAt: today,
+      },
+    })
+  }
+
+  // Check if we need to reset monthly usage
   if (user.monthlyResetAt !== thisMonth) {
-    user.monthlyUsage = 0
-    user.monthlyResetAt = thisMonth
+    user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        monthlyUsage: 0,
+        monthlyResetAt: thisMonth,
+      },
+    })
   }
 
   return {
     daily: user.dailyUsage,
     monthly: user.monthlyUsage,
+    tier: user.tier,
   }
 }
 
@@ -78,13 +102,16 @@ export async function GET(request: NextRequest) {
     }))
   }
 
-  const user = users.get(userId)
-  if (!user) {
-    return applySecurityHeaders(NextResponse.json({ error: 'User not found' }, { status: 404 }))
+  // Fetch user usage from Prisma database
+  let usage
+  try {
+    usage = await getUserUsageFromDB(userId)
+  } catch (dbError) {
+    console.error("Prisma lookup failed:", dbError)
+    return applySecurityHeaders(NextResponse.json({ error: 'Database error' }, { status: 500 }))
   }
 
-  const tier = user.tier || 'FREE'
-  const { daily, monthly } = getUserUsage(user)
+  const tier = usage.tier || 'FREE'
 
   // Calculate limits based on tier
   const limits = tier === 'PRO'
@@ -95,14 +122,14 @@ export async function GET(request: NextRequest) {
     userId,
     tier,
     daily: {
-      used: daily,
+      used: usage.daily,
       limit: limits.dailyLimit,
-      remaining: Math.max(0, limits.dailyLimit - daily),
+      remaining: Math.max(0, limits.dailyLimit - usage.daily),
     },
     monthly: {
-      used: monthly,
+      used: usage.monthly,
       limit: limits.monthlyLimit,
-      remaining: limits.monthlyLimit === -1 ? -1 : Math.max(0, limits.monthlyLimit - monthly),
+      remaining: limits.monthlyLimit === -1 ? -1 : Math.max(0, limits.monthlyLimit - usage.monthly),
     },
   }))
 }
@@ -130,13 +157,17 @@ export async function POST(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({ error: 'Invalid session' }, { status: 401 }))
   }
 
-  const user = users.get(userId)
-  if (!user) {
-    return applySecurityHeaders(NextResponse.json({ error: 'User not found' }, { status: 404 }))
+  // Fetch user usage from Prisma database
+  let usage
+  try {
+    usage = await getUserUsageFromDB(userId)
+  } catch (dbError) {
+    console.error("Prisma lookup failed:", dbError)
+    return applySecurityHeaders(NextResponse.json({ error: 'Database error' }, { status: 500 }))
   }
 
-  const tier = user.tier || 'FREE'
-  const { daily, monthly } = getUserUsage(user)
+  const tier = usage.tier || 'FREE'
+  const { daily, monthly } = usage
 
   // Calculate limits based on tier
   const limits = tier === 'PRO'
@@ -157,14 +188,23 @@ export async function POST(request: NextRequest) {
     ))
   }
 
-  // Increment using global.users (synchronized with songs route)
-  user.dailyUsage++
-  user.monthlyUsage++
-  users.set(userId, user)
+  // Increment usage in database
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        dailyUsage: { increment: 1 },
+        monthlyUsage: { increment: 1 },
+      },
+    })
+  } catch (dbError) {
+    console.error("Failed to increment usage:", dbError)
+    return applySecurityHeaders(NextResponse.json({ error: 'Database error' }, { status: 500 }))
+  }
 
   return applySecurityHeaders(NextResponse.json({
     success: true,
-    daily: user.dailyUsage,
-    monthly: user.monthlyUsage,
+    daily: daily + 1,
+    monthly: monthly + 1,
   }))
 }

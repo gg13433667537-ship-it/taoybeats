@@ -60,10 +60,22 @@ export default function DashboardPage() {
   const playlistDropdownRef = useRef<HTMLDivElement>(null)
   const songOptionsRef = useRef<HTMLDivElement>(null)
 
-  // Handle download
-  const handleDownload = (song: Song) => {
-    if (song.audioUrl) {
-      window.open(song.audioUrl, '_blank')
+  // Handle download - local download without opening new window
+  const handleDownload = async (song: Song) => {
+    if (!song.audioUrl) return
+    try {
+      const response = await fetch(song.audioUrl)
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = song.title || 'audio'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error('Download failed:', error)
     }
   }
 
@@ -650,9 +662,29 @@ export default function DashboardPage() {
                             </div>
                           </>
                         )}
-                        <button aria-label="More options" className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors">
-                          <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
-                        </button>
+                        <div className="relative" ref={songOptionsRef}>
+                          <button
+                            onClick={() => {
+                              setShowSongOptions(showSongOptions === song.id ? null : song.id)
+                            }}
+                            aria-label="More options"
+                            aria-expanded={showSongOptions === song.id}
+                            className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors"
+                          >
+                            <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
+                          </button>
+                          {showSongOptions === song.id && (
+                            <div className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
+                              <button
+                                onClick={() => handleDeleteSong(song.id)}
+                                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-error hover:bg-error/10 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" aria-hidden="true" />
+                                {t('deleteSong')}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

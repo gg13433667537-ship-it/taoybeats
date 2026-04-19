@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n"
 import LanguageSwitcher from "@/components/LanguageSwitcher"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import VersionBadge from "@/components/VersionBadge"
+import UserDropdown from "@/components/UserDropdown"
 
 export default function HomePage() {
   const { t } = useI18n()
@@ -30,15 +31,7 @@ export default function HomePage() {
             <Link href="/pricing" className="text-sm text-text-secondary hover:text-foreground transition-colors">
               {t('pricing')}
             </Link>
-            <Link href="/login" className="text-sm text-text-secondary hover:text-foreground transition-colors">
-              {t('signIn')}
-            </Link>
-            <Link
-              href="/register"
-              className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
-            >
-              {t('getStarted')}
-            </Link>
+            <UserDropdown />
           </nav>
         </div>
       </header>

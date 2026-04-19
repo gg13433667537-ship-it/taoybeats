@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     // Check if API key is configured
     if (!apiKey) {
-      console.error("MINIMAX_API_KEY is not configured")
+      console.error("API_KEY is not configured")
       return applySecurityHeaders(NextResponse.json(
         { error: "Service configuration error" },
         { status: 500 }
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     if (title) payload.title = title
 
-    // Call MiniMax Lyrics Generation API
+    // Call Lyrics Generation API
     const response = await fetch(`${baseUrl}/v1/lyrics_generation`, {
       method: 'POST',
       headers: {
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       }
 
       return applySecurityHeaders(NextResponse.json(
-        { error: `MiniMax API error: ${errorMessage}` },
+        { error: `API error: ${errorMessage}` },
         { status: response.status }
       ))
     }

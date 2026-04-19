@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
       }
 
       return applySecurityHeaders(NextResponse.json(
-        { error: `MiniMax API error: ${errorMessage}` },
+        { error: `上传音频文件失败: ${errorMessage}` },
         { status: response.status }
       ))
     }

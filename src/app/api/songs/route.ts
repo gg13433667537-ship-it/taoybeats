@@ -31,7 +31,7 @@
  * @rateLimit 20 requests per minute per user
  */
 import { NextRequest, NextResponse } from "next/server"
-import type { User, Song } from "@/lib/types"
+import type { Song } from "@/lib/types"
 import { musicProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { checkDuplicateGeneration } from "@/lib/cache"
@@ -40,25 +40,16 @@ import { rateLimitMiddleware, DEFAULT_RATE_LIMIT, sanitizeString, validateRequir
 import crypto from "crypto"
 
 // Shared global storage - ensure initialized
-if (typeof global.users === 'undefined') global.users = new Map()
 if (typeof global.songs === 'undefined') global.songs = new Map()
 if (typeof global.adminLogs === 'undefined') global.adminLogs = new Map()
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
 if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
-
-// Helper to get or initialize users map
-function getUsersMap(): Map<string, User> {
-  if (!global.users) global.users = new Map()
-  return global.users
-}
 
 // Helper to get or initialize songs map
 function getSongsMap(): Map<string, Song> {
   if (!global.songs) global.songs = new Map()
   return global.songs
 }
-
-const users = getUsersMap()
 
 // Free tier limits
 const FREE_DAILY_LIMIT = 3
@@ -72,43 +63,75 @@ function getMonthKey(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
-function getOrCreateUser(userId: string, email?: string): User {
-  let user = users.get(userId)
-  if (!user) {
-    user = {
-      id: userId,
-      email: email || `${userId}@example.com`,
-      name: email?.split('@')[0] || 'User',
-      role: 'USER',
-      isActive: true,
-      tier: 'FREE',
-      dailyUsage: 0,
-      monthlyUsage: 0,
-      dailyResetAt: getDateKey(),
-      monthlyResetAt: getMonthKey(),
-      createdAt: new Date().toISOString(),
-    }
-    users.set(userId, user)
-  }
-  return user
+interface SessionUser {
+  id: string
+  email?: string
+  name?: string
+  tier: string
+  dailyUsage: number
+  monthlyUsage: number
+  dailyResetAt: string
+  monthlyResetAt: string
 }
 
-function checkAndResetUsage(user: User) {
+async function getOrCreateUserFromDB(userId: string, email?: string): Promise<SessionUser> {
   const today = getDateKey()
   const thisMonth = getMonthKey()
 
-  if (user.dailyResetAt !== today) {
-    user.dailyUsage = 0
-    user.dailyResetAt = today
+  // Try to find user in DB
+  let user = await prisma.user.findUnique({ where: { id: userId } })
+
+  if (!user) {
+    // Create user in DB if doesn't exist
+    user = await prisma.user.create({
+      data: {
+        id: userId,
+        email: email || null,
+        name: email?.split('@')[0] || 'User',
+        tier: 'FREE',
+        dailyUsage: 0,
+        monthlyUsage: 0,
+        dailyResetAt: today,
+        monthlyResetAt: thisMonth,
+      },
+    })
   }
 
+  // Check if we need to reset daily usage
+  if (user.dailyResetAt !== today) {
+    user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        dailyUsage: 0,
+        dailyResetAt: today,
+      },
+    })
+  }
+
+  // Check if we need to reset monthly usage
   if (user.monthlyResetAt !== thisMonth) {
-    user.monthlyUsage = 0
-    user.monthlyResetAt = thisMonth
+    user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        monthlyUsage: 0,
+        monthlyResetAt: thisMonth,
+      },
+    })
+  }
+
+  return {
+    id: user.id,
+    email: user.email || undefined,
+    name: user.name || undefined,
+    tier: user.tier,
+    dailyUsage: user.dailyUsage,
+    monthlyUsage: user.monthlyUsage,
+    dailyResetAt: user.dailyResetAt || today,
+    monthlyResetAt: user.monthlyResetAt || thisMonth,
   }
 }
 
-function getSessionUser(request: NextRequest): User | null {
+async function getSessionUser(request: NextRequest): Promise<SessionUser | null> {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
     return null
@@ -119,10 +142,20 @@ function getSessionUser(request: NextRequest): User | null {
     if (!payload) {
       return null
     }
-    return getOrCreateUser(payload.id, payload.email)
+    return await getOrCreateUserFromDB(payload.id, payload.email)
   } catch {
     return null
   }
+}
+
+async function incrementUsage(userId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      dailyUsage: { increment: 1 },
+      monthlyUsage: { increment: 1 },
+    },
+  })
 }
 
 export async function GET(request: NextRequest) {
@@ -132,7 +165,7 @@ export async function GET(request: NextRequest) {
     return rateLimitResponse
   }
 
-  const user = getSessionUser(request)
+  const user = await getSessionUser(request)
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
@@ -186,7 +219,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const user = getSessionUser(request)
+    const user = await getSessionUser(request)
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -327,9 +360,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check usage limits
-    checkAndResetUsage(user)
-
+    // Check usage limits (from Prisma - already reset if needed by getSessionUser)
     if (user.tier === 'FREE') {
       if (user.dailyUsage >= FREE_DAILY_LIMIT) {
         return NextResponse.json(
@@ -422,9 +453,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Increment usage ONLY after song is successfully created in database
-    user.dailyUsage++
-    user.monthlyUsage++
+    // Increment usage in database ONLY after song is successfully created
+    try {
+      await incrementUsage(user.id)
+    } catch (dbError) {
+      console.error("Failed to increment usage in Prisma:", dbError)
+      // Song was created, but usage increment failed - this is not critical
+      // The user might get an extra generation, but it's better than failing the request
+    }
 
     // Start real generation in background
     generateMusic(songId, song, apiKey, apiUrl).catch((err) => {
@@ -436,8 +472,8 @@ export async function POST(request: NextRequest) {
       shareToken,
       status: "PENDING",
       usage: {
-        daily: { used: user.dailyUsage, limit: FREE_DAILY_LIMIT },
-        monthly: { used: user.monthlyUsage, limit: FREE_MONTHLY_LIMIT },
+        daily: { used: user.dailyUsage + 1, limit: FREE_DAILY_LIMIT },
+        monthly: { used: user.monthlyUsage + 1, limit: FREE_MONTHLY_LIMIT },
       },
     })
   } catch (error) {
@@ -489,7 +525,7 @@ async function generateMusic(
     // Update status to GENERATING
     await updateSongStatus(songId, { status: "GENERATING" }, song)
 
-    // Call MiniMax API
+    // Call Music API
     const taskId = await musicProvider.generate({
       title: song.title,
       lyrics: song.lyrics || '',

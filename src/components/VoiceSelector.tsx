@@ -19,16 +19,40 @@ interface VoiceSelectorProps {
   apiKey?: string
 }
 
-const systemVoices: Voice[] = [
-  { voice_id: 'male-qn-qingse', voice_name: '青年男声', description: '清澈温暖', type: 'system' },
-  { voice_id: 'female-shaonv-yujie', voice_name: '少女御姐', description: '成熟大气', type: 'system' },
-  { voice_id: 'male-bada-mengchuan', voice_name: '霸总磁力', description: '低沉磁性', type: 'system' },
+// 20种主流音色模板 - 覆盖男声/女声/童声/各种风格
+const defaultSystemVoices: Voice[] = [
+  // 男声系列 (7种)
+  { voice_id: 'male-qn-qingse', voice_name: '青年男声', description: '清澈温暖，适合抒情歌曲', type: 'system' },
+  { voice_id: 'male-bada-mengchuan', voice_name: '霸总磁力', description: '低沉磁性，成熟稳重', type: 'system' },
+  { voice_id: 'male-zhongnian', voice_name: '中年大叔', description: '浑厚沉稳，叙事感强', type: 'system' },
+  { voice_id: 'male-wenrou', voice_name: '温柔暖男', description: '柔和温暖，治愈系', type: 'system' },
+  { voice_id: 'male-cool', voice_name: '酷帅男声', description: '冷峻帅气，节奏感强', type: 'system' },
+  { voice_id: 'male-aggressive', voice_name: '硬朗硬汉', description: '粗犷有力，摇滚风', type: 'system' },
+  { voice_id: 'male-radio', voice_name: '播音男声', description: '标准普通话，新闻感', type: 'system' },
+  // 女声系列 (8种)
+  { voice_id: 'female-shaonv-yujie', voice_name: '少女御姐', description: '成熟大气，女王范', type: 'system' },
+  { voice_id: 'female-tianmei', voice_name: '甜美女孩', description: '清新甜美，少女感', type: 'system' },
+  { voice_id: 'female-zhixing', voice_name: '知性姐姐', description: '温柔理性，娓娓道来', type: 'system' },
+  { voice_id: 'female-nvhuang', voice_name: '女王音', description: '气场强大，霸气侧漏', type: 'system' },
+  { voice_id: 'female-wenyi', voice_name: '文艺女声', description: '文艺清新，诗意感', type: 'system' },
+  { voice_id: 'female-gaibai', voice_name: '可爱甜心', description: '活泼可爱，元气满满', type: 'system' },
+  { voice_id: 'female-radio', voice_name: '播音女声', description: '标准普通话，主持感', type: 'system' },
+  { voice_id: 'female-luoli', voice_name: '萝莉娃娃音', description: '稚嫩可爱，萌萌哒', type: 'system' },
+  { voice_id: 'female-qingshao', voice_name: '青涩少女', description: '害羞腼腆，青春校园', type: 'system' },
+  // 童声系列 (2种)
+  { voice_id: 'child-boy', voice_name: '童声男孩', description: '稚嫩纯真，清澈干净', type: 'system' },
+  { voice_id: 'child-girl', voice_name: '童声女孩', description: '天真烂漫，活泼可爱', type: 'system' },
+  // 特色音色 (3种)
+  { voice_id: 'drama-male', voice_name: '剧情男声', description: '戏剧张力，故事感强', type: 'system' },
+  { voice_id: 'drama-female', voice_name: '剧情女声', description: '情感丰富，代入感强', type: 'system' },
+  { voice_id: 'voiceover', voice_name: '专业配音', description: '纪录片配音，商业品质', type: 'system' },
 ]
 
 export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }: VoiceSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false)
   const [voices, setVoices] = useState<Voice[]>([])
+  const [systemVoices, setSystemVoices] = useState<Voice[]>(defaultSystemVoices)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,7 +84,21 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
         })),
       ]
 
+      // Combine API system voices with defaults, avoiding duplicates
+      const apiSystemVoices: Voice[] = (data.system_voice || []).map((v: { voice_id: string; voice_name?: string; description?: string }) => ({
+        ...v,
+        voice_name: v.voice_name || v.voice_id,
+        type: 'system' as const,
+      }))
+
+      // Merge API system voices with defaults (API takes precedence for duplicates)
+      const systemVoiceMap = new Map<string, Voice>()
+      defaultSystemVoices.forEach(v => systemVoiceMap.set(v.voice_id, v))
+      apiSystemVoices.forEach(v => systemVoiceMap.set(v.voice_id, v))
+      const allSystemVoices = Array.from(systemVoiceMap.values())
+
       setVoices(userVoices)
+      setSystemVoices(allSystemVoices)
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
       setError(err instanceof Error ? err.message : '获取音色列表失败')
@@ -246,9 +284,11 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
       <CloneVoiceModal
         isOpen={isCloneModalOpen}
         onClose={() => setIsCloneModalOpen(false)}
-        onSuccess={(voiceId) => {
+        onSuccess={async (voiceId) => {
+          // Await loadVoices to ensure the voice list is refreshed before selecting
+          // This fixes the issue where newly created voices don't appear in the list
+          await loadVoices()
           onSelectVoice(voiceId)
-          loadVoices()
         }}
       />
     </>

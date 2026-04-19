@@ -11,6 +11,7 @@
 ## 活跃 Claims
 
 | T-001 | claude-main | src/components/CloneVoiceModal.tsx | 2026-04-18 | 麦克风权限和上传功能修复完成 | released |
+| T-002 | claude-main | src/components/UserDropdown.tsx | 2026-04-18 | 登录UI状态修复组件 | released |
 
 ---
 

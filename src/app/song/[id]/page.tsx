@@ -118,10 +118,15 @@ export default function SongSharePage() {
 
     if (isPlaying) {
       audio.pause()
+      setIsPlaying(false)
     } else {
-      audio.play()
+      audio.play().then(() => {
+        setIsPlaying(true)
+      }).catch((error) => {
+        console.error('Playback failed:', error)
+        setIsPlaying(false)
+      })
     }
-    setIsPlaying(!isPlaying)
   }, [isPlaying])
 
   const toggleMute = useCallback(() => {
@@ -281,7 +286,7 @@ export default function SongSharePage() {
       console.error('Download failed:', error)
       setSongError(t('downloadFailed'))
     }
-  }, [song?.audioUrl, song?.title, t])
+  }, [song, t])
 
   const handleRemix = async () => {
     if (!song) return
@@ -297,7 +302,8 @@ export default function SongSharePage() {
       if (res.ok) {
         const data = await res.json()
         // Redirect to generate page with fork parameters
-        window.location.href = `/generate?fork=${songId}&songId=${data.id}`
+        // Note: fork API no longer creates a placeholder song - actual creation happens on Generate page
+        window.location.href = data.redirectUrl || `/generate?fork=${songId}`
       } else {
         setSongError(t('remixFailed'))
       }
@@ -885,14 +891,12 @@ export default function SongSharePage() {
                     >
                       {playingStem === stem.stem_type ? t('pause') : t('play')}
                     </button>
-                    <a
-                      href={stem.audioUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => handleStemDownload(stem.stem_type, stem.audioUrl)}
                       className="px-3 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-xs font-medium transition-colors"
                     >
                       {t('download')}
-                    </a>
+                    </button>
                   </div>
                 </div>
               ))}

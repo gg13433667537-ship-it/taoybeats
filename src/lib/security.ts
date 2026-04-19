@@ -474,7 +474,7 @@ const API_CSP = [
   "style-src 'self'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  // Allow MiniMax API connections
+  // Allow Music API connections
   "connect-src 'self' https://api.minimaxi.com https://api.minimax.com",
   "frame-src 'none'",
   "object-src 'none'",
@@ -504,7 +504,7 @@ const BROWSER_CSP = [
   "style-src 'self'",
   "img-src 'self' data: blob: https://*.supabase.co https://*.minimax.io",
   "font-src 'self' data:",
-  // Allow MiniMax API and Supabase connections
+  // Allow Music API and Supabase connections
   "connect-src 'self' https://api.minimaxi.com https://api.minimax.com https://*.supabase.co wss://*.supabase.co",
   "frame-src 'none'",
   "object-src 'none'",

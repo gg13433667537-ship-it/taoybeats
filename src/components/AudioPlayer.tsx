@@ -20,11 +20,15 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
-  const [isReady, setIsReady] = useState(false)
 
   // Initialize WaveSurfer
   useEffect(() => {
     if (!waveformRef.current || !src) return
+
+    // Reset state when src changes
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
 
     const wavesurfer = WaveSurfer.create({
       container: waveformRef.current,
@@ -41,8 +45,8 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
     wavesurferRef.current = wavesurfer
 
     wavesurfer.on('ready', () => {
-      setDuration(wavesurfer.getDuration())
-      setIsReady(true)
+      const dur = wavesurfer.getDuration()
+      setDuration(dur)
     })
 
     wavesurfer.on('audioprocess', () => {
@@ -60,17 +64,28 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
       onEnded?.()
     })
 
+    wavesurfer.on('error', (err) => {
+      console.error('WaveSurfer error:', err)
+    })
+
     wavesurfer.load(src)
 
     return () => {
       wavesurfer.destroy()
+      wavesurferRef.current = null
     }
   }, [src, onEnded])
 
   const togglePlay = useCallback(() => {
-    if (!wavesurferRef.current || !isReady) return
+    if (!wavesurferRef.current) return
+    // Check if wavesurfer is ready by checking if it has a duration
+    const duration = wavesurferRef.current.getDuration()
+    if (!duration || duration === 0) {
+      console.warn('WaveSurfer not ready yet')
+      return
+    }
     wavesurferRef.current.playPause()
-  }, [isReady])
+  }, [])
 
   const toggleMute = useCallback(() => {
     if (!wavesurferRef.current) return
@@ -89,8 +104,10 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
 
   const skip = useCallback((seconds: number) => {
     if (!wavesurferRef.current) return
+    const duration = wavesurferRef.current.getDuration()
+    if (!duration || duration === 0) return
     const newTime = wavesurferRef.current.getCurrentTime() + seconds
-    wavesurferRef.current.seekTo(newTime / wavesurferRef.current.getDuration())
+    wavesurferRef.current.seekTo(Math.max(0, Math.min(1, newTime / duration)))
   }, [])
 
   const formatTime = (time: number): string => {
