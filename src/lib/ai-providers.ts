@@ -81,6 +81,9 @@ export const musicProvider: AIProvider = {
 
     // Check if instrumental - explicit flag or no lyrics
     const isInstrumental = params.isInstrumental || !params.lyrics || params.lyrics.trim() === ''
+    // If no lyrics and not instrumental, we need lyrics_optimizer to auto-generate
+    const needsLyricsOptimizer = !params.lyrics?.trim() && !isInstrumental
+    const enableLyricsOptimizer = params.lyricsOptimizer || needsLyricsOptimizer
 
     // Determine output format
     const outputFormat = params.outputFormat || 'mp3'
@@ -89,8 +92,6 @@ export const musicProvider: AIProvider = {
     const requestBody: Record<string, unknown> = {
       model,
       prompt,
-      lyrics: isInstrumental ? undefined : params.lyrics,
-      is_instrumental: isInstrumental,
       stream: false,
       output_format: 'url',
       audio_setting: {
@@ -99,7 +100,22 @@ export const musicProvider: AIProvider = {
         format: outputFormat
       },
       aigc_watermark: params.aigcWatermark || false,
-      lyrics_optimizer: params.lyricsOptimizer,
+    }
+
+    // Only add lyrics if we have them and not instrumental
+    if (!isInstrumental) {
+      if (params.lyrics?.trim()) {
+        requestBody.lyrics = params.lyrics
+      }
+      // Enable lyrics optimizer if no lyrics provided (MiniMax will auto-generate)
+      if (enableLyricsOptimizer) {
+        requestBody.lyrics_optimizer = true
+      }
+    }
+
+    // Set instrumental flag if no lyrics
+    if (isInstrumental || (!params.lyrics?.trim() && !enableLyricsOptimizer)) {
+      requestBody.is_instrumental = true
     }
 
     if (coverModel) {
