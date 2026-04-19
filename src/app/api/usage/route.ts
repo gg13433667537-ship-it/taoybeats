@@ -11,7 +11,7 @@ function getMonthKey(): string {
   return new Date().toISOString().slice(0, 7) // YYYY-MM
 }
 
-async function getUserUsageFromDB(userId: string): Promise<{ daily: number; monthly: number; tier: string }> {
+async function getUserUsageFromDB(userId: string): Promise<{ daily: number; monthly: number; tier: string; role: string }> {
   const today = getDateKey()
   const thisMonth = getMonthKey()
 
@@ -61,6 +61,7 @@ async function getUserUsageFromDB(userId: string): Promise<{ daily: number; mont
     daily: user.dailyUsage,
     monthly: user.monthlyUsage,
     tier: user.tier,
+    role: user.role,
   }
 }
 
@@ -120,8 +121,8 @@ export async function GET(request: NextRequest) {
   const tier = usage.tier || 'FREE'
   console.log(`[USAGE API GET] Final tier for userId ${userId}: ${tier}`)
 
-  // Calculate limits based on tier - ADMIN and PRO have unlimited access
-  const limits = (tier === 'PRO' || tier === 'ADMIN')
+  // Calculate limits based on tier and role - ADMIN and PRO have unlimited access
+  const limits = (tier === 'PRO' || usage.role === 'ADMIN')
     ? { dailyLimit: -1, monthlyLimit: -1 }
     : { dailyLimit: 3, monthlyLimit: 10 }
 
@@ -176,8 +177,8 @@ export async function POST(request: NextRequest) {
   const tier = usage.tier || 'FREE'
   const { daily, monthly } = usage
 
-  // Calculate limits based on tier - ADMIN and PRO have unlimited access
-  const limits = (tier === 'PRO' || tier === 'ADMIN')
+  // Calculate limits based on tier and role - ADMIN and PRO have unlimited access
+  const limits = (tier === 'PRO' || usage.role === 'ADMIN')
     ? { dailyLimit: -1, monthlyLimit: -1 }
     : { dailyLimit: 3, monthlyLimit: 10 }
 
