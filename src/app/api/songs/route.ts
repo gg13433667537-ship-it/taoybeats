@@ -306,6 +306,8 @@ export async function POST(request: NextRequest) {
       sampleRate,
       bitrate,
       aigcWatermark,
+      forkedFrom,
+      originalOwnerId,
     } = body
 
     // Validation and sanitization
@@ -480,6 +482,8 @@ export async function POST(request: NextRequest) {
       bitrate: (validatedBitrate || 256000) as 32000 | 64000 | 128000 | 256000,
       aigcWatermark: aigcWatermark === true || aigcWatermark === "true",
       moderationStatus: "APPROVED" as const,
+      forkedFrom,
+      originalOwnerId,
     }
 
     const songsMap = getSongsMap()
@@ -533,6 +537,8 @@ export async function POST(request: NextRequest) {
             userId: user.id,
             partGroupId: partGroupId || null,
             part: partNumber,
+            forkedFrom: song.forkedFrom || null,
+            originalOwnerId: song.originalOwnerId || null,
           },
         })
         createdSongs.push({ id: songId, part: partNumber, shareToken: shareToken || '' })
@@ -598,7 +604,7 @@ export async function POST(request: NextRequest) {
 // Helper to update song in both memory and Prisma
 async function updateSongStatus(
   songId: string,
-  updates: Partial<Pick<Song, 'status' | 'audioUrl' | 'videoUrl'>>,
+  updates: Partial<Pick<Song, 'status' | 'audioUrl' | 'videoUrl' | 'error'>>,
   currentSong: Song
 ): Promise<void> {
   const songsMap = getSongsMap()
@@ -607,7 +613,7 @@ async function updateSongStatus(
   // Update memory cache
   songsMap.set(songId, { ...currentSong, ...updates, updatedAt: now })
 
-  // Update Prisma database
+  // Update Prisma database (error field is not stored in Prisma, only in memory)
   try {
     await prisma.song.update({
       where: { id: songId },
@@ -717,6 +723,7 @@ async function generateMusic(
     const currentSong = songsMap.get(songId) || song
     await updateSongStatus(songId, {
       status: 'FAILED',
+      error: error instanceof Error ? error.message : 'Generation failed',
     }, currentSong)
   }
 }

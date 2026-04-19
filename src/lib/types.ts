@@ -61,6 +61,7 @@ export interface Song {
   part?: number             // Part number for multi-part songs (1 = first part)
   createdAt: string
   updatedAt: string
+  error?: string           // Error message if generation failed
 }
 
 // Structured reference lyrics for learning songwriting style

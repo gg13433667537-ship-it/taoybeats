@@ -193,6 +193,9 @@ export default function GeneratePage() {
   const [userNotes, setUserNotes] = useState("")
   const [isInstrumental, setIsInstrumental] = useState(false)
   const [songId, setSongId] = useState<string | null>(null)
+  // Fork tracking - store original song info for attribution
+  const [forkedFrom, setForkedFrom] = useState<string | undefined>()
+  const [originalOwnerId, setOriginalOwnerId] = useState<string | undefined>()
 
   // Voice state
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('')
@@ -276,6 +279,9 @@ export default function GeneratePage() {
             setReferenceSong(song.referenceSong || '')
             setUserNotes(song.userNotes || '')
             setIsInstrumental(song.isInstrumental || false)
+            // Track fork attribution
+            setForkedFrom(forkedSongId)
+            setOriginalOwnerId(song.userId)
           }
         })
         .catch((err) => {
@@ -334,6 +340,8 @@ export default function GeneratePage() {
           isInstrumental,
           voiceId: selectedVoiceId,
           referenceAudio,
+          forkedFrom,
+          originalOwnerId,
           model,
           outputFormat,
           lyricsOptimizer,
