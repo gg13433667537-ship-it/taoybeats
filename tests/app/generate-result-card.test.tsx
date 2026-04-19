@@ -47,11 +47,19 @@ vi.mock("@/components/ThemeToggle", () => ({
   ThemeToggle: () => <div data-testid="theme-toggle" />,
 }))
 
-vi.mock("@/components/AudioPlayer", () => ({
-  default: ({ src }: { src?: string }) => (
-    <div data-testid="audio-player">{src || "no-audio"}</div>
-  ),
-}))
+vi.mock("@/components/AudioPlayer", async () => {
+  const React = await import("react")
+
+  return {
+    default: ({ src, onDurationResolved }: { src?: string; onDurationResolved?: (seconds: number) => void }) => {
+      React.useEffect(() => {
+        if (src) onDurationResolved?.(187)
+      }, [src, onDurationResolved])
+
+      return <div data-testid="audio-player">{src || "no-audio"}</div>
+    },
+  }
+})
 
 vi.mock("@/components/LyricsAssistantModal", () => ({
   default: () => null,
@@ -74,7 +82,9 @@ vi.mock("@/components/AdvancedOptions", () => ({
 }))
 
 vi.mock("@/components/GenerationProgress", () => ({
-  default: () => <div data-testid="generation-progress" />,
+  default: ({ stage, progress, stageMessage }: { stage: string; progress: number; stageMessage?: string }) => (
+    <div data-testid="generation-progress">{`${stage}|${progress}|${stageMessage ?? ""}`}</div>
+  ),
 }))
 
 vi.mock("@/components/Toast", () => ({
@@ -226,11 +236,37 @@ describe("Generate page result card", () => {
       expect.stringContaining("自动压缩")
     )
 
+    expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|0|Initializing...")
+
+    act(() => {
+      MockEventSource.instances[0].emitMessage({
+        status: "PENDING",
+        progress: 10,
+        stage: "Queued...",
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|10|Queued...")
+    })
+
+    act(() => {
+      MockEventSource.instances[0].emitMessage({
+        status: "GENERATING",
+        progress: 52,
+        stage: "Creating your music...",
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generation-progress")).toHaveTextContent("generating|52|Creating your music...")
+    })
+
     act(() => {
       MockEventSource.instances[0].emitMessage({
         status: "COMPLETED",
         progress: 100,
-        stage: "completed",
+        stage: "Complete!",
         audioUrl: "https://cdn.example.com/song-1.mp3",
         songId: "song-1",
       })
@@ -239,6 +275,10 @@ describe("Generate page result card", () => {
     await waitFor(() => {
       expect(screen.getByTestId("audio-player")).toHaveTextContent("https://cdn.example.com/song-1.mp3")
     })
+
+    expect(screen.getByTestId("generation-progress")).toHaveTextContent("completed|100|Complete!")
+    expect(screen.getByText("3:07")).toBeVisible()
+    expect(screen.queryByText("加载后显示")).not.toBeInTheDocument()
 
     expect(screen.queryByText(/Part 1\//i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Multi-part song detected/i)).not.toBeInTheDocument()
