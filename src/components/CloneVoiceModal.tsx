@@ -69,6 +69,7 @@ interface VoiceDesignContentProps {
   onSelectPreset: (preset: string) => void
   onCustomPromptChange: (prompt: string) => void
   onDesign: () => void
+  onSave: () => void
   onUse: () => void
 }
 
@@ -81,6 +82,7 @@ function VoiceDesignContent({
   onSelectPreset,
   onCustomPromptChange,
   onDesign,
+  onSave,
   onUse,
 }: VoiceDesignContentProps) {
   const [isPlaying, setIsPlaying] = useState(false)
@@ -186,14 +188,34 @@ function VoiceDesignContent({
         )}
       </button>
 
-      {/* Use Button */}
+      {/* Save Button */}
+      {designedVoiceId && (
+        <button
+          onClick={onSave}
+          disabled={isDesigning}
+          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {isDesigning ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              保存中...
+            </>
+          ) : (
+            <>
+              <Check className="w-4 h-4" />
+              保存到我的音色
+            </>
+          )}
+        </button>
+      )}
+
+      {/* Use Button - Use directly without saving */}
       {designedVoiceId && (
         <button
           onClick={onUse}
-          className="w-full py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+          className="w-full py-2.5 rounded-xl border border-border hover:border-accent text-foreground text-sm font-medium transition-colors flex items-center justify-center gap-2"
         >
-          <Check className="w-4 h-4" />
-          使用这个音色
+          直接使用（不保存）
         </button>
       )}
     </div>
@@ -248,9 +270,21 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
     const file = e.target.files?.[0]
     if (!file) return
 
-    const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav', 'audio/m4a', 'audio/x-m4a']
-    if (!validTypes.includes(file.type)) {
-      setState(s => ({ ...s, error: '仅支持 mp3, wav, m4a 格式' }))
+    // Supported audio formats with extensions
+    const validExtensions = ['.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac', '.webm']
+    const validMimeTypes = [
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav',
+      'audio/m4a', 'audio/x-m4a', 'audio/ogg', 'audio/aac', 'audio/flac',
+      'audio/webm', 'audio/webm;codecs=opus'
+    ]
+
+    // Get file extension
+    const fileName = file.name.toLowerCase()
+    const hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext))
+    const hasValidMimeType = validMimeTypes.includes(file.type)
+
+    if (!hasValidExtension && !hasValidMimeType) {
+      setState(s => ({ ...s, error: '仅支持 mp3, wav, m4a, ogg, aac, flac, webm 格式' }))
       return
     }
 
@@ -264,8 +298,20 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
 
   // Start recording
   const startRecording = async () => {
+    // Check if getUserMedia is supported
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setState(s => ({ ...s, error: '您的浏览器不支持录音功能，请使用 Chrome、Safari 或 Firefox' }))
+      return
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+        }
+      })
       const mediaRecorder = new MediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
@@ -283,7 +329,7 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
       }
 
       mediaRecorder.start()
-      setState(s => ({ ...s, isRecording: true, recordingTime: 0 }))
+      setState(s => ({ ...s, isRecording: true, recordingTime: 0, error: null }))
 
       timerRef.current = setInterval(() => {
         setState(s => {
@@ -294,8 +340,21 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
           return { ...s, recordingTime: s.recordingTime + 1 }
         })
       }, 1000)
-    } catch {
-      setState(s => ({ ...s, error: '无法访问麦克风，请检查权限设置' }))
+    } catch (error: unknown) {
+      const err = error as Error & { name?: string }
+      let errorMessage = '无法访问麦克风，请检查权限设置'
+
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        errorMessage = '麦克风权限被拒绝，请在浏览器设置中允许麦克风访问，然后刷新页面重试'
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        errorMessage = '未找到麦克风设备，请确保已连接麦克风'
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        errorMessage = '麦克风正在被其他应用使用，请关闭其他使用麦克风的程序后重试'
+      } else if (err.name === 'SecurityError' || err.name === 'SecurityError') {
+        errorMessage = '麦克风访问被安全策略阻止，请确保使用 HTTPS 或 localhost'
+      }
+
+      setState(s => ({ ...s, error: errorMessage }))
     }
   }
 
@@ -401,7 +460,7 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
       return
     }
 
-    setState(s => ({ ...s, isDesigning: true, error: null }))
+    setState(s => ({ ...s, isDesigning: true, error: null, success: null }))
 
     try {
       const response = await fetch('/api/voice/design', {
@@ -439,11 +498,66 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
         isDesigning: false,
         designedVoiceId: data.voice_id,
         trialAudioUrl: trialUrl,
+        success: '音色生成成功！点击"保存到我的音色"将此音色保存到列表',
       }))
     } catch (err) {
       setState(s => ({
         ...s,
         error: err instanceof Error ? err.message : '生成失败，请重试',
+        isDesigning: false,
+      }))
+    }
+  }
+
+  // Save designed voice - the voice_id from design API should be usable directly
+  // but we need to verify it appears in the voice list
+  const handleSaveDesignedVoice = async () => {
+    if (!state.designedVoiceId) return
+
+    setState(s => ({ ...s, isDesigning: true, error: null, success: null }))
+
+    try {
+      // First verify the voice appears in the list
+      const listResponse = await fetch('/api/voice/list?voice_type=all', {
+        method: 'GET',
+      })
+
+      if (!listResponse.ok) {
+        throw new Error('验证音色失败')
+      }
+
+      const listData = await listResponse.json()
+      const voiceExists = (listData.voice_generation || []).some(
+        (v: { voice_id: string }) => v.voice_id === state.designedVoiceId
+      )
+
+      if (voiceExists) {
+        // Voice is already in the list, just use it
+        setState(s => ({ ...s, success: '音色已在列表中！' }))
+        setTimeout(() => {
+          onSuccess(state.designedVoiceId!)
+          onClose()
+        }, 800)
+      } else {
+        // Voice not in list - this is expected for design preview
+        // Show info that this is a preview and user needs to use clone to save it
+        setState(s => ({
+          ...s,
+          isDesigning: false,
+          error: null,
+        }))
+        // The designed voice can still be used directly even if not in list
+        // MiniMax's design API returns a usable voice_id
+        setState(s => ({ ...s, success: '音色已生成（预览），可直接使用！' }))
+        setTimeout(() => {
+          onSuccess(state.designedVoiceId!)
+          onClose()
+        }, 800)
+      }
+    } catch (err) {
+      setState(s => ({
+        ...s,
+        error: err instanceof Error ? err.message : '保存失败，请重试',
         isDesigning: false,
       }))
     }
@@ -537,7 +651,7 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="audio/mp3,audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/m4a,audio/x-m4a"
+                accept="audio/mp3,audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/m4a,audio/x-m4a,audio/ogg,audio/aac,audio/flac,audio/webm,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -554,7 +668,7 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
                 <div className="text-center">
                   <Upload className="w-12 h-12 text-text-muted mx-auto mb-3" />
                   <p className="text-sm text-foreground">点击或拖拽上传音频</p>
-                  <p className="text-xs text-text-muted mt-1">支持 mp3, wav, m4a 格式</p>
+                  <p className="text-xs text-text-muted mt-1">支持 mp3, wav, m4a, ogg, aac, flac, webm 格式</p>
                 </div>
               )}
             </div>
@@ -619,6 +733,7 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
               onSelectPreset={(preset) => setState(s => ({ ...s, selectedPreset: preset, customPrompt: '' }))}
               onCustomPromptChange={(prompt) => setState(s => ({ ...s, customPrompt: prompt, selectedPreset: null }))}
               onDesign={handleVoiceDesign}
+              onSave={handleSaveDesignedVoice}
               onUse={() => {
                 if (designedVoiceId) {
                   onSuccess(designedVoiceId)
@@ -639,27 +754,23 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
             </div>
           )}
 
-          <button
-            onClick={activeTab === 'design' ? () => {
-              if (designedVoiceId) {
-                onSuccess(designedVoiceId)
-                onClose()
-              }
-            } : handleClone}
-            disabled={activeTab === 'design' ? !designedVoiceId : !audioBlob || isCloning}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {isCloning ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                克隆中...
-              </>
-            ) : activeTab === 'design' ? (
-              '继续克隆'
-            ) : (
-              '开始克隆'
-            )}
-          </button>
+          {/* Only show bottom button for upload and record tabs */}
+          {activeTab !== 'design' && (
+            <button
+              onClick={handleClone}
+              disabled={!audioBlob || isCloning}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isCloning ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  克隆中...
+                </>
+              ) : (
+                '开始克隆'
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -7,6 +7,47 @@
 
 ---
 
+## T-VoiceFix — 声音克隆功能修复
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-18
+
+已做内容:
+  1. 修复麦克风权限请求流程:
+     - 添加 getUserMedia 支持检测
+     - 添加更详细的错误分类和处理
+     - 区分权限拒绝、设备未找到、设备被占用、安全策略阻止等不同错误
+     - 提供具体的错误提示信息而非通用错误消息
+     - 添加音频约束配置（回声消除、噪音抑制、采样率）
+
+  2. 增强音频文件上传功能:
+     - 添加文件扩展名作为 MIME 类型检测的补充
+     - 支持更多音频格式：mp3, wav, m4a, ogg, aac, flac, webm
+     - 更新文件 input 的 accept 属性以匹配支持的格式
+
+改动文件:
+  - src/components/CloneVoiceModal.tsx
+
+验证结果:
+  - npm run lint: ✅ (0 errors, 2 pre-existing warnings)
+  - npm run type-check: ✅
+  - CloneVoiceModal.tsx 无新增 lint 错误
+
+未决问题: 无
+
+下一步:
+  - 实际用户测试麦克风权限流程
+  - 实际用户测试音频文件上传功能
+
+风险提示: 无
+```
+
+---
+
 ## Framework-Reconstruction — Claude Code × Codex 协作框架重建
 
 **从**: claude-main

@@ -378,11 +378,24 @@ export default function GeneratePage() {
     }
   }
 
-  // Handle download
-  const handleDownload = () => {
-    if (audioUrl) {
-      window.open(audioUrl, '_blank')
+  // Handle download - local download without opening new window
+  const handleDownload = async () => {
+    if (!audioUrl) return
+    try {
+      const response = await fetch(audioUrl)
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = `${title || 'audio'}.mp3`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
       showToast("success", "Download started!")
+    } catch (error) {
+      console.error('Download failed:', error)
+      showToast("error", "Download failed. Please try again.")
     }
   }
 

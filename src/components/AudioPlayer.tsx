@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward } from "lucide-react"
+import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Download } from "lucide-react"
 import WaveSurfer from "wavesurfer.js"
 
 interface AudioPlayerProps {
@@ -9,9 +9,10 @@ interface AudioPlayerProps {
   title?: string
   artist?: string
   onEnded?: () => void
+  filename?: string
 }
 
-export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayerProps) {
+export default function AudioPlayer({ src, title, artist, onEnded, filename }: AudioPlayerProps) {
   const waveformRef = useRef<HTMLDivElement>(null)
   const wavesurferRef = useRef<WaveSurfer | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -98,6 +99,25 @@ export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayer
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  // Download audio file directly to user's local machine
+  const handleDownload = useCallback(async () => {
+    if (!src) return
+    try {
+      const response = await fetch(src)
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = filename || title || 'audio'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error('Download failed:', error)
+    }
+  }, [src, filename, title])
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -119,74 +139,89 @@ export default function AudioPlayer({ src, title, artist, onEnded }: AudioPlayer
   if (!src) return null
 
   return (
-    <div className="flex items-center gap-4 p-4 rounded-xl bg-surface border border-border">
-      {/* Play/Pause */}
-      <button
-        onClick={togglePlay}
-        aria-label={isPlaying ? "Pause" : "Play"}
-        className="w-12 h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors flex-shrink-0"
-      >
-        {isPlaying ? (
-          <Pause className="w-5 h-5" aria-hidden="true" />
-        ) : (
-          <Play className="w-5 h-5 ml-0.5" aria-hidden="true" />
-        )}
-      </button>
-
-      {/* Skip buttons */}
-      <button
-        onClick={() => skip(-10)}
-        aria-label="Back 10 seconds"
-        className="text-text-secondary hover:text-foreground transition-colors"
-      >
-        <SkipBack className="w-5 h-5" aria-hidden="true" />
-      </button>
-      <button
-        onClick={() => skip(10)}
-        aria-label="Forward 10 seconds"
-        className="text-text-secondary hover:text-foreground transition-colors"
-      >
-        <SkipForward className="w-5 h-5" aria-hidden="true" />
-      </button>
-
-      {/* Track info */}
-      <div className="w-32 flex-shrink-0 hidden sm:block">
-        <p className="text-sm font-medium text-foreground truncate">{title || 'Unknown'}</p>
-        <p className="text-xs text-text-muted truncate">{artist || 'TaoyBeats'}</p>
-      </div>
-
-      {/* Waveform Progress */}
-      <div className="flex-1 min-w-0">
-        <div ref={waveformRef} className="w-full cursor-pointer" />
-        <div className="flex justify-between mt-1">
-          <span className="text-xs text-text-muted">{formatTime(currentTime)}</span>
-          <span className="text-xs text-text-muted">{formatTime(duration)}</span>
-        </div>
-      </div>
-
-      {/* Volume */}
-      <div className="flex items-center gap-2 flex-shrink-0">
+    <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 p-4 rounded-xl bg-surface border border-border">
+      {/* Top row: Play controls, track info, download */}
+      <div className="flex items-center gap-3 w-full sm:w-auto">
+        {/* Play/Pause */}
         <button
-          onClick={toggleMute}
-          aria-label={isMuted ? "Unmute" : "Mute"}
-          className="text-text-secondary hover:text-foreground transition-colors"
+          onClick={togglePlay}
+          aria-label={isPlaying ? "Pause" : "Play"}
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors flex-shrink-0"
         >
-          {isMuted || volume === 0 ? (
-            <VolumeX className="w-5 h-5" />
+          {isPlaying ? (
+            <Pause className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
           ) : (
-            <Volume2 className="w-5 h-5" />
+            <Play className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5" aria-hidden="true" />
           )}
         </button>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.1}
-          value={isMuted ? 0 : volume}
-          onChange={handleVolumeChange}
-          aria-label={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
-          className="w-20 h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent"
-        />
+
+        {/* Skip buttons */}
+        <button
+          onClick={() => skip(-10)}
+          aria-label="Back 10 seconds"
+          className="text-text-secondary hover:text-foreground transition-colors p-1"
+        >
+          <SkipBack className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
+        </button>
+        <button
+          onClick={() => skip(10)}
+          aria-label="Forward 10 seconds"
+          className="text-text-secondary hover:text-foreground transition-colors p-1"
+        >
+          <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
+        </button>
+
+        {/* Track info */}
+        <div className="flex-1 min-w-0 hidden sm:block">
+          <p className="text-sm font-medium text-foreground truncate">{title || 'Unknown'}</p>
+          <p className="text-xs text-text-muted truncate">{artist || 'TaoyBeats'}</p>
+        </div>
+
+        {/* Download button */}
+        <button
+          onClick={handleDownload}
+          aria-label="Download"
+          className="text-text-secondary hover:text-foreground transition-colors p-1 flex-shrink-0"
+        >
+          <Download className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
+        </button>
+      </div>
+
+      {/* Bottom row: Waveform and Volume */}
+      <div className="flex items-center gap-3 w-full">
+        {/* Waveform Progress */}
+        <div className="flex-1 min-w-0">
+          <div ref={waveformRef} className="w-full cursor-pointer" />
+          <div className="flex justify-between mt-1">
+            <span className="text-xs text-text-muted">{formatTime(currentTime)}</span>
+            <span className="text-xs text-text-muted">{formatTime(duration)}</span>
+          </div>
+        </div>
+
+        {/* Volume */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={toggleMute}
+            aria-label={isMuted ? "Unmute" : "Mute"}
+            className="text-text-secondary hover:text-foreground transition-colors p-1"
+          >
+            {isMuted || volume === 0 ? (
+              <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" />
+            ) : (
+              <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.1}
+            value={isMuted ? 0 : volume}
+            onChange={handleVolumeChange}
+            aria-label={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+            className="w-16 sm:w-20 h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent"
+          />
+        </div>
       </div>
     </div>
   )

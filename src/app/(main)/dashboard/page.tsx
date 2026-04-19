@@ -647,7 +647,11 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-foreground">{t('playlists')}</h2>
               <button
-                onClick={() => setShowPlaylistModal(true)}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowPlaylistModal(true)
+                }}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-accent hover:bg-accent/10 transition-colors"
               >
                 <FolderPlus className="w-4 h-4" />
