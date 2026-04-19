@@ -188,7 +188,8 @@ export const musicProvider: AIProvider = {
 
     // Music 2.6 may return audio directly (status=2 means completed)
     // or return a task_id for async polling (status=1 means processing)
-    const audioUrl = data.data?.audio_url
+    // IMPORTANT: MiniMax returns "audio" field with URL, NOT "audio_url"!
+    const audioUrl = data.data?.audio || data.data?.audio_url
     const taskId = data.data?.task_id
     const status = data.data?.status
 
@@ -196,6 +197,8 @@ export const musicProvider: AIProvider = {
     console.log('[MiniMax] generate response:', JSON.stringify({
       hasData: !!data.data,
       audioUrl,
+      audio: data.data?.audio,
+      audio_url: data.data?.audio_url,
       taskId,
       status,
       baseResp: data.base_resp
@@ -335,8 +338,8 @@ export const musicProvider: AIProvider = {
     }
 
     const data = await response.json()
-    // Get the audio URL from the response
-    const audioUrl = data.data?.audio_url || data.audio_url
+    // Get the audio URL from the response - MiniMax uses "audio" field, not "audio_url"
+    const audioUrl = data.data?.audio || data.data?.audio_url || data.audio_url
     if (!audioUrl) {
       throw new Error('Audio not ready yet')
     }
@@ -563,17 +566,16 @@ function mapMusicStatus(data: MusicStatusResponse): GenerationProgress {
   else if (status === 'FAILED') progress = 0
 
   // Extract audio URL - check multiple possible locations
+  // IMPORTANT: MiniMax returns "audio" field with direct URL, not "audio_url"
   let audioUrl: string | undefined
-  if (nestedData?.audio_url) {
+  if (nestedData?.audio && typeof nestedData.audio === 'string' && nestedData.audio.startsWith('http')) {
+    audioUrl = nestedData.audio
+  } else if (nestedData?.audio_url) {
     audioUrl = nestedData.audio_url
-  } else if (nestedData?.audio) {
-    // Hex audio data - need to indicate this somehow
-    // Actually for hex we'd need to handle differently
-    audioUrl = undefined
+  } else if (data.audio && typeof data.audio === 'string' && data.audio.startsWith('http')) {
+    audioUrl = data.audio
   } else if (data.audio_url) {
     audioUrl = data.audio_url
-  } else if (data.audio) {
-    audioUrl = undefined
   }
 
   // Extract error message
