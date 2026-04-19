@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Download, AlertCircle, Loader2 } from "lucide-react"
+import { downloadSongFile } from "@/lib/song-download"
 
 interface AudioPlayerProps {
   src?: string
@@ -230,55 +231,16 @@ export default function AudioPlayer({
 
   // Download audio file via API proxy to handle CORS from external URLs
   const handleDownload = useCallback(async () => {
-    if (!effectiveSrc) return
+    if (!effectiveSongId) return
     try {
-      if (effectiveSongId) {
-        const response = await fetch(`/api/songs/${effectiveSongId}/download`)
-        if (!response.ok) throw new Error('Download failed')
-        const blob = await response.blob()
-        const downloadUrl = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = downloadUrl
-        link.download = filename || currentTitle || 'audio'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        window.URL.revokeObjectURL(downloadUrl)
-        return
-      }
-
-      // Extract song ID from src path to use API proxy for CORS
-      const songIdMatch = effectiveSrc.match(/\/songs\/([^/]+)/)
-      if (songIdMatch) {
-        const songId = songIdMatch[1]
-        const response = await fetch(`/api/songs/${songId}/download`)
-        if (!response.ok) throw new Error('Download failed')
-        const blob = await response.blob()
-        const downloadUrl = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = downloadUrl
-        link.download = filename || currentTitle || 'audio'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        window.URL.revokeObjectURL(downloadUrl)
-        return
-      }
-      // Fallback: direct fetch (may fail with CORS for external URLs)
-      const response = await fetch(effectiveSrc)
-      const blob = await response.blob()
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = filename || currentTitle || 'audio'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(downloadUrl)
+      await downloadSongFile({
+        songId: effectiveSongId,
+        fallbackFilename: filename || currentTitle || 'audio',
+      })
     } catch (error) {
       console.error('Download failed:', error)
     }
-  }, [effectiveSongId, effectiveSrc, filename, currentTitle])
+  }, [effectiveSongId, filename, currentTitle])
 
   // Keyboard shortcuts
   useEffect(() => {

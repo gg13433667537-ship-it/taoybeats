@@ -16,6 +16,7 @@ import AdvancedOptions from "@/components/AdvancedOptions"
 import GenerationProgress from "@/components/GenerationProgress"
 import { useToast } from "@/components/Toast"
 import type { MultiPartInfo } from "@/lib/song-multipart"
+import { downloadSongFile } from "@/lib/song-download"
 
 type TranslateFn = ReturnType<typeof useI18n>["t"]
 
@@ -764,23 +765,14 @@ export default function GeneratePage() {
   const handleDownload = async () => {
     if (!songId) return
     try {
-      const response = await fetch(`/api/songs/${songId}/download`)
-      if (!response.ok) {
-        throw new Error('Download failed')
-      }
-      const blob = await response.blob()
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = `${title || 'audio'}.mp3`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(downloadUrl)
+      await downloadSongFile({
+        songId,
+        fallbackFilename: `${title || 'audio'}.mp3`,
+      })
       showToast("success", "Download started!")
     } catch (error) {
       console.error('Download failed:', error)
-      showToast("error", "Download failed. Please try again.")
+      showToast("error", error instanceof Error ? error.message : "Download failed. Please try again.")
     }
   }
 

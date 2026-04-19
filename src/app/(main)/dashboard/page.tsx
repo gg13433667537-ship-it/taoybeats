@@ -7,6 +7,7 @@ import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Za
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
 import { useToast } from "@/components/Toast"
+import { downloadSongFile } from "@/lib/song-download"
 
 interface Song {
   id: string
@@ -72,6 +73,7 @@ export default function DashboardPage() {
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('')
   const [addingToPlaylist, setAddingToPlaylist] = useState(false)
   const [deletingSongId, setDeletingSongId] = useState<string | null>(null)
+  const [downloadingSongId, setDownloadingSongId] = useState<string | null>(null)
   const [showSongOptions, setShowSongOptions] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const playlistDropdownRef = useRef<HTMLDivElement>(null)
@@ -109,19 +111,18 @@ export default function DashboardPage() {
   // Handle download - local download without opening new window
   const handleDownload = async (song: Song) => {
     if (!song.audioUrl) return
+
+    setDownloadingSongId(song.id)
     try {
-      const response = await fetch(`/api/songs/${song.id}/download`)
-      const blob = await response.blob()
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = song.title || 'audio'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(downloadUrl)
+      await downloadSongFile({
+        songId: song.id,
+        fallbackFilename: song.title || 'audio',
+      })
     } catch (error) {
       console.error('Download failed:', error)
+      showToast("error", error instanceof Error ? error.message : "Download failed")
+    } finally {
+      setDownloadingSongId(null)
     }
   }
 
@@ -632,6 +633,10 @@ export default function DashboardPage() {
                   const allFailed = item.songs.every(s => s.status === 'FAILED')
                   const overallStatus = allFailed ? 'FAILED' : anyGenerating ? 'GENERATING' : 'COMPLETED'
                   const maxProgress = Math.max(...item.songs.map(s => s.progress ?? 0))
+                  const isPlayable = overallStatus === 'COMPLETED' && allCompleted
+                  const canDownload = isPlayable && Boolean(primarySong.audioUrl)
+                  const isDownloading = downloadingSongId === primarySong.id
+                  const isDeleting = deletingSongId === primarySong.id
 
                   return (
                     <div
@@ -718,19 +723,25 @@ export default function DashboardPage() {
 
                         {/* Actions */}
                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {overallStatus === 'COMPLETED' && (
+                          {isPlayable && (
                             <>
                               <button
                                 onClick={() => handleDownload(primarySong)}
+                                disabled={!canDownload || isDownloading || isDeleting}
                                 aria-label={t('downloadSong')}
-                                className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors"
+                                className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Download className="w-4 h-4" aria-hidden="true" />
+                                {isDownloading ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                                ) : (
+                                  <Download className="w-4 h-4" aria-hidden="true" />
+                                )}
                               </button>
                               <button
                                 onClick={() => handleShare(primarySong)}
+                                disabled={isDownloading || isDeleting}
                                 aria-label={copiedSongId === primarySong.id ? t('copied') : t('shareSong')}
-                                className={`p-2 rounded-lg hover:bg-background transition-colors ${
+                                className={`p-2 rounded-lg hover:bg-background transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                                   copiedSongId === primarySong.id ? 'text-success' : 'text-text-secondary hover:text-foreground'
                                 }`}
                               >
@@ -746,7 +757,7 @@ export default function DashboardPage() {
                                   onClick={() => {
                                     setShowPlaylistDropdown(showPlaylistDropdown === primarySong.id ? null : primarySong.id)
                                   }}
-                                  disabled={addingToPlaylist}
+                                  disabled={addingToPlaylist || isDownloading || isDeleting}
                                   aria-label="Add to playlist"
                                   aria-expanded={showPlaylistDropdown === primarySong.id}
                                   className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -788,9 +799,10 @@ export default function DashboardPage() {
                                 console.log("[DEBUG] Three-dot menu clicked, current showSongOptions:", showSongOptions, "primarySong.id:", primarySong.id)
                                 setShowSongOptions(showSongOptions === primarySong.id ? null : primarySong.id)
                               }}
+                              disabled={isDeleting || isDownloading}
                               aria-label="More options"
                               aria-expanded={showSongOptions === primarySong.id}
-                              className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors"
+                              className="p-2 rounded-lg hover:bg-background text-text-secondary hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
                             </button>
@@ -802,15 +814,15 @@ export default function DashboardPage() {
                                     console.log("[DEBUG] Delete button onMouseDown fired for song:", primarySong.id)
                                     handleDeleteSong(primarySong.id)
                                   }}
-                                  disabled={deletingSongId === primarySong.id}
+                                  disabled={isDeleting}
                                   className="w-full flex items-center gap-3 px-4 py-3 text-sm text-error hover:bg-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  {deletingSongId === primarySong.id ? (
+                                  {isDeleting ? (
                                     <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                                   ) : (
                                     <Trash2 className="w-4 h-4" aria-hidden="true" />
                                   )}
-                                  {deletingSongId === primarySong.id ? 'Deleting...' : t('deleteSong')}
+                                  {isDeleting ? 'Deleting...' : t('deleteSong')}
                                 </button>
                               </div>
                             )}

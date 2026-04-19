@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/useKeyboardShortcuts"
 import AdvancedAudioEditor from "@/components/AdvancedAudioEditor"
+import { downloadSongFile } from "@/lib/song-download"
 
 const SONG_REFRESH_INTERVAL_MS = 3000
 
@@ -333,27 +334,16 @@ export default function SongSharePage() {
   }
 
   const handleDownload = useCallback(async () => {
-    if (!song?.audioUrl) return
+    if (!song?.id) return
     try {
-      const downloadSource = song.id
-        ? `/api/songs/${song.id}/download${shareAccessToken ? `?shareToken=${encodeURIComponent(shareAccessToken)}` : ""}`
-        : song.audioUrl
-      const response = await fetch(downloadSource)
-      if (!response.ok) {
-        throw new Error(`Download failed with status ${response.status}`)
-      }
-      const blob = await response.blob()
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = song.title || 'audio'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1000)
+      await downloadSongFile({
+        songId: song.id,
+        shareToken: shareAccessToken || undefined,
+        fallbackFilename: song.title || 'audio',
+      })
     } catch (error) {
       console.error('Download failed:', error)
-      setSongError(t('downloadFailed'))
+      setSongError(error instanceof Error ? error.message : t('downloadFailed'))
     }
   }, [shareAccessToken, song, t])
 
