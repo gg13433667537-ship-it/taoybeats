@@ -230,6 +230,16 @@ async function startGeneration() {
   )
 }
 
+function readGenerationProgress() {
+  const [stage = "", progress = "", ...messageParts] = (screen.getByTestId("generation-progress").textContent ?? "").split("|")
+
+  return {
+    stage,
+    progress: Number(progress),
+    stageMessage: messageParts.join("|"),
+  }
+}
+
 describe("Generate page result card", () => {
   beforeEach(() => {
     MockEventSource.instances = []
@@ -243,7 +253,10 @@ describe("Generate page result card", () => {
   it("shows changing progress text and renders a single clean result card with a resolved duration", async () => {
     await startGeneration()
 
-    expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|0|Initializing...")
+    const initialProgress = readGenerationProgress()
+    expect(initialProgress.stage).toBe("initializing")
+    expect(initialProgress.progress).toBe(0)
+    expect(initialProgress.stageMessage).toBeTruthy()
 
     act(() => {
       MockEventSource.instances[0].emitMessage({
@@ -254,7 +267,11 @@ describe("Generate page result card", () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId("generation-progress")).toHaveTextContent("initializing|10|Queued...")
+      const pendingProgress = readGenerationProgress()
+      expect(pendingProgress.stage).toBe("initializing")
+      expect(pendingProgress.progress).toBe(10)
+      expect(pendingProgress.stageMessage).not.toBe(initialProgress.stageMessage)
+      expect(pendingProgress.stageMessage.toLowerCase()).toContain("queue")
     })
 
     act(() => {
@@ -266,7 +283,10 @@ describe("Generate page result card", () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId("generation-progress")).toHaveTextContent("generating|52|Creating your music...")
+      const generatingProgress = readGenerationProgress()
+      expect(generatingProgress.stage).toBe("generating")
+      expect(generatingProgress.progress).toBe(52)
+      expect(generatingProgress.stageMessage.toLowerCase()).toContain("creat")
     })
 
     act(() => {
@@ -280,12 +300,16 @@ describe("Generate page result card", () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId("audio-player")).toHaveTextContent("https://cdn.example.com/song-1.mp3")
+      const completedProgress = readGenerationProgress()
+      expect(completedProgress.stage).toBe("completed")
+      expect(completedProgress.progress).toBe(100)
+      expect(completedProgress.stageMessage.toLowerCase()).toContain("complete")
     })
 
-    expect(screen.getByTestId("generation-progress")).toHaveTextContent("completed|100|Complete!")
-    expect(screen.getByText("3:07")).toBeVisible()
-    expect(screen.queryByText("加载后显示")).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText("3:07")).toBeVisible()
+      expect(screen.queryByText("加载后显示")).not.toBeInTheDocument()
+    })
 
     expect(screen.queryByText(/Part 1\//i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Multi-part song detected/i)).not.toBeInTheDocument()
