@@ -54,7 +54,7 @@ Add an assertion that the result card shows `3:07` and no longer shows the place
 - [ ] **Step 3: Run the generate-page regression test and verify it fails for the intended reasons**
 
 Run: `npm test -- --run tests/app/generate-result-card.test.tsx`
-Expected: FAIL because the current page does not surface changing progress copy and never updates the duration label.
+Expected: FAIL because the current page still never updates the duration label. The new progress assertions may already pass in this branch; if so, they remain as regression coverage and the red failure should still cleanly capture the missing duration handoff in the same test.
 
 - [ ] **Step 4: Commit the red test if it cleanly captures the regressions**
 
