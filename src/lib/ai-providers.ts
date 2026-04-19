@@ -111,6 +111,22 @@ export const miniMaxProvider: AIProvider = {
 
     const data = await response.json()
 
+    // Check for API-level errors even when HTTP status is 200
+    const apiStatusCode = data.base_resp?.status_code
+    const apiStatusMsg = data.base_resp?.status_msg
+    if (apiStatusCode && apiStatusCode !== 0 && apiStatusCode !== '0' && apiStatusCode !== 'Success') {
+      const errorMessages: Record<number, string> = {
+        1002: '请求过于频繁，请稍后再试',
+        1004: 'API鉴权失败，请检查配置',
+        1008: '账户余额不足，请充值后重试',
+        1026: '内容包含敏感词，请修改后重试',
+        2013: '请求参数错误，请检查输入',
+        2049: '无效的API Key，请检查配置',
+      }
+      const userMessage = errorMessages[apiStatusCode] || apiStatusMsg || `API error: ${apiStatusCode}`
+      throw new Error(`MiniMax API error: ${userMessage}`)
+    }
+
     // Music 2.6 may return audio directly (status=2 means completed)
     // or return a task_id for async polling (status=1 means processing)
     const audioUrl = data.data?.audio
