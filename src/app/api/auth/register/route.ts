@@ -181,9 +181,10 @@ export async function POST(request: NextRequest) {
     return applySecurityHeaders(response)
   } catch (error) {
     logger.api.error("POST", endpoint, error, { requestId })
+    const errorMessage = error instanceof Error ? error.message : String(error)
     return applySecurityHeaders(
       NextResponse.json(
-        { error: "注册失败，请稍后重试" },
+        { error: `注册失败: ${errorMessage}` },
         { status: 500 }
       )
     )
