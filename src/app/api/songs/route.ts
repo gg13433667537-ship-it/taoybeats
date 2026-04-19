@@ -56,8 +56,36 @@ function getSongsMap(): Map<string, Song> {
 const FREE_DAILY_LIMIT = 3
 const FREE_MONTHLY_LIMIT = 10
 
+// Lyrics limits for MiniMax API (approximately 500 chars = ~5 min of audio)
+const MAX_LYRICS_LENGTH = 500
+const LYRICS_TRUNCATE_WARNING = "Lyrics were truncated because they exceeded the maximum length supported by a single generation. The full lyrics will be split into multiple parts in a future update."
+
 function getDateKey(): string {
   return new Date().toISOString().split('T')[0]
+}
+
+// Helper to truncate lyrics if too long (MiniMax limit ~500 chars per generation)
+function truncateLyricsIfNeeded(lyrics: string | undefined): { truncatedLyrics: string | undefined; wasTruncated: boolean; warning?: string } {
+  if (!lyrics) {
+    return { truncatedLyrics: lyrics, wasTruncated: false }
+  }
+
+  // Count Chinese characters + English characters
+  // Chinese chars are typically 1 character but take more space
+  // For simplicity, use total string length as proxy
+  const totalLength = lyrics.length
+
+  if (totalLength <= MAX_LYRICS_LENGTH) {
+    return { truncatedLyrics: lyrics, wasTruncated: false }
+  }
+
+  // Truncate to MAX_LYRICS_LENGTH characters
+  const truncated = lyrics.slice(0, MAX_LYRICS_LENGTH)
+  return {
+    truncatedLyrics: truncated,
+    wasTruncated: true,
+    warning: LYRICS_TRUNCATE_WARNING
+  }
 }
 
 function getMonthKey(): string {
@@ -269,7 +297,11 @@ export async function POST(request: NextRequest) {
     }
 
     const sanitizedTitle = sanitizeString(title)
-    const sanitizedLyrics = lyrics ? sanitizeString(lyrics) : undefined
+    const sanitizedLyricsInput = lyrics ? sanitizeString(lyrics) : undefined
+
+    // Truncate lyrics if too long for MiniMax single-generation limit
+    const { truncatedLyrics: sanitizedLyrics, wasTruncated, warning: lyricsWarning } = truncateLyricsIfNeeded(sanitizedLyricsInput)
+
     const sanitizedMood = sanitizeString(mood)
     const sanitizedGenre = genre.map((g: string) => sanitizeString(g)).filter((g: string) => g.length > 0)
 
@@ -476,6 +508,8 @@ export async function POST(request: NextRequest) {
         daily: { used: user.dailyUsage + 1, limit: FREE_DAILY_LIMIT },
         monthly: { used: user.monthlyUsage + 1, limit: FREE_MONTHLY_LIMIT },
       },
+      lyricsTruncated: wasTruncated,
+      warning: lyricsWarning,
     })
   } catch (error) {
     console.error("Error creating song:", error)

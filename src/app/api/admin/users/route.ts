@@ -3,6 +3,7 @@ import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 import { sanitizeString, validateEnum } from "@/lib/security"
+import { prisma } from "@/lib/db"
 
 // In-memory user storage (shared with other routes for demo)
 
@@ -144,7 +145,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { userId, role, isActive, tier } = body
+    const { userId, role, isActive, tier, addCredits, resetDailyUsage, resetMonthlyUsage } = body
 
     // Validate userId format
     if (!userId) {
@@ -177,6 +178,19 @@ export async function PATCH(request: NextRequest) {
       return applySecurityHeaders(NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 }))
     }
 
+    // Validate addCredits if provided
+    if (addCredits !== undefined && (typeof addCredits !== "number" || addCredits < 0 || !Number.isInteger(addCredits))) {
+      return applySecurityHeaders(NextResponse.json({ error: "addCredits must be a non-negative integer" }, { status: 400 }))
+    }
+
+    // Validate reset flags
+    if (resetDailyUsage !== undefined && typeof resetDailyUsage !== "boolean") {
+      return applySecurityHeaders(NextResponse.json({ error: "resetDailyUsage must be a boolean" }, { status: 400 }))
+    }
+    if (resetMonthlyUsage !== undefined && typeof resetMonthlyUsage !== "boolean") {
+      return applySecurityHeaders(NextResponse.json({ error: "resetMonthlyUsage must be a boolean" }, { status: 400 }))
+    }
+
     const targetUser = users.get(sanitizedUserId)
     if (!targetUser) {
       return applySecurityHeaders(NextResponse.json({ error: "User not found" }, { status: 404 }))
@@ -187,7 +201,37 @@ export async function PATCH(request: NextRequest) {
     if (isActive !== undefined) updates.isActive = isActive
     if (tier !== undefined) updates.tier = tier
 
+    // Handle credits management
+    if (typeof addCredits === "number" && addCredits > 0) {
+      // Add credits to monthly usage (negative values reduce usage)
+      targetUser.monthlyUsage = Math.max(0, targetUser.monthlyUsage - addCredits)
+      updates.addedCredits = addCredits
+    }
+
+    if (resetDailyUsage) {
+      targetUser.dailyUsage = 0
+      updates.resetDailyUsage = true
+    }
+
+    if (resetMonthlyUsage) {
+      targetUser.monthlyUsage = 0
+      updates.resetMonthlyUsage = true
+    }
+
     Object.assign(targetUser, updates)
+
+    // Persist tier changes to Prisma database (for usage API which reads from DB)
+    if (tier !== undefined) {
+      try {
+        await prisma.user.update({
+          where: { id: sanitizedUserId },
+          data: { tier },
+        })
+      } catch (prismaError) {
+        console.error("Failed to update tier in Prisma:", prismaError)
+        // Continue anyway - in-memory update is still valid
+      }
+    }
 
     logAdminAction(user.id, user.email, 'UPDATE_USER', sanitizedUserId, 'USER', updates)
 

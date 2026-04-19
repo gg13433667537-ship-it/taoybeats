@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
-import { ChevronDown, Settings, User, LogOut } from "lucide-react"
+import { ChevronDown, Settings, User, LogOut, Loader2 } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
 interface UserData {
@@ -14,27 +14,45 @@ interface UserData {
   tier?: string
 }
 
+type AuthState = 'loading' | 'authenticated' | 'unauthenticated'
+
 export default function UserDropdown() {
   const router = useRouter()
   const pathname = usePathname()
   const { t } = useI18n()
   const [user, setUser] = useState<UserData | null>(null)
+  const [authState, setAuthState] = useState<AuthState>('loading')
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Fetch user profile on mount
   useEffect(() => {
     const fetchProfile = async () => {
+      setAuthState('loading')
       try {
         const res = await fetch("/api/auth/profile")
+        if (res.status === 401) {
+          // Not logged in - clear any stale data and show logged-out state
+          setUser(null)
+          setAuthState('unauthenticated')
+          return
+        }
         if (res.ok) {
           const data = await res.json()
           if (data.user) {
             setUser(data.user)
+            setAuthState('authenticated')
+            return
           }
         }
+        // Unexpected response - treat as not logged in
+        setUser(null)
+        setAuthState('unauthenticated')
       } catch {
-        // ignore profile fetch errors - user not logged in
+        // Network error - treat as not logged in but log for debugging
+        console.error("Profile fetch failed")
+        setUser(null)
+        setAuthState('unauthenticated')
       }
     }
     fetchProfile()
@@ -59,14 +77,26 @@ export default function UserDropdown() {
     try {
       await fetch("/api/auth/logout", { method: "POST" })
       setUser(null)
+      setAuthState('unauthenticated')
       router.push("/")
     } catch (error) {
       console.error("Logout error:", error)
     }
   }
 
+  // Loading state - show minimal placeholder
+  if (authState === 'loading') {
+    return (
+      <div className="flex items-center gap-4">
+        <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center">
+          <Loader2 className="w-4 h-4 animate-spin text-text-muted" />
+        </div>
+      </div>
+    )
+  }
+
   // If not logged in, show login and register buttons
-  if (!user) {
+  if (authState === 'unauthenticated' || !user) {
     return (
       <div className="flex items-center gap-4">
         <Link href="/login" className="text-sm text-text-secondary hover:text-foreground transition-colors">

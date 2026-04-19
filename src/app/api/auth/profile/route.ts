@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { sanitizeString, validateOptionalString, applySecurityHeaders, MAX_LENGTHS } from "@/lib/security"
 import { logger } from "@/lib/logger"
+import { prisma } from "@/lib/db"
 import crypto from "crypto"
 
 
@@ -33,9 +34,11 @@ export async function GET(request: NextRequest) {
       return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
 
-    // Get full user from global store
-    const usersMap = global.users!
-    const existingUser = usersMap.get(user.id)
+    // Get full user from database
+    const existingUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true, email: true, name: true, role: true, tier: true }
+    })
     if (!existingUser) {
       const duration = Date.now() - startTime
       logger.api.response("GET", endpoint, 404, duration, { requestId })
@@ -47,13 +50,7 @@ export async function GET(request: NextRequest) {
 
     return applySecurityHeaders(NextResponse.json({
       success: true,
-      user: {
-        id: existingUser.id,
-        email: existingUser.email,
-        name: existingUser.name,
-        role: existingUser.role,
-        tier: existingUser.tier,
-      },
+      user: existingUser,
     }))
   } catch (error) {
     logger.api.error("GET", endpoint, error, { requestId })

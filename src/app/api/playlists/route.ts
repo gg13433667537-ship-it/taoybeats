@@ -90,10 +90,14 @@ export async function POST(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({ error: descError }, { status: 400 }))
   }
 
-  // Validate isPublic
-  const validatedIsPublic = validateBoolean(isPublic, "isPublic")
-  if (validatedIsPublic === null) {
-    return applySecurityHeaders(NextResponse.json({ error: "isPublic must be a boolean" }, { status: 400 }))
+  // Validate isPublic (optional, defaults to false)
+  let validatedIsPublic = false
+  if (isPublic !== undefined) {
+    const result = validateBoolean(isPublic, "isPublic")
+    if (result === null) {
+      return applySecurityHeaders(NextResponse.json({ error: "isPublic must be a boolean" }, { status: 400 }))
+    }
+    validatedIsPublic = result
   }
 
   const sanitizedName = sanitizeString(name)

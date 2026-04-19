@@ -327,6 +327,7 @@ export async function DELETE(
       })
     } catch (dbError) {
       console.error("Prisma delete failed:", dbError)
+      return NextResponse.json({ error: "Failed to delete song from database" }, { status: 500 })
     }
 
     // Delete from memory cache

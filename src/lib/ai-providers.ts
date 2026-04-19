@@ -103,10 +103,31 @@ export const musicProvider: AIProvider = {
       lyrics_optimizer: params.lyricsOptimizer,
     }
 
+    // Add title to prompt if provided
+    if (params.title) {
+      requestBody.title = params.title
+    }
+
+    // Add reference singer as separate parameter if provided
+    if (params.referenceSinger) {
+      requestBody.reference_singer = params.referenceSinger
+    }
+
+    // Add reference song if provided
+    if (params.referenceSong) {
+      requestBody.reference_song = params.referenceSong
+    }
+
     // Add reference audio for music-cover model using correct parameter names
     // Use audio_base64 for uploaded files or audio_url for URL-based reference
-    if (model === 'music-cover' && params.referenceAudio) {
-      requestBody.audio_base64 = params.referenceAudio
+    if (params.referenceAudio) {
+      if (params.referenceAudio.startsWith('data:') || /^[A-Za-z0-9+/=]+$/.test(params.referenceAudio.slice(0, 50))) {
+        // Looks like base64 data
+        requestBody.audio_base64 = params.referenceAudio
+      } else if (params.referenceAudio.startsWith('http://') || params.referenceAudio.startsWith('https://')) {
+        // Looks like a URL
+        requestBody.audio_url = params.referenceAudio
+      }
     }
 
     const response = await fetch(`${baseUrl}/v1/music_generation`, {
@@ -368,6 +389,11 @@ export function getProvider(name: string): AIProvider {
 // Build prompt from song params
 function buildPrompt(params: SongParams): string {
   const parts: string[] = []
+
+  // Title as the first part of the prompt
+  if (params.title) {
+    parts.push(params.title)
+  }
 
   // Genre as comma-separated style tags
   if (params.genre.length > 0) {

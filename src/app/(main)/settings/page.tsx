@@ -2,7 +2,7 @@
 
 import { useState, useEffect, startTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Music, User, Key, Bell, Shield, Check } from "lucide-react"
+import { Music, User, Key, Bell, Shield, Check, Users, CreditCard, Search } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
 
@@ -37,6 +37,24 @@ export default function SettingsPage() {
     weeklySummary: false,
   })
 
+  // User management state (admin only)
+  const [users, setUsers] = useState<Array<{
+    id: string
+    email: string
+    name?: string
+    role: string
+    tier: string
+    isActive: boolean
+    dailyUsage: number
+    monthlyUsage: number
+    createdAt: string
+  }>>([])
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [usersSearch, setUsersSearch] = useState('')
+  const [selectedUser, setSelectedUser] = useState<string | null>(null)
+  const [userActionLoading, setUserActionLoading] = useState(false)
+  const [userActionSuccess, setUserActionSuccess] = useState('')
+
   // Fetch user profile from API (runs once on mount)
   useEffect(() => {
     const fetchProfile = async () => {
@@ -68,6 +86,7 @@ export default function SettingsPage() {
   // Admin-only tabs
   const ADMIN_TABS = [
     { id: 'api', label: t('apiConfiguration'), icon: Key },
+    { id: 'users', label: t('userManagement') || 'User Management', icon: Users },
   ]
 
   const allTabs = userRole === 'ADMIN' ? [...TABS, ...ADMIN_TABS] : TABS
@@ -157,6 +176,61 @@ export default function SettingsPage() {
       console.error('Error signing out all devices:', error)
     }
   }
+
+  // Fetch users for admin
+  const fetchUsers = async (search?: string) => {
+    setUsersLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (search) params.set('search', search)
+      params.set('limit', '50')
+      const res = await fetch(`/api/admin/users?${params.toString}`)
+      if (res.ok) {
+        const data = await res.json()
+        setUsers(data.users || [])
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    } finally {
+      setUsersLoading(false)
+    }
+  }
+
+  // Update user tier/credits
+  const handleUpdateUser = async (userId: string, updates: Record<string, unknown>) => {
+    setUserActionLoading(true)
+    setUserActionSuccess('')
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, ...updates }),
+      })
+      if (res.ok) {
+        setUserActionSuccess(t('userUpdated') || 'User updated successfully')
+        fetchUsers(usersSearch)
+        setSelectedUser(null)
+        setTimeout(() => setUserActionSuccess(''), 3000)
+      } else {
+        const data = await res.json()
+        console.error('Failed to update user:', data.error)
+      }
+    } catch (error) {
+      console.error('Error updating user:', error)
+    } finally {
+      setUserActionLoading(false)
+    }
+  }
+
+  // Load users when switching to users tab
+  useEffect(() => {
+    if (activeTab === 'users' && userRole === 'ADMIN' && users.length === 0) {
+      startTransition(() => {
+        fetchUsers()
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, userRole])
 
   return (
     <div className="min-h-screen bg-background">
@@ -422,6 +496,156 @@ export default function SettingsPage() {
                       </button>
                     </div>
                   </div>
+                </section>
+              )}
+
+              {activeTab === 'users' && (
+                <section className="p-6 rounded-2xl bg-surface border border-border">
+                  <h2 className="text-lg font-semibold text-foreground mb-6">{t('userManagement') || 'User Management'}</h2>
+
+                  {userActionSuccess && (
+                    <div className="mb-4 p-3 rounded-lg bg-success/10 text-success text-sm">
+                      {userActionSuccess}
+                    </div>
+                  )}
+
+                  {/* Search */}
+                  <div className="mb-6 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+                    <input
+                      type="text"
+                      value={usersSearch}
+                      onChange={(e) => setUsersSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && fetchUsers(usersSearch)}
+                      placeholder="Search users by email or name..."
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      onClick={() => fetchUsers(usersSearch)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 rounded-lg bg-accent text-white text-sm hover:bg-accent-hover"
+                    >
+                      Search
+                    </button>
+                  </div>
+
+                  {/* Users List */}
+                  {usersLoading ? (
+                    <div className="text-center py-8 text-text-secondary">Loading...</div>
+                  ) : users.length === 0 ? (
+                    <div className="text-center py-8 text-text-secondary">No users found</div>
+                  ) : (
+                    <div className="space-y-4">
+                      {users.map((user) => (
+                        <div
+                          key={user.id}
+                          className={`p-4 rounded-xl bg-background border ${selectedUser === user.id ? 'border-accent' : 'border-border'}`}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="font-medium text-foreground">{user.name || 'No name'}</p>
+                              <p className="text-sm text-text-secondary">{user.email}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${user.tier === 'PRO' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                {user.tier}
+                              </span>
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${user.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                {user.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
+                            <div>
+                              <span className="text-text-secondary">Daily:</span>{' '}
+                              <span className="text-foreground">{user.dailyUsage} used</span>
+                            </div>
+                            <div>
+                              <span className="text-text-secondary">Monthly:</span>{' '}
+                              <span className="text-foreground">{user.monthlyUsage} used</span>
+                            </div>
+                          </div>
+
+                          {selectedUser === user.id ? (
+                            <div className="space-y-4 pt-3 border-t border-border">
+                              <div className="grid grid-cols-2 gap-4">
+                                {/* Tier */}
+                                <div>
+                                  <label className="block text-sm font-medium text-text-secondary mb-1">Tier</label>
+                                  <select
+                                    id={`tier-${user.id}`}
+                                    defaultValue={user.tier}
+                                    className="w-full px-3 py-2 rounded-lg bg-surface border border-border text-foreground text-sm"
+                                  >
+                                    <option value="FREE">FREE</option>
+                                    <option value="PRO">PRO</option>
+                                  </select>
+                                </div>
+                                {/* Credits to add */}
+                                <div>
+                                  <label className="block text-sm font-medium text-text-secondary mb-1">Add Credits</label>
+                                  <input
+                                    type="number"
+                                    id={`credits-${user.id}`}
+                                    min="0"
+                                    defaultValue={0}
+                                    placeholder="0"
+                                    className="w-full px-3 py-2 rounded-lg bg-surface border border-border text-foreground text-sm"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <label className="flex items-center gap-2 text-sm">
+                                  <input type="checkbox" id={`reset-daily-${user.id}`} className="rounded" />
+                                  <span>Reset Daily Usage</span>
+                                </label>
+                                <label className="flex items-center gap-2 text-sm">
+                                  <input type="checkbox" id={`reset-monthly-${user.id}`} className="rounded" />
+                                  <span>Reset Monthly Usage</span>
+                                </label>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    const tier = (document.getElementById(`tier-${user.id}`) as HTMLSelectElement).value
+                                    const addCredits = parseInt((document.getElementById(`credits-${user.id}`) as HTMLInputElement).value) || 0
+                                    const resetDaily = (document.getElementById(`reset-daily-${user.id}`) as HTMLInputElement).checked
+                                    const resetMonthly = (document.getElementById(`reset-monthly-${user.id}`) as HTMLInputElement).checked
+                                    handleUpdateUser(user.id, {
+                                      tier,
+                                      addCredits,
+                                      resetDailyUsage: resetDaily,
+                                      resetMonthlyUsage: resetMonthly,
+                                    })
+                                  }}
+                                  disabled={userActionLoading}
+                                  className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover disabled:opacity-50"
+                                >
+                                  {userActionLoading ? 'Saving...' : 'Save Changes'}
+                                </button>
+                                <button
+                                  onClick={() => setSelectedUser(null)}
+                                  className="px-4 py-2 rounded-lg border border-border text-text-secondary text-sm hover:bg-surface"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setSelectedUser(user.id)}
+                              className="w-full mt-2 px-4 py-2 rounded-lg border border-border text-text-secondary text-sm hover:bg-surface flex items-center justify-center gap-2"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                              Manage Quota
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </section>
               )}
             </div>
