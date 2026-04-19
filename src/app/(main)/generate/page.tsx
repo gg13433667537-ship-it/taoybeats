@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Music, Loader2, Download, Share2, AlertCircle, RefreshCw, Shield, Sparkles } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
@@ -16,13 +16,13 @@ import AdvancedOptions from "@/components/AdvancedOptions"
 import GenerationProgress from "@/components/GenerationProgress"
 import { useToast } from "@/components/Toast"
 
-// Genre options
+// Genre options (English values for API)
 const GENRES = [
   "Pop", "Hip-Hop", "Rock", "Electronic", "R&B", "Jazz",
   "Classical", "Country", "Reggae", "Folk", "Metal", "Indie", "Mandopop", "K-Pop", "Latin"
 ]
 
-// Mood options
+// Mood options (English values for API)
 const MOODS = [
   "Happy", "Sad", "Energetic", "Calm", "Romantic", "Epic", "Dark", "Dreamy",
   "Festive", "Celebration", "Chill", "Uplifting", "Melancholic", "Intense"
@@ -30,31 +30,140 @@ const MOODS = [
 
 // Duration options
 const DURATIONS = [
-  { label: 'Short (30s)', value: 30, description: 'Quick clip' },
-  { label: 'Standard (2min)', value: 120, description: 'Standard song' },
-  { label: 'Extended (3min)', value: 180, description: 'Full song' },
-  { label: 'Extended (5min)', value: 300, description: 'Complete album version' },
+  { value: 30 },
+  { value: 120 },
+  { value: 180 },
+  { value: 300 },
 ]
 
-// Selector drawer options
-const GENRE_OPTIONS: SelectOption[] = GENRES.map(g => ({ value: g, label: g }))
-
-const MOOD_OPTIONS: SelectOption[] = MOODS.map(m => ({ value: m, label: m }))
-
-// Grouped instruments
+// Grouped instruments (English values for API)
 const INSTRUMENT_GROUPS: Record<string, string[]> = {
-  '弦乐': ['Guitar', 'Violin', 'Cello', 'Harp', 'Banjo', 'Ukulele', 'Mandolin'],
-  '键盘': ['Piano', 'Organ', 'Accordion'],
-  '打击乐': ['Drum', 'Tabla', 'Steel Drum'],
-  '电子': ['Synth', 'Electric Guitar'],
-  '管乐': ['Saxophone', 'Trumpet', 'Clarinet', 'Flute', 'Bagpipes'],
-  '人声': ['Vocals', 'Choir'],
-  '其他': ['Bass', 'Strings', 'Brass', 'Harmonica', 'Didgeridoo'],
+  'Strings': ['Guitar', 'Violin', 'Cello', 'Harp', 'Banjo', 'Ukulele', 'Mandolin'],
+  'Keyboard': ['Piano', 'Organ', 'Accordion'],
+  'Percussion': ['Drum', 'Tabla', 'Steel Drum'],
+  'Electronic': ['Synth', 'Electric Guitar'],
+  'Wind': ['Saxophone', 'Trumpet', 'Clarinet', 'Flute', 'Bagpipes'],
+  'Vocal': ['Vocals', 'Choir'],
+  'Other': ['Bass', 'Strings', 'Brass', 'Harmonica', 'Didgeridoo'],
 }
 
-const INSTRUMENT_OPTIONS: SelectOption[] = Object.entries(INSTRUMENT_GROUPS).flatMap(
-  ([group, instruments]) => instruments.map(i => ({ value: i, label: i, group }))
-)
+// Helper to get translated genre label
+const getGenreLabel = (genre: string, t: (key: string) => string): string => {
+  const labels: Record<string, string> = {
+    'Pop': t('genrePop'),
+    'Hip-Hop': t('genreHipHop'),
+    'Rock': t('genreRock'),
+    'Electronic': t('genreElectronic'),
+    'R&B': t('genreRB'),
+    'Jazz': t('genreJazz'),
+    'Classical': t('genreClassical'),
+    'Country': t('genreCountry'),
+    'Reggae': t('genreReggae'),
+    'Folk': t('genreFolk'),
+    'Metal': t('genreMetal'),
+    'Indie': t('genreIndie'),
+    'Mandopop': t('genreMandopop'),
+    'K-Pop': t('genreKPop'),
+    'Latin': t('genreLatin'),
+  }
+  return labels[genre] || genre
+}
+
+// Helper to get translated mood label
+const getMoodLabel = (mood: string, t: (key: string) => string): string => {
+  const labels: Record<string, string> = {
+    'Happy': t('moodHappy'),
+    'Sad': t('moodSad'),
+    'Energetic': t('moodEnergetic'),
+    'Calm': t('moodCalm'),
+    'Romantic': t('moodRomantic'),
+    'Epic': t('moodEpic'),
+    'Dark': t('moodDark'),
+    'Dreamy': t('moodDreamy'),
+    'Festive': t('moodFestive'),
+    'Celebration': t('moodCelebration'),
+    'Chill': t('moodChill'),
+    'Uplifting': t('moodUplifting'),
+    'Melancholic': t('moodMelancholic'),
+    'Intense': t('moodIntense'),
+  }
+  return labels[mood] || mood
+}
+
+// Helper to get translated instrument label
+const getInstrumentLabel = (instrument: string, t: (key: string) => string): string => {
+  const labels: Record<string, string> = {
+    'Guitar': t('instrumentGuitar'),
+    'Violin': t('instrumentViolin'),
+    'Cello': t('instrumentCello'),
+    'Harp': t('instrumentHarp'),
+    'Banjo': t('instrumentBanjo'),
+    'Ukulele': t('instrumentUkulele'),
+    'Mandolin': t('instrumentMandolin'),
+    'Piano': t('instrumentPiano'),
+    'Organ': t('instrumentOrgan'),
+    'Accordion': t('instrumentAccordion'),
+    'Drum': t('instrumentDrum'),
+    'Tabla': t('instrumentTabla'),
+    'Steel Drum': t('instrumentSteelDrum'),
+    'Synth': t('instrumentSynth'),
+    'Electric Guitar': t('instrumentElectricGuitar'),
+    'Saxophone': t('instrumentSaxophone'),
+    'Trumpet': t('instrumentTrumpet'),
+    'Clarinet': t('instrumentClarinet'),
+    'Flute': t('instrumentFlute'),
+    'Bagpipes': t('instrumentBagpipes'),
+    'Vocals': t('instrumentVocals'),
+    'Choir': t('instrumentChoir'),
+    'Bass': t('instrumentBass'),
+    'Strings': t('instrumentStrings'),
+    'Brass': t('instrumentBrass'),
+    'Harmonica': t('instrumentHarmonica'),
+    'Didgeridoo': t('instrumentDidgeridoo'),
+  }
+  return labels[instrument] || instrument
+}
+
+// Helper to get translated instrument group name
+const getInstrumentGroupLabel = (group: string, t: (key: string) => string): string => {
+  const labels: Record<string, string> = {
+    'Strings': t('instrumentStrings'),
+    'Keyboard': t('instrumentKeyboard'),
+    'Percussion': t('instrumentPercussion'),
+    'Electronic': t('instrumentElectronicGroup'),
+    'Wind': t('instrumentWind'),
+    'Vocal': t('instrumentVocal'),
+    'Other': t('instrumentOther'),
+  }
+  return labels[group] || group
+}
+
+// Helper to get translated duration label
+const getDurationLabel = (value: number, t: (key: string) => string): { label: string; description: string } => {
+  const durations: Record<number, { label: string; description: string }> = {
+    30: { label: t('durationShort'), description: t('durationShortDesc') },
+    120: { label: t('durationStandard'), description: t('durationStandardDesc') },
+    180: { label: t('durationExtended3'), description: t('durationExtended3Desc') },
+    300: { label: t('durationExtended5'), description: t('durationExtended5Desc') },
+  }
+  return durations[value] || { label: `${value}s`, description: '' }
+}
+
+// Selector drawer options factory
+const createGenreOptions = (t: (key: string) => string): SelectOption[] =>
+  GENRES.map(g => ({ value: g, label: getGenreLabel(g, t) }))
+
+const createMoodOptions = (t: (key: string) => string): SelectOption[] =>
+  MOODS.map(m => ({ value: m, label: getMoodLabel(m, t) }))
+
+const createInstrumentOptions = (t: (key: string) => string): SelectOption[] =>
+  Object.entries(INSTRUMENT_GROUPS).flatMap(
+    ([group, instruments]) => instruments.map(i => ({
+      value: i,
+      label: getInstrumentLabel(i, t),
+      group: getInstrumentGroupLabel(group, t)
+    }))
+  )
 
 type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | 'completed' | 'failed'
 
@@ -147,6 +256,16 @@ export default function GeneratePage() {
   const [isGenreDrawerOpen, setIsGenreDrawerOpen] = useState(false)
   const [isMoodDrawerOpen, setIsMoodDrawerOpen] = useState(false)
   const [isInstrumentDrawerOpen, setIsInstrumentDrawerOpen] = useState(false)
+
+  // Memoized translated options for selector drawers
+  const genreOptions = useMemo(() => createGenreOptions(t), [t])
+  const moodOptions = useMemo(() => createMoodOptions(t), [t])
+  const instrumentOptions = useMemo(() => createInstrumentOptions(t), [t])
+
+  // Helper to display translated selected values
+  const displayGenres = selectedGenres.map(g => getGenreLabel(g, t)).join(', ')
+  const displayMood = mood ? getMoodLabel(mood, t) : ''
+  const displayInstruments = selectedInstruments.map(i => getInstrumentLabel(i, t)).join(', ')
 
   // Cloud sync presets
   const { presets: cloudPresets, createPreset: savePresetToCloud } = usePresets()
@@ -378,11 +497,14 @@ export default function GeneratePage() {
     }
   }
 
-  // Handle download - local download without opening new window
+  // Handle download - uses API proxy to avoid CORS issues with external audio URLs
   const handleDownload = async () => {
-    if (!audioUrl) return
+    if (!songId) return
     try {
-      const response = await fetch(audioUrl)
+      const response = await fetch(`/api/songs/${songId}/download`)
+      if (!response.ok) {
+        throw new Error('Download failed')
+      }
       const blob = await response.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -793,7 +915,7 @@ export default function GeneratePage() {
                       }`}
                     >
                       <span className={selectedGenres.length > 0 ? "text-foreground" : "text-text-muted"}>
-                        {selectedGenres.length > 0 ? selectedGenres.join(', ') : t('selectStyle')}
+                        {selectedGenres.length > 0 ? displayGenres : t('selectStyle')}
                       </span>
                       <span className="text-sm text-accent">{selectedGenres.length} selected</span>
                     </button>
@@ -811,7 +933,9 @@ export default function GeneratePage() {
                       {t('duration')}
                     </label>
                     <div className="flex gap-2">
-                      {DURATIONS.map(d => (
+                      {DURATIONS.map(d => {
+                        const durationInfo = getDurationLabel(d.value, t)
+                        return (
                         <button
                           key={d.value}
                           onClick={() => setDuration(d.value)}
@@ -820,11 +944,11 @@ export default function GeneratePage() {
                               ? 'bg-accent text-white'
                               : 'bg-background border border-border text-text-secondary hover:border-accent'
                           }`}
-                          title={d.description}
+                          title={durationInfo.description}
                         >
-                          {d.label}
+                          {durationInfo.label}
                         </button>
-                      ))}
+                      )})}
                     </div>
                   </div>
 
@@ -838,9 +962,9 @@ export default function GeneratePage() {
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground text-left hover:border-accent transition-colors flex items-center justify-between"
                     >
                       <span className={mood ? "text-foreground" : "text-text-muted"}>
-                        {mood || t('selectMood')}
+                        {displayMood || t('selectMood')}
                       </span>
-                      {mood && <span className="text-sm text-accent">{mood}</span>}
+                      {mood && <span className="text-sm text-accent">{displayMood}</span>}
                     </button>
                   </div>
 
@@ -854,7 +978,7 @@ export default function GeneratePage() {
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground text-left hover:border-accent transition-colors flex items-center justify-between"
                     >
                       <span className={selectedInstruments.length > 0 ? "text-foreground" : "text-text-muted"}>
-                        {selectedInstruments.length > 0 ? selectedInstruments.join(', ') : t('selectInstruments')}
+                        {selectedInstruments.length > 0 ? displayInstruments : t('selectInstruments')}
                       </span>
                       <span className="text-sm text-accent">{selectedInstruments.length} selected</span>
                     </button>
@@ -1063,7 +1187,7 @@ export default function GeneratePage() {
         isOpen={isGenreDrawerOpen}
         onClose={() => setIsGenreDrawerOpen(false)}
         title={t('selectStyle')}
-        options={GENRE_OPTIONS}
+        options={genreOptions}
         selectedValues={selectedGenres}
         onConfirm={(values) => setSelectedGenres(values)}
         multiSelect={true}
@@ -1075,7 +1199,7 @@ export default function GeneratePage() {
         isOpen={isMoodDrawerOpen}
         onClose={() => setIsMoodDrawerOpen(false)}
         title={t('selectMood')}
-        options={MOOD_OPTIONS}
+        options={moodOptions}
         selectedValues={mood ? [mood] : []}
         onConfirm={(values) => setMood(values[0] || '')}
         multiSelect={false}
@@ -1087,7 +1211,7 @@ export default function GeneratePage() {
         isOpen={isInstrumentDrawerOpen}
         onClose={() => setIsInstrumentDrawerOpen(false)}
         title={t('selectInstruments')}
-        options={INSTRUMENT_OPTIONS}
+        options={instrumentOptions}
         selectedValues={selectedInstruments}
         onConfirm={(values) => setSelectedInstruments(values)}
         multiSelect={true}

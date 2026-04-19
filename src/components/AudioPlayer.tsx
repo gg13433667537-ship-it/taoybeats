@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Download } from "lucide-react"
+import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Download, AlertCircle, Loader2 } from "lucide-react"
 import WaveSurfer from "wavesurfer.js"
 
 interface AudioPlayerProps {
@@ -20,6 +20,8 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Initialize WaveSurfer
   useEffect(() => {
@@ -29,6 +31,8 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
     setIsPlaying(false)
     setCurrentTime(0)
     setDuration(0)
+    setIsLoading(true)
+    setLoadError(null)
 
     const wavesurfer = WaveSurfer.create({
       container: waveformRef.current,
@@ -47,6 +51,7 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
     wavesurfer.on('ready', () => {
       const dur = wavesurfer.getDuration()
       setDuration(dur)
+      setIsLoading(false)
     })
 
     wavesurfer.on('audioprocess', () => {
@@ -66,6 +71,8 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
 
     wavesurfer.on('error', (err) => {
       console.error('WaveSurfer error:', err)
+      setIsLoading(false)
+      setLoadError(err instanceof Error ? err.message : 'Failed to load audio')
     })
 
     wavesurfer.load(src)
@@ -116,10 +123,28 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  // Download audio file directly to user's local machine
+  // Download audio file via API proxy to handle CORS from external URLs
   const handleDownload = useCallback(async () => {
     if (!src) return
     try {
+      // Extract song ID from src path to use API proxy for CORS
+      const songIdMatch = src.match(/\/songs\/([^/]+)/)
+      if (songIdMatch) {
+        const songId = songIdMatch[1]
+        const response = await fetch(`/api/songs/${songId}/download`)
+        if (!response.ok) throw new Error('Download failed')
+        const blob = await response.blob()
+        const downloadUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = filename || title || 'audio'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(downloadUrl)
+        return
+      }
+      // Fallback: direct fetch (may fail with CORS for external URLs)
       const response = await fetch(src)
       const blob = await response.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
@@ -162,10 +187,13 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
         {/* Play/Pause */}
         <button
           onClick={togglePlay}
+          disabled={isLoading || !!loadError}
           aria-label={isPlaying ? "Pause" : "Play"}
-          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors flex-shrink-0"
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isPlaying ? (
+          {isLoading ? (
+            <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" aria-hidden="true" />
+          ) : isPlaying ? (
             <Pause className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
           ) : (
             <Play className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5" aria-hidden="true" />
@@ -208,6 +236,12 @@ export default function AudioPlayer({ src, title, artist, onEnded, filename }: A
       <div className="flex items-center gap-3 w-full">
         {/* Waveform Progress */}
         <div className="flex-1 min-w-0">
+          {loadError && (
+            <div className="flex items-center gap-2 mb-2 text-error text-xs">
+              <AlertCircle className="w-3 h-3" />
+              <span>Audio error: {loadError}</span>
+            </div>
+          )}
           <div ref={waveformRef} className="w-full cursor-pointer" />
           <div className="flex justify-between mt-1">
             <span className="text-xs text-text-muted">{formatTime(currentTime)}</span>

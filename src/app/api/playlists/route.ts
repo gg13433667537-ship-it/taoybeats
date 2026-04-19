@@ -115,5 +115,12 @@ export async function POST(request: NextRequest) {
   // Invalidate playlist cache for this user
   playlistCache.delete(`playlists:${user.id}`)
 
-  return applySecurityHeaders(NextResponse.json({ playlist }, { status: 201 }))
+  const response = {
+    playlist: {
+      ...playlist,
+      songCount: playlist.songIds.length,
+    },
+  }
+
+  return applySecurityHeaders(NextResponse.json(response, { status: 201 }))
 }

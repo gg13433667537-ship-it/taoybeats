@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { sanitizeString, validateRequiredString, validateOptionalString, validateStringArray, MAX_LENGTHS } from "@/lib/security"
+import { prisma } from "@/lib/db"
 
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
@@ -27,17 +28,55 @@ export async function GET(
   try {
     const { id } = await params
 
+    // Try in-memory cache first
     const songsMap = global.songs as Map<string, Song> | undefined
-    if (!songsMap) {
-      return NextResponse.json({ error: "Song not found" }, { status: 404 })
+    if (songsMap) {
+      const song = songsMap.get(id)
+      if (song) {
+        return NextResponse.json(song)
+      }
     }
 
-    const song = songsMap.get(id)
-    if (!song) {
-      return NextResponse.json({ error: "Song not found" }, { status: 404 })
+    // Fall back to Prisma database
+    try {
+      const dbSong = await prisma.song.findUnique({
+        where: { id },
+      })
+
+      if (dbSong) {
+        const song: Song = {
+          id: dbSong.id,
+          title: dbSong.title,
+          lyrics: dbSong.lyrics || undefined,
+          genre: dbSong.genre,
+          mood: dbSong.mood || undefined,
+          instruments: dbSong.instruments,
+          referenceSinger: dbSong.referenceSinger || undefined,
+          referenceSong: dbSong.referenceSong || undefined,
+          userNotes: dbSong.userNotes || undefined,
+          isInstrumental: false,
+          status: dbSong.status as Song['status'],
+          moderationStatus: dbSong.moderationStatus as Song['moderationStatus'],
+          audioUrl: dbSong.audioUrl || undefined,
+          coverUrl: dbSong.coverUrl || undefined,
+          shareToken: dbSong.shareToken || undefined,
+          userId: dbSong.userId,
+          createdAt: dbSong.createdAt.toISOString(),
+          updatedAt: dbSong.updatedAt.toISOString(),
+        }
+
+        // Update in-memory cache
+        if (songsMap) {
+          songsMap.set(id, song)
+        }
+
+        return NextResponse.json(song)
+      }
+    } catch (dbError) {
+      console.error("Prisma lookup failed:", dbError)
     }
 
-    return NextResponse.json(song)
+    return NextResponse.json({ error: "Song not found" }, { status: 404 })
   } catch (error) {
     console.error("GET song error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -59,8 +98,38 @@ export async function PATCH(
 
     const body = await request.json()
 
-    const songsMap = global.songs as Map<string, Song>
-    const song = songsMap.get(id)
+    // Try in-memory cache first, then fall back to database
+    let song = global.songs ? global.songs.get(id) as Song | undefined : undefined
+    if (!song) {
+      try {
+        const dbSong = await prisma.song.findUnique({ where: { id } })
+        if (dbSong) {
+          song = {
+            id: dbSong.id,
+            title: dbSong.title,
+            lyrics: dbSong.lyrics || undefined,
+            genre: dbSong.genre,
+            mood: dbSong.mood || undefined,
+            instruments: dbSong.instruments,
+            referenceSinger: dbSong.referenceSinger || undefined,
+            referenceSong: dbSong.referenceSong || undefined,
+            userNotes: dbSong.userNotes || undefined,
+            isInstrumental: false,
+            status: dbSong.status as Song['status'],
+            moderationStatus: dbSong.moderationStatus as Song['moderationStatus'],
+            audioUrl: dbSong.audioUrl || undefined,
+            coverUrl: dbSong.coverUrl || undefined,
+            shareToken: dbSong.shareToken || undefined,
+            userId: dbSong.userId,
+            createdAt: dbSong.createdAt.toISOString(),
+            updatedAt: dbSong.updatedAt.toISOString(),
+          }
+        }
+      } catch (dbError) {
+        console.error("Prisma lookup failed:", dbError)
+      }
+    }
+
     if (!song) {
       return NextResponse.json({ error: "Song not found" }, { status: 404 })
     }
@@ -162,7 +231,33 @@ export async function PATCH(
     }
 
     const updatedSong: Song = { ...song, ...allowedUpdates, id, updatedAt: new Date().toISOString() }
-    songsMap.set(id, updatedSong)
+
+    // Update both database and cache
+    try {
+      await prisma.song.update({
+        where: { id },
+        data: {
+          title: updatedSong.title,
+          lyrics: updatedSong.lyrics,
+          genre: updatedSong.genre,
+          mood: updatedSong.mood,
+          instruments: updatedSong.instruments,
+          referenceSinger: updatedSong.referenceSinger,
+          referenceSong: updatedSong.referenceSong,
+          userNotes: updatedSong.userNotes,
+          isInstrumental: updatedSong.isInstrumental,
+          voiceId: updatedSong.voiceId,
+          status: updatedSong.status,
+        },
+      })
+    } catch (dbError) {
+      console.error("Prisma update failed:", dbError)
+    }
+
+    // Update memory cache
+    if (global.songs) {
+      global.songs.set(id, updatedSong)
+    }
 
     return NextResponse.json(updatedSong)
   } catch (error) {
@@ -184,8 +279,38 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const songsMap = global.songs as Map<string, Song>
-    const song = songsMap.get(id)
+    // Try in-memory cache first, then fall back to database
+    let song = global.songs ? global.songs.get(id) as Song | undefined : undefined
+    if (!song) {
+      try {
+        const dbSong = await prisma.song.findUnique({ where: { id } })
+        if (dbSong) {
+          song = {
+            id: dbSong.id,
+            title: dbSong.title,
+            lyrics: dbSong.lyrics || undefined,
+            genre: dbSong.genre,
+            mood: dbSong.mood || undefined,
+            instruments: dbSong.instruments,
+            referenceSinger: dbSong.referenceSinger || undefined,
+            referenceSong: dbSong.referenceSong || undefined,
+            userNotes: dbSong.userNotes || undefined,
+            isInstrumental: false,
+            status: dbSong.status as Song['status'],
+            moderationStatus: dbSong.moderationStatus as Song['moderationStatus'],
+            audioUrl: dbSong.audioUrl || undefined,
+            coverUrl: dbSong.coverUrl || undefined,
+            shareToken: dbSong.shareToken || undefined,
+            userId: dbSong.userId,
+            createdAt: dbSong.createdAt.toISOString(),
+            updatedAt: dbSong.updatedAt.toISOString(),
+          }
+        }
+      } catch (dbError) {
+        console.error("Prisma lookup failed:", dbError)
+      }
+    }
+
     if (!song) {
       return NextResponse.json({ error: "Song not found" }, { status: 404 })
     }
@@ -195,7 +320,19 @@ export async function DELETE(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    songsMap.delete(id)
+    // Delete from database
+    try {
+      await prisma.song.delete({
+        where: { id },
+      })
+    } catch (dbError) {
+      console.error("Prisma delete failed:", dbError)
+    }
+
+    // Delete from memory cache
+    if (global.songs) {
+      global.songs.delete(id)
+    }
 
     return NextResponse.json({ success: true, id })
   } catch (error) {

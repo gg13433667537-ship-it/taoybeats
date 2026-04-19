@@ -252,7 +252,7 @@ export default function DiscoverPage() {
                   >
                     <option value="">{t('discoverAllMoods')}</option>
                     {MOODS.map(m => (
-                      <option key={m} value={m}>{m}</option>
+                      <option key={m} value={m}>{t(`mood${m}`)}</option>
                     ))}
                   </select>
                 </div>

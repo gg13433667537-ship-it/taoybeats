@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { ChevronDown, Settings, User, LogOut } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 
@@ -16,6 +16,7 @@ interface UserData {
 
 export default function UserDropdown() {
   const router = useRouter()
+  const pathname = usePathname()
   const { t } = useI18n()
   const [user, setUser] = useState<UserData | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
@@ -83,7 +84,7 @@ export default function UserDropdown() {
 
   // Logged in: show user avatar with dropdown
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef} key={pathname}>
       <button
         onClick={() => setShowDropdown(!showDropdown)}
         aria-label="User menu"

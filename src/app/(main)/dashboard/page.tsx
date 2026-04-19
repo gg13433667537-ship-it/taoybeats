@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Music, Plus, Play, MoreHorizontal, Clock, Share2, Download, Loader2, Zap, Shield, LogOut, User, ChevronDown, Settings, AlertCircle, X, ListMusic, FolderPlus, Trash2, Eye, EyeOff } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
+import { useToast } from "@/components/Toast"
 
 interface Song {
   id: string
@@ -40,6 +41,7 @@ interface Playlist {
 export default function DashboardPage() {
   const router = useRouter()
   const { t, lang } = useI18n()
+  const { showToast } = useToast()
   const [songs, setSongs] = useState<Song[]>([])
   const [usage, setUsage] = useState<Usage | null>(null)
   const [loading, setLoading] = useState(true)
@@ -55,6 +57,7 @@ export default function DashboardPage() {
   const [newPlaylistName, setNewPlaylistName] = useState('')
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('')
   const [addingToPlaylist, setAddingToPlaylist] = useState(false)
+  const [deletingSongId, setDeletingSongId] = useState<string | null>(null)
   const [showSongOptions, setShowSongOptions] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const playlistDropdownRef = useRef<HTMLDivElement>(null)
@@ -223,14 +226,27 @@ export default function DashboardPage() {
 
   // Delete song
   const handleDeleteSong = async (songId: string) => {
+    setDeletingSongId(songId)
+    setShowSongOptions(null)
     try {
       const res = await fetch(`/api/songs/${songId}`, { method: "DELETE" })
       if (res.ok) {
-        setSongs(songs.filter(s => s.id !== songId))
-        setShowSongOptions(null)
+        // Refresh songs from server
+        const songsRes = await fetch("/api/songs")
+        if (songsRes.ok) {
+          const songsData = await songsRes.json()
+          setSongs(songsData.songs || [])
+        }
+        showToast("success", t("songDeleted") || "Song deleted successfully")
+      } else {
+        const errorData = await res.json().catch(() => ({}))
+        showToast("error", errorData.error || t("deleteFailed") || "Failed to delete song")
       }
     } catch (error) {
       console.error("Error deleting song:", error)
+      showToast("error", t("deleteFailed") || "Failed to delete song")
+    } finally {
+      setDeletingSongId(null)
     }
   }
 
@@ -528,7 +544,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-4">
                       {/* Play Button / Status */}
                       <div className="relative">
-                        {song.status === 'COMPLETED' ? (
+                        {song.status === 'COMPLETED' && song.audioUrl ? (
                           <button
                             onClick={() => router.push(`/song/${song.id}`)}
                             aria-label={t('playSong')}
@@ -677,10 +693,15 @@ export default function DashboardPage() {
                             <div className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
                               <button
                                 onClick={() => handleDeleteSong(song.id)}
-                                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-error hover:bg-error/10 transition-colors"
+                                disabled={deletingSongId === song.id}
+                                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-error hover:bg-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Trash2 className="w-4 h-4" aria-hidden="true" />
-                                {t('deleteSong')}
+                                {deletingSongId === song.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                                )}
+                                {deletingSongId === song.id ? t('deleting') || 'Deleting...' : t('deleteSong')}
                               </button>
                             </div>
                           )}

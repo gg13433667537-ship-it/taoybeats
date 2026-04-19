@@ -37,6 +37,7 @@ import { verifySessionToken } from "@/lib/auth-utils"
 import { checkDuplicateGeneration } from "@/lib/cache"
 import { prisma } from "@/lib/db"
 import { rateLimitMiddleware, DEFAULT_RATE_LIMIT, sanitizeString, validateRequiredString, validateOptionalString, validateStringArray, validateNumber, MAX_LENGTHS } from "@/lib/security"
+import { uploadAudioFromUrl } from "@/lib/r2-storage"
 import crypto from "crypto"
 
 // Shared global storage - ensure initialized
@@ -568,6 +569,27 @@ async function generateMusic(
 
       if (progress.status === 'COMPLETED') {
         console.log(`[Generate] Song ${songId} completed, audioUrl: ${progress.audioUrl}`)
+
+        // Upload to R2 and store R2 URL (fallback to MiniMax URL on failure)
+        let finalAudioUrl = progress.audioUrl
+        if (progress.audioUrl) {
+          try {
+            finalAudioUrl = await uploadAudioFromUrl(progress.audioUrl, songId)
+            console.log(`[Generate] Song ${songId} uploaded to R2: ${finalAudioUrl}`)
+          } catch (r2Error) {
+            console.error(`[Generate] Song ${songId} R2 upload failed, using MiniMax URL:`, r2Error)
+          }
+        }
+
+        // Update with final URL (R2 or MiniMax fallback)
+        const currentSongAfterComplete = songsMap.get(songId)
+        if (currentSongAfterComplete) {
+          await updateSongStatus(songId, {
+            status: 'COMPLETED',
+            audioUrl: finalAudioUrl,
+            videoUrl: progress.videoUrl,
+          }, currentSongAfterComplete)
+        }
         return // Successful completion
       }
 

@@ -149,7 +149,7 @@ export const musicProvider: AIProvider = {
 
     // Music 2.6 may return audio directly (status=2 means completed)
     // or return a task_id for async polling (status=1 means processing)
-    const audioUrl = data.data?.audio
+    const audioUrl = data.data?.audio_url
     const taskId = data.data?.task_id
     const status = data.data?.status
 
@@ -330,7 +330,7 @@ export const musicProvider: AIProvider = {
     }
 
     const data = await response.json()
-    const audioUrl = data.data?.audio
+    const audioUrl = data.data?.audio_url
     const taskId = data.data?.task_id
     const status = data.data?.status
 

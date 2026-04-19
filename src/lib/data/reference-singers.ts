@@ -1,0 +1,70 @@
+/**
+ * Reference singers data
+ * 30 popular Chinese singers (华语) and 30 popular Western singers
+ */
+
+export const chineseSingers = [
+  '张学友',
+  '周杰伦',
+  '陈奕迅',
+  '王菲',
+  '林俊杰',
+  '邓紫棋',
+  '张靓颖',
+  '李荣浩',
+  '薛之谦',
+  '周深',
+  '张惠妹',
+  '五月天',
+  '苏打绿',
+  '田馥甄',
+  '林宥嘉',
+  '潘玮柏',
+  '王力宏',
+  '胡彦斌',
+  '李宇春',
+  '许嵩',
+  '毛不易',
+  '赵雷',
+  '马良',
+  '郭顶',
+  '梁博',
+  '许巍',
+  '朴树',
+  '郑钧',
+  '汪峰',
+  '许冠杰',
+] as const;
+
+export const westernSingers = [
+  'Taylor Swift',
+  'Ed Sheeran',
+  'Drake',
+  'The Weeknd',
+  'Billie Eilish',
+  'Ariana Grande',
+  'BTS',
+  'Justin Bieber',
+  'Adele',
+  'Lady Gaga',
+  'Bruno Mars',
+  'Post Malone',
+  'Dua Lipa',
+  'Bad Bunny',
+  'Eminem',
+  'Rihanna',
+  'Beyonce',
+  'Selena Gomez',
+  'Shawn Mendes',
+  'Olivia Rodrigo',
+  'Kendrick Lamar',
+  'Coldplay',
+  'Maroon 5',
+  'Imagine Dragons',
+  'OneRepublic',
+  'Linkin Park',
+  'The Chainsmokers',
+] as const;
+
+export type ChineseSinger = (typeof chineseSingers)[number];
+export type WesternSinger = (typeof westernSingers)[number];
