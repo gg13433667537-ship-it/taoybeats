@@ -237,6 +237,56 @@ async function incrementUsage(userId: string): Promise<void> {
   }
 }
 
+type PrismaSongCreateArgs = Parameters<typeof prisma.song.create>[0]
+
+function buildPrismaSongCreateData(song: Song): PrismaSongCreateArgs["data"] {
+  return {
+    id: song.id,
+    title: song.title,
+    lyrics: song.lyrics || null,
+    originalLyrics: song.originalLyrics || null,
+    genre: song.genre,
+    mood: song.mood || null,
+    instruments: song.instruments,
+    referenceSinger: song.referenceSinger || null,
+    referenceSong: song.referenceSong || null,
+    userNotes: song.userNotes || null,
+    status: "PENDING",
+    lyricsCompressionApplied: song.lyricsCompressionApplied || false,
+    lyricsCompressionReason: song.lyricsCompressionReason || null,
+    lyricsCompressionModel: song.lyricsCompressionModel || null,
+    lyricsCompressionLimit: song.lyricsCompressionLimit || null,
+    providerTaskId: null,
+    errorMessage: null,
+    audioUrl: null,
+    coverUrl: null,
+    shareToken: song.shareToken || null,
+    userId: song.userId,
+    forkedFrom: song.forkedFrom || null,
+    originalOwnerId: song.originalOwnerId || null,
+  }
+}
+
+async function persistSongToDatabase(song: Song, userEmail?: string): Promise<boolean> {
+  const createData = buildPrismaSongCreateData(song)
+
+  try {
+    await prisma.song.create({ data: createData })
+    return true
+  } catch (prismaError) {
+    console.error("Failed to persist song to Prisma on first attempt:", prismaError)
+  }
+
+  try {
+    await getOrCreateUserFromDB(song.userId, userEmail)
+    await prisma.song.create({ data: createData })
+    return true
+  } catch (retryError) {
+    console.error("Failed to persist song to Prisma after recreating user record:", retryError)
+    return false
+  }
+}
+
 export async function GET(request: NextRequest) {
   // Rate limiting
   const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "songs:get")
@@ -535,36 +585,9 @@ export async function POST(request: NextRequest) {
 
     songsMap.set(songId, song)
 
-    try {
-      await prisma.song.create({
-        data: {
-          id: songId,
-          title: song.title,
-          lyrics: song.lyrics || null,
-          originalLyrics: song.originalLyrics || null,
-          genre: song.genre,
-          mood: song.mood || null,
-          instruments: song.instruments,
-          referenceSinger: song.referenceSinger || null,
-          referenceSong: song.referenceSong || null,
-          userNotes: song.userNotes || null,
-          status: "PENDING",
-          lyricsCompressionApplied: song.lyricsCompressionApplied || false,
-          lyricsCompressionReason: song.lyricsCompressionReason || null,
-          lyricsCompressionModel: song.lyricsCompressionModel || null,
-          lyricsCompressionLimit: song.lyricsCompressionLimit || null,
-          providerTaskId: null,
-          errorMessage: null,
-          audioUrl: null,
-          coverUrl: null,
-          shareToken,
-          userId: user.id,
-          forkedFrom: song.forkedFrom || null,
-          originalOwnerId: song.originalOwnerId || null,
-        },
-      })
-    } catch (prismaError) {
-      console.error("Failed to persist song to Prisma, continuing with memory fallback:", prismaError)
+    const persistedToDatabase = await persistSongToDatabase(song, user.email)
+    if (!persistedToDatabase) {
+      console.error("Song persistence failed, continuing with memory fallback")
     }
 
     // Increment usage in database ONLY after all songs are successfully created

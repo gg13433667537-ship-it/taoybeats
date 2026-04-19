@@ -262,6 +262,55 @@ describe('Songs API', () => {
       expect(createdSong?.partGroupId).toBeUndefined()
     })
 
+    it('should retry song persistence after recreating a missing user record', async () => {
+      const sessionToken = createTestSessionToken('recovered-user', 'recovered@example.com')
+
+      vi.mocked(prisma.user.findUnique)
+        .mockResolvedValueOnce(null as any)
+        .mockResolvedValueOnce(null as any)
+
+      vi.mocked(prisma.user.create)
+        .mockRejectedValueOnce(new Error('temporary user create failure'))
+        .mockResolvedValueOnce({
+          id: 'recovered-user',
+          email: 'recovered@example.com',
+          name: 'Recovered User',
+          role: 'USER',
+          isActive: true,
+          tier: 'FREE',
+          dailyUsage: 0,
+          monthlyUsage: 0,
+          dailyResetAt: new Date().toISOString().split('T')[0],
+          monthlyResetAt: new Date().toISOString().slice(0, 7),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any)
+
+      vi.mocked(prisma.song.create)
+        .mockRejectedValueOnce(new Error('Foreign key constraint failed on field: Song_userId_fkey'))
+        .mockResolvedValueOnce({
+          id: 'persisted-song',
+        } as any)
+
+      const request = createMockNextRequest('http://localhost:3000/api/songs', {
+        title: 'Recovered Persistence Song',
+        lyrics: 'Recovered lyrics',
+        genre: ['pop'],
+        mood: 'steady',
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
+      })
+
+      const response = await createSong(request as any)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(vi.mocked(prisma.song.create)).toHaveBeenCalledTimes(2)
+      expect(vi.mocked(prisma.user.create)).toHaveBeenCalledTimes(2)
+      expect(data.id).toBeDefined()
+      expect(global.songs?.get(data.id)?.userId).toBe('recovered-user')
+    })
+
     it('should fall back to memory storage when Prisma is unavailable', async () => {
       vi.mocked(prisma.user.findUnique).mockRejectedValueOnce(new Error('db unavailable'))
       vi.mocked(prisma.user.create).mockRejectedValueOnce(new Error('db unavailable'))
