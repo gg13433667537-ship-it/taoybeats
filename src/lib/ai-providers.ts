@@ -192,16 +192,32 @@ export const musicProvider: AIProvider = {
     const taskId = data.data?.task_id
     const status = data.data?.status
 
-    if (audioUrl && status === 2) {
-      // Synchronous completion - return audio URL prefixed with 'audio:'
+    // Log response for debugging
+    console.log('[MiniMax] generate response:', JSON.stringify({
+      hasData: !!data.data,
+      audioUrl,
+      taskId,
+      status,
+      baseResp: data.base_resp
+    }).slice(0, 500))
+
+    if (status === 2 && audioUrl) {
+      // Synchronous completion with URL
       if (typeof audioUrl !== 'string' || !audioUrl.startsWith('http')) {
         throw new Error('Invalid audio URL in API response')
       }
       return `audio:${audioUrl}`
     }
 
+    // If status=2 but no audioUrl (maybe hex audio was returned instead)
+    if (status === 2 && data.data?.audio) {
+      // Hex audio returned - this is unusual for output_format=url
+      console.warn('[MiniMax] API returned hex audio instead of URL, task may need async polling')
+    }
+
     // Return task_id for async polling
     if (!taskId && !data.task_id) {
+      console.error('[MiniMax] No task_id in response, data:', JSON.stringify(data).slice(0, 300))
       throw new Error('No task_id returned from API')
     }
     return taskId || data.task_id
@@ -476,45 +492,102 @@ function buildPrompt(params: SongParams): string {
   return parts.join('; ')
 }
 
-// Music API Response Types
+// Music API Response Types - nested structure from MiniMax API
 interface MusicStatusResponse {
+  // Top-level fields
+  base_resp?: {
+    status_code: number
+    status_msg: string
+  }
+  // Nested data object from music_generation_info
+  data?: {
+    status?: number // 1=processing, 2=completed
+    audio?: string // hex encoded audio when status=2
+    audio_url?: string // URL when output_format=url
+    task_id?: string
+    video_url?: string
+  }
+  // Alternative flat structure some APIs use
   status?: string
-  progress?: number
-  stage?: string
+  status_code?: number
+  status_msg?: string
   audio_url?: string
-  audio_download_url?: string
-  video_url?: string
+  audio?: string
   error?: string
   error_code?: number
+  trace_id?: string
+  extra_info?: {
+    music_duration?: number
+    music_sample_rate?: number
+    music_channel?: number
+    bitrate?: number
+    music_size?: number
+  }
 }
 
 function mapMusicStatus(data: MusicStatusResponse): GenerationProgress {
-  // Status: pending, processing, completed, failed
-  const statusMap: Record<string, GenerationStatus> = {
-    pending: 'PENDING',
-    processing: 'GENERATING',
-    completed: 'COMPLETED',
-    failed: 'FAILED',
+  // MiniMax uses nested data.data for music_generation_info response
+  const nestedData = data.data
+
+  // Determine status from nested or flat structure
+  let apiStatus: number | string | undefined
+  if (nestedData?.status !== undefined) {
+    apiStatus = nestedData.status // 1=processing, 2=completed
+  } else if (data.status !== undefined) {
+    apiStatus = data.status
+  } else if (data.status_code !== undefined) {
+    apiStatus = data.status_code
   }
 
-  const status = statusMap[data.status || ''] || 'PENDING'
+  // Map numeric or string status to our enum
+  let status: GenerationStatus = 'PENDING'
+  if (typeof apiStatus === 'number') {
+    if (apiStatus === 2) status = 'COMPLETED'
+    else if (apiStatus === 1) status = 'GENERATING'
+    else if (apiStatus === 3 || apiStatus === 'failed') status = 'FAILED'
+  } else if (typeof apiStatus === 'string') {
+    const statusMap: Record<string, GenerationStatus> = {
+      pending: 'PENDING',
+      processing: 'GENERATING',
+      completed: 'COMPLETED',
+      failed: 'FAILED',
+    }
+    status = statusMap[apiStatus.toLowerCase()] || 'PENDING'
+  }
 
   // Calculate progress based on status
-  let progress = data.progress || 0
+  let progress = 0
   if (status === 'PENDING') progress = 10
-  else if (status === 'GENERATING') progress = progress || 50
+  else if (status === 'GENERATING') progress = 50
   else if (status === 'COMPLETED') progress = 100
   else if (status === 'FAILED') progress = 0
 
-  // Extract error message - check multiple possible locations
-  const errorMsg = data.error || data.base_resp?.status_msg || undefined
+  // Extract audio URL - check multiple possible locations
+  let audioUrl: string | undefined
+  if (nestedData?.audio_url) {
+    audioUrl = nestedData.audio_url
+  } else if (nestedData?.audio) {
+    // Hex audio data - need to indicate this somehow
+    // Actually for hex we'd need to handle differently
+    audioUrl = undefined
+  } else if (data.audio_url) {
+    audioUrl = data.audio_url
+  } else if (data.audio) {
+    audioUrl = undefined
+  }
+
+  // Extract error message
+  let errorMsg: string | undefined
+  if (status === 'FAILED') {
+    errorMsg = data.base_resp?.status_msg || data.error || data.status_msg || 'Generation failed'
+  }
 
   return {
     status,
     progress,
-    stage: data.stage || data.status,
-    audioUrl: data.audio_url || data.audio_download_url,
-    videoUrl: data.video_url,
-    error: status === 'FAILED' ? (errorMsg || 'Generation failed') : undefined,
+    stage: status === 'COMPLETED' ? 'completed' : status === 'GENERATING' ? 'Creating your music...' : 'Queued...',
+    audioUrl,
+    videoUrl: nestedData?.video_url || undefined,
+    error: errorMsg,
   }
 }
