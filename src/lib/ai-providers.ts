@@ -262,8 +262,6 @@ function buildGenerationRequestBody(params: SongParams): Record<string, unknown>
     ...commonBody,
     lyrics: isInstrumental ? undefined : params.lyrics,
     is_instrumental: isInstrumental,
-    voice_id: params.voiceId,
-    reference_audio: params.referenceAudio,
     lyrics_optimizer: params.lyricsOptimizer,
   }
 }
@@ -297,6 +295,10 @@ function buildPrompt(params: SongParams): string {
 
   if (params.referenceSinger) {
     parts.push(`Style: ${params.referenceSinger}`)
+  }
+
+  if (params.referenceSong) {
+    parts.push(`Reference Song: ${params.referenceSong}`)
   }
 
   if (params.userNotes) {

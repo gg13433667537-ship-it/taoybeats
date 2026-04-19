@@ -33,6 +33,13 @@ function isAdmin(user: SessionUser | null): boolean {
   return user?.role === 'ADMIN'
 }
 
+function normalizeAdminUser<T extends { email: string | null }>(user: T): Omit<T, "email"> & { email: string } {
+  return {
+    ...user,
+    email: user.email ?? "",
+  }
+}
+
 // GET /api/admin/users - List users with pagination
 export async function GET(request: NextRequest) {
   // Rate limiting for admin endpoint
@@ -103,10 +110,13 @@ export async function GET(request: NextRequest) {
         : Promise.resolve(null),
     ])
 
+    const normalizedUsers = allUsers.map((listedUser) => normalizeAdminUser(listedUser))
+    const normalizedCurrentAdmin = currentAdmin ? normalizeAdminUser(currentAdmin) : null
+
     return NextResponse.json({
       users: ensureCurrentAdminVisible({
-        users: allUsers,
-        currentUser: currentAdmin,
+        users: normalizedUsers,
+        currentUser: normalizedCurrentAdmin,
         page,
         limit,
         search,

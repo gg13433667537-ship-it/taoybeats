@@ -353,6 +353,7 @@ const translations = {
     settingsTitle: 'Settings',
     profile: 'Profile',
     apiConfiguration: 'API Configuration',
+    userManagement: 'User Management',
     notifications: 'Notifications',
     security: 'Security',
     profileSettings: 'Profile Settings',
@@ -412,8 +413,10 @@ const translations = {
     unmute: 'Unmute',
 
     // Errors
+    downloadFailed: 'Download failed, please try again',
     remixFailed: 'Remix failed, please try again',
     songLoadFailed: 'Failed to load song, please refresh and try again',
+    userUpdated: 'User updated successfully',
 
     // Stems
     splitStems: 'Split Stems',
@@ -963,6 +966,7 @@ const translations = {
     settingsTitle: '设置',
     profile: '个人资料',
     apiConfiguration: 'API 配置',
+    userManagement: '用户管理',
     notifications: '通知',
     security: '安全',
     profileSettings: '个人资料设置',
@@ -1022,8 +1026,10 @@ const translations = {
     unmute: '取消静音',
 
     // Errors
+    downloadFailed: '下载失败，请重试',
     remixFailed: '混音失败，请重试',
     songLoadFailed: '加载歌曲失败，请刷新重试',
+    userUpdated: '用户信息已更新',
 
     // Stems
     splitStems: '分离声部',
@@ -1262,18 +1268,8 @@ const translations = {
     genreMandopop: '华语流行',
     genreKPop: '韩流',
     genreLatin: '拉丁',
-    moodHappy: '欢快',
-    moodSad: '悲伤',
-    moodEnergetic: '活力',
-    moodCalm: '平静',
-    moodRomantic: '浪漫',
-    moodEpic: '史诗',
-    moodDark: '暗黑',
-    moodDreamy: '梦幻',
-    moodFestive: '节日',
     moodCelebration: '庆祝',
     moodChill: '休闲',
-    moodUplifting: '振奋',
     moodMelancholic: '忧郁',
     moodIntense: '激烈',
     instrumentGuitar: '吉他',
@@ -1667,6 +1663,7 @@ const translations = {
     settingsTitle: '設定',
     profile: '個人資料',
     apiConfiguration: 'API 設定',
+    userManagement: '使用者管理',
     notifications: '通知',
     security: '安全',
     profileSettings: '個人資料設定',
@@ -1726,8 +1723,10 @@ const translations = {
     unmute: '取消靜音',
 
     // Errors
+    downloadFailed: '下載失敗，請重試',
     remixFailed: '混音失敗，請重試',
     songLoadFailed: '載入歌曲失敗，請重新整理重試',
+    userUpdated: '使用者資訊已更新',
 
     // Stems
     splitStems: '分離聲部',
@@ -2282,6 +2281,7 @@ const translations = {
     settingsTitle: '設定',
     profile: 'プロフィール',
     apiConfiguration: 'API設定',
+    userManagement: 'ユーザー管理',
     notifications: '通知',
     security: 'セキュリティ',
     profileSettings: 'プロフィール設定',
@@ -2341,8 +2341,10 @@ const translations = {
     unmute: 'ミュート解除',
 
     // Errors
+    downloadFailed: 'ダウンロードに失敗しました。もう一度お試しください',
     remixFailed: 'リミックスに失敗しました。もう一度お試しください',
     songLoadFailed: '曲の読み込みに失敗しました。ページを更新して再試行してください',
+    userUpdated: 'ユーザー情報を更新しました',
 
     // Stems
     splitStems: 'ステムを分割',
@@ -2897,6 +2899,7 @@ const translations = {
     settingsTitle: '설정',
     profile: '프로필',
     apiConfiguration: 'API 구성',
+    userManagement: '사용자 관리',
     notifications: '알림',
     security: '보안',
     profileSettings: '프로필 설정',
@@ -2956,8 +2959,10 @@ const translations = {
     unmute: '음소거 해제',
 
     // Errors
+    downloadFailed: '다운로드에 실패했습니다. 다시 시도해 주세요',
     remixFailed: '리믹스에 실패했습니다. 다시 시도해 주세요',
     songLoadFailed: '노래를 불러오는 데 실패했습니다. 페이지를 새로고침하고 다시 시도하세요',
+    userUpdated: '사용자 정보가 업데이트되었습니다',
 
     // Stems
     splitStems: '스텝 분할',

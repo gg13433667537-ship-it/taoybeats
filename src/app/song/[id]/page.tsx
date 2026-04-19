@@ -9,10 +9,13 @@ import { ThemeToggle } from "@/components/ThemeToggle"
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/useKeyboardShortcuts"
 import AdvancedAudioEditor from "@/components/AdvancedAudioEditor"
 
+const SONG_REFRESH_INTERVAL_MS = 3000
+
 export default function SongSharePage() {
   const { t } = useI18n()
   const params = useParams()
   const songId = params.id as string
+  const isShareToken = /^[a-z0-9]{8}$/i.test(songId)
 
   const [song, setSong] = useState<{
     id?: string
@@ -57,6 +60,9 @@ export default function SongSharePage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const animationRef = useRef<number | null>(null)
   const stemAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({})
+  const shareAccessToken = isShareToken
+    ? songId
+    : ((song as { shareToken?: string } | null)?.shareToken || null)
 
   // Helper to update meta tags
   const updateMetaTag = (property: string, content: string) => {
@@ -69,54 +75,83 @@ export default function SongSharePage() {
     meta.content = content
   }
 
-  // Fetch song data
-  useEffect(() => {
-    const fetchSong = async () => {
-      try {
-        // Check if songId looks like a shareToken (8 alphanumeric chars)
-        const isShareToken = /^[a-z0-9]{8}$/i.test(songId)
+  const loadSong = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false
 
-        const endpoint = isShareToken
-          ? `/api/songs/by-share/${songId}`
-          : `/api/songs/${songId}`
+    try {
+      const endpoint = isShareToken
+        ? `/api/songs/by-share/${songId}`
+        : `/api/songs/${songId}`
 
-        const res = await fetch(endpoint)
-        if (res.ok) {
-          const data = await res.json()
-          setSong(data)
+      const res = await fetch(endpoint)
+      if (!res || !res.ok) {
+        throw new Error(`Failed to fetch song: ${res?.status ?? "unknown"}`)
+      }
 
-          // If song has partGroupId, fetch all parts
-          if (data.partGroupId) {
-            try {
-              const partsRes = await fetch(`/api/songs/by-part-group/${data.partGroupId}`)
-              if (partsRes.ok) {
-                const partsData = await partsRes.json()
-                setPartGroupSongs(partsData.songs || [])
-                // Set current part index based on this song's part number
-                const partIndex = (partsData.songs || []).findIndex((p: { id: string }) => p.id === songId)
-                setCurrentPartIndex(partIndex >= 0 ? partIndex : 0)
-              }
-            } catch (partsError) {
-              console.error("Error fetching part group songs:", partsError)
-            }
+      const data = await res.json()
+      setSong(data)
+      setSongError(null)
+
+      if (data.partGroupId) {
+        try {
+          const partsRes = await fetch(`/api/songs/by-part-group/${data.partGroupId}`)
+          if (partsRes.ok) {
+            const partsData = await partsRes.json()
+            const songs = partsData.songs || []
+            setPartGroupSongs(songs)
+            const partIndex = songs.findIndex((p: { id: string }) => p.id === data.id)
+            setCurrentPartIndex(partIndex >= 0 ? partIndex : 0)
           }
-
-          // Generate random waveform data for visualization
-          if (data.status === 'COMPLETED') {
-            const bars = Array.from({ length: 64 }, () => Math.random() * 0.7 + 0.3)
-            setWaveformData(bars)
-          }
+        } catch (partsError) {
+          console.error("Error fetching part group songs:", partsError)
         }
-      } catch (error) {
-        console.error("Error fetching song:", error)
+      } else {
+        setPartGroupSongs([])
+        setCurrentPartIndex(0)
+      }
+
+      if (data.status === 'COMPLETED' && data.audioUrl) {
+        const bars = Array.from({ length: 64 }, () => Math.random() * 0.7 + 0.3)
+        setWaveformData(bars)
+      } else if (!silent) {
+        setWaveformData([])
+      }
+    } catch (error) {
+      console.error("Error fetching song:", error)
+      if (!silent) {
         setSongError(t('songLoadFailed'))
-      } finally {
+      }
+    } finally {
+      if (!silent) {
         setLoading(false)
       }
     }
+  }, [isShareToken, songId, t])
 
-    fetchSong()
-  }, [songId, t])
+  // Fetch song data
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadSong()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [loadSong])
+
+  useEffect(() => {
+    if (loading || !song || (song.status !== 'GENERATING' && song.status !== 'PENDING')) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadSong({ silent: true })
+    }, SONG_REFRESH_INTERVAL_MS)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [loadSong, loading, song])
 
   // Update OG meta tags when song data changes
   useEffect(() => {
@@ -300,8 +335,13 @@ export default function SongSharePage() {
   const handleDownload = useCallback(async () => {
     if (!song?.audioUrl) return
     try {
-      const downloadSource = song.id ? `/api/songs/${song.id}/download` : song.audioUrl
+      const downloadSource = song.id
+        ? `/api/songs/${song.id}/download${shareAccessToken ? `?shareToken=${encodeURIComponent(shareAccessToken)}` : ""}`
+        : song.audioUrl
       const response = await fetch(downloadSource)
+      if (!response.ok) {
+        throw new Error(`Download failed with status ${response.status}`)
+      }
       const blob = await response.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -310,12 +350,12 @@ export default function SongSharePage() {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      window.URL.revokeObjectURL(downloadUrl)
+      window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1000)
     } catch (error) {
       console.error('Download failed:', error)
       setSongError(t('downloadFailed'))
     }
-  }, [song, t])
+  }, [shareAccessToken, song, t])
 
   const handleRemix = async () => {
     if (!song) return

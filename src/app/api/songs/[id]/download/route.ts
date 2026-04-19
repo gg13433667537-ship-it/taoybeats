@@ -23,20 +23,31 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
   }
 }
 
+function getFileExtension(contentType: string | null, audioUrl: string): string {
+  if (contentType?.includes("wav")) return "wav"
+  if (contentType?.includes("flac")) return "flac"
+  if (contentType?.includes("pcm")) return "pcm"
+  if (contentType?.includes("mpeg") || contentType?.includes("mp3")) return "mp3"
+
+  const urlPath = audioUrl.split("?")[0]
+  const extension = urlPath.split(".").pop()
+  return extension && extension.length <= 5 ? extension : "mp3"
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+    const shareToken = request.nextUrl.searchParams.get("shareToken")
 
-    // Auth check
     const user = getSessionUser(request)
-    if (!user) {
+    if (!user && !shareToken) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    let song: { title: string; audioUrl: string | null; userId: string } | Song | null =
+    let song: { title: string; audioUrl: string | null; userId: string; shareToken?: string | null } | Song | null =
       (global.songs as Map<string, Song> | undefined)?.get(id) || null
 
     if (!song) {
@@ -53,9 +64,14 @@ export async function GET(
       return NextResponse.json({ error: "Song not found" }, { status: 404 })
     }
 
-    // Check ownership or admin
-    if (song.userId !== user.id && user.role !== 'ADMIN') {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const hasSharedAccess = Boolean(shareToken && song.shareToken === shareToken)
+    const hasUserAccess = Boolean(user && (song.userId === user.id || user.role === "ADMIN"))
+
+    if (!hasSharedAccess && !hasUserAccess) {
+      return NextResponse.json(
+        { error: shareToken ? "Song not found or invalid share token" : "Forbidden" },
+        { status: shareToken ? 404 : 403 }
+      )
     }
 
     // Check if song has audio
@@ -76,9 +92,10 @@ export async function GET(
 
     // Determine content type from response or default to mp3
     const contentType = audioResponse.headers.get('content-type') || 'audio/mpeg'
+    const extension = getFileExtension(contentType, song.audioUrl)
 
     // Get filename from title or use default
-    const filename = `${song.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_') || 'audio'}.mp3`
+    const filename = `${song.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_') || 'audio'}.${extension}`
 
     // Return the audio with appropriate headers for download
     return new NextResponse(audioBuffer, {

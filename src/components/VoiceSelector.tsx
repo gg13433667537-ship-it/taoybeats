@@ -163,7 +163,7 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
       <div className="relative">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          aria-label="选择语音音色 (用于语音合成)"
+          aria-label="选择音色风格参考（对歌曲生成为间接影响）"
           aria-expanded={isOpen}
           className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border hover:border-accent transition-colors"
         >
@@ -178,7 +178,7 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
 
             <div className="absolute top-full left-0 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-96 overflow-y-auto bg-surface border border-border rounded-xl shadow-xl z-20">
               <div className="p-3 border-b border-border flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">选择音色 (语音合成)</span>
+                <span className="text-sm font-medium text-foreground">选择音色参考（间接影响歌曲风格）</span>
                 <button
                   onClick={() => {
                     setIsCloneModalOpen(true)
@@ -191,6 +191,9 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
                   克隆音色
                 </button>
               </div>
+              <p className="px-3 py-2 text-xs text-text-muted border-b border-border">
+                当前选择会保留为音色参考，用于后续参考音频/风格工作流，不保证直接绑定歌曲歌声音色。
+              </p>
 
               <div className="p-2">
                 <p className="px-2 py-1 text-xs text-text-muted">系统音色</p>

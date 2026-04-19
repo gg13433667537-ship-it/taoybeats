@@ -48,7 +48,7 @@ export async function GET(
           userNotes: dbSong.userNotes || undefined,
           isInstrumental: false,
           status: dbSong.status as Song['status'],
-          moderationStatus: dbSong.moderationStatus as Song['moderationStatus'],
+          moderationStatus: "APPROVED",
           audioUrl: dbSong.audioUrl || undefined,
           coverUrl: dbSong.coverUrl || undefined,
           shareToken: dbSong.shareToken || undefined,

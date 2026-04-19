@@ -98,6 +98,8 @@ model Song {
   referenceSong   String?
   userNotes       String?  @db.Text
   status          GenerationStatus @default(PENDING)
+  providerTaskId  String?
+  errorMessage    String?  @db.Text
   audioUrl        String?
   coverUrl        String?
   shareToken      String?  @unique

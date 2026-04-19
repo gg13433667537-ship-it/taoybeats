@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { GET as getSongs, POST as createSong } from '@/app/api/songs/route'
+import { musicProvider } from '@/lib/ai-providers'
 import { createSessionToken } from '@/lib/auth-utils'
 import { prisma } from '@/lib/db'
 
@@ -80,6 +81,7 @@ describe('Songs API', () => {
     // Reset environment
     process.env.MINIMAX_API_KEY = 'test-api-key'
     process.env.MINIMAX_API_URL = 'https://api.minimaxi.com'
+    vi.spyOn(musicProvider, 'generate').mockResolvedValue('test-task-123')
   })
 
   describe('GET /api/songs', () => {
@@ -179,7 +181,8 @@ describe('Songs API', () => {
       expect(response.status).toBe(200)
       expect(data.id).toBeDefined()
       expect(data.shareToken).toBeDefined()
-      expect(data.status).toBe('PENDING')
+      expect(data.status).toBe('GENERATING')
+      expect(data.multiPart).toBeUndefined()
     })
 
     it('should create instrumental song without lyrics', async () => {
@@ -198,6 +201,33 @@ describe('Songs API', () => {
 
       expect(response.status).toBe(200)
       expect(data.id).toBeDefined()
+    })
+
+    it('should compress very long lyrics instead of creating multipart songs', async () => {
+      const sessionToken = createTestSessionToken('long-user', 'long@example.com')
+      const originalLyrics = Array.from({ length: 120 }, (_, index) => `Line ${index + 1} should compress.`).join('\n')
+      const request = createMockNextRequest('http://localhost:3000/api/songs', {
+        title: 'Long Song',
+        lyrics: originalLyrics,
+        genre: ['pop'],
+        mood: 'epic',
+      }, {
+        cookies: [{ name: 'session-token', value: sessionToken }],
+      })
+
+      const response = await createSong(request as any)
+      const data = await response.json()
+      const createdSong = global.songs?.get(data.id)
+
+      expect(response.status).toBe(200)
+      expect(data.multiPart).toBeUndefined()
+      expect(data.compression).toMatchObject({
+        applied: true,
+        reason: 'lyrics_too_long',
+      })
+      expect(vi.mocked(prisma.song.create).mock.calls.length).toBe(1)
+      expect(createdSong?.lyrics?.length).toBeLessThan(originalLyrics.length)
+      expect(createdSong?.partGroupId).toBeUndefined()
     })
 
     it('should fall back to memory storage when Prisma is unavailable', async () => {

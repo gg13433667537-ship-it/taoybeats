@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song, User } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { musicProvider } from "@/lib/ai-providers"
+import { musicProvider, type StemSplitResult as ProviderStemSplitResult } from "@/lib/ai-providers"
 
 // Global storage is shared from main songs route
 
@@ -39,6 +39,40 @@ export interface StemSplitResponse {
   stems: StemResult[]
   originalAudioUrl: string
   processingTime: number
+}
+
+const STEM_TYPES: StemType[] = ['vocals', 'drums', 'bass', 'other']
+const STEM_LABELS: Record<StemType, string> = {
+  vocals: 'Vocals',
+  drums: 'Drums',
+  bass: 'Bass',
+  other: 'Other Instruments',
+}
+const STEM_DESCRIPTIONS: Record<StemType, string> = {
+  vocals: 'Lead vocals and harmonies',
+  drums: 'Drum tracks and percussion',
+  bass: 'Bass guitar and low-frequency instruments',
+  other: 'Guitars, synths, strings, and other instruments',
+}
+
+function isStemType(value: unknown): value is StemType {
+  return typeof value === "string" && STEM_TYPES.includes(value as StemType)
+}
+
+function normalizeProviderStem(stem: ProviderStemSplitResult, index: number): StemResult {
+  const stemType = isStemType(stem.stem_type) ? stem.stem_type : STEM_TYPES[index] ?? 'other'
+
+  return {
+    stem_type: stemType,
+    label: typeof stem.label === "string" && stem.label.length > 0 ? stem.label : STEM_LABELS[stemType],
+    description:
+      typeof stem.description === "string" && stem.description.length > 0
+        ? stem.description
+        : STEM_DESCRIPTIONS[stemType],
+    audioUrl: stem.audioUrl,
+    format: typeof stem.format === "string" && stem.format.length > 0 ? stem.format : 'mp3',
+    duration: typeof stem.duration === "number" ? stem.duration : 0,
+  }
 }
 
 /**
@@ -118,11 +152,16 @@ export async function POST(
     // Call MiniMax stem splitting API
     let stems: StemResult[] = []
     try {
-      stems = await musicProvider.splitStems!(
-        { audioUrl: song.audioUrl! },
-        apiKey,
-        apiUrl
-      )
+      if (musicProvider.splitStems) {
+        const providerStems = await musicProvider.splitStems(
+          { audioUrl: song.audioUrl! },
+          apiKey,
+          apiUrl
+        )
+        stems = providerStems.map((stem, index) => normalizeProviderStem(stem, index))
+      } else {
+        stems = await splitAudioStems(song.audioUrl!, song.title, songId)
+      }
     } catch (stemError) {
       // Fallback to local stem splitting if API fails
       console.error("[Stems] MiniMax API failed, using fallback:", stemError)
@@ -166,20 +205,6 @@ export async function POST(
  * - Storing results in cloud storage (S3/Supabase Storage)
  */
 async function splitAudioStems(audioUrl: string, title: string, songId: string): Promise<StemResult[]> {
-  const stemTypes: StemType[] = ['vocals', 'drums', 'bass', 'other']
-  const labels: Record<StemType, string> = {
-    vocals: 'Vocals',
-    drums: 'Drums',
-    bass: 'Bass',
-    other: 'Other Instruments',
-  }
-  const descriptions: Record<StemType, string> = {
-    vocals: 'Lead vocals and harmonies',
-    drums: 'Drum tracks and percussion',
-    bass: 'Bass guitar and low-frequency instruments',
-    other: 'Guitars, synths, strings, and other instruments',
-  }
-
   // Check if we have a Demucs API configured
   const demucsApiUrl = process.env.DEMUCS_API_URL
   const demucsApiKey = process.env.DEMUCS_API_KEY
@@ -196,7 +221,7 @@ async function splitAudioStems(audioUrl: string, title: string, songId: string):
         body: JSON.stringify({
           audio_url: audioUrl,
           model: 'htdemucs',
-          stems: stemTypes,
+          stems: STEM_TYPES,
         }),
       })
 
@@ -204,10 +229,10 @@ async function splitAudioStems(audioUrl: string, title: string, songId: string):
         const data = await response.json()
 
         // Map service response to our StemResult format
-        return stemTypes.map(stem_type => ({
+        return STEM_TYPES.map(stem_type => ({
           stem_type,
-          label: labels[stem_type],
-          description: descriptions[stem_type],
+          label: STEM_LABELS[stem_type],
+          description: STEM_DESCRIPTIONS[stem_type],
           audioUrl: data.stems?.[stem_type] || data[stem_type] || audioUrl,
           format: 'mp3',
           duration: 0,
@@ -238,10 +263,10 @@ async function splitAudioStems(audioUrl: string, title: string, songId: string):
       if (response.ok) {
         const data = await response.json()
 
-        return stemTypes.map(stem_type => ({
+        return STEM_TYPES.map(stem_type => ({
           stem_type,
-          label: labels[stem_type],
-          description: descriptions[stem_type],
+          label: STEM_LABELS[stem_type],
+          description: STEM_DESCRIPTIONS[stem_type],
           audioUrl: data.stems?.[stem_type]?.url || audioUrl,
           format: 'mp3',
           duration: 0,
@@ -257,10 +282,10 @@ async function splitAudioStems(audioUrl: string, title: string, songId: string):
   // In production, this should trigger a background job for Demucs processing
   console.log(`[Stems] No external service configured, using placeholder for song ${songId}`)
 
-  return stemTypes.map(stem_type => ({
+  return STEM_TYPES.map(stem_type => ({
     stem_type,
-    label: labels[stem_type],
-    description: descriptions[stem_type],
+    label: STEM_LABELS[stem_type],
+    description: STEM_DESCRIPTIONS[stem_type],
     audioUrl: audioUrl, // Placeholder - in production, queue for async processing
     format: 'mp3',
     duration: 0,

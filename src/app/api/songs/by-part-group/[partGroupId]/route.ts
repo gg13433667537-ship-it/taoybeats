@@ -35,7 +35,7 @@ export async function GET(
       userNotes: s.userNotes || undefined,
       isInstrumental: false,
       status: s.status as Song['status'],
-      moderationStatus: s.moderationStatus as Song['moderationStatus'],
+      moderationStatus: "APPROVED",
       audioUrl: s.audioUrl || undefined,
       coverUrl: s.coverUrl || undefined,
       shareToken: s.shareToken || undefined,

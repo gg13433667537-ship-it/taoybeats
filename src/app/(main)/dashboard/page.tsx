@@ -31,8 +31,9 @@ interface DisplayItem {
 
 interface Usage {
   tier: string
-  daily: { used: number; limit: number; remaining: number }
-  monthly: { used: number; limit: number; remaining: number }
+  daily: { used: number; limit: number | null; remaining: number | null; unlimited: boolean }
+  monthly: { used: number; limit: number | null; remaining: number | null; unlimited: boolean }
+  output: { successfulToday: number; successfulThisMonth: number }
 }
 
 interface Playlist {
@@ -75,6 +76,35 @@ export default function DashboardPage() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const playlistDropdownRef = useRef<HTMLDivElement>(null)
   const songOptionsRef = useRef<HTMLDivElement>(null)
+  const completedSongsCount = useMemo(
+    () => songs.filter((song) => song.status === 'COMPLETED').length,
+    [songs]
+  )
+
+  const renderUsageHeadline = useCallback((bucket: Usage["daily"] | Usage["monthly"]) => {
+    if (bucket.unlimited) {
+      return '无限生成'
+    }
+
+    return `${bucket.remaining ?? 0} / ${bucket.limit ?? 0}`
+  }, [])
+
+  const renderUsageProgress = useCallback((bucket: Usage["daily"] | Usage["monthly"]) => {
+    if (bucket.unlimited || !bucket.limit || bucket.limit <= 0) {
+      return null
+    }
+
+    const progress = Math.min(100, ((bucket.used ?? 0) / bucket.limit) * 100)
+
+    return (
+      <div className="mt-2 h-1 rounded-full bg-border overflow-hidden">
+        <div
+          className="h-full bg-accent rounded-full"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    )
+  }, [])
 
   // Handle download - local download without opening new window
   const handleDownload = async (song: Song) => {
@@ -528,43 +558,30 @@ export default function DashboardPage() {
                   <Zap className="w-4 h-4 text-accent" aria-hidden="true" />
                   <span className="text-sm text-text-secondary">{t('daily')}</span>
                 </div>
-                <p className="text-2xl font-bold text-foreground">
-                  {usage.daily?.remaining ?? '—'}
-                  <span className="text-sm text-text-muted font-normal"> / {usage.daily?.limit ?? '—'}</span>
+                <p className="text-2xl font-bold text-foreground">{renderUsageHeadline(usage.daily)}</p>
+                <p className="mt-2 text-xs text-text-secondary">
+                  今日已生成 {usage.output?.successfulToday ?? 0} 首
                 </p>
-                <div className="mt-2 h-1 rounded-full bg-border overflow-hidden">
-                  <div
-                    className="h-full bg-accent rounded-full"
-                    style={{ width: `${((usage.daily?.used ?? 0) / (usage.daily?.limit ?? 1)) * 100}%` }}
-                  />
-                </div>
+                {renderUsageProgress(usage.daily)}
               </div>
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">
                   <Clock className="w-4 h-4 text-accent" aria-hidden="true" />
                   <span className="text-sm text-text-secondary">{t('monthlyUsage')}</span>
                 </div>
-                <p className="text-2xl font-bold text-foreground">
-                  {usage.monthly?.remaining === -1 ? '∞' : (usage.monthly?.remaining ?? '—')}
-                  <span className="text-sm text-text-muted font-normal">
-                    {usage.monthly?.limit === -1 ? '' : ` / ${usage.monthly?.limit ?? '—'}`}
-                  </span>
+                <p className="text-2xl font-bold text-foreground">{renderUsageHeadline(usage.monthly)}</p>
+                <p className="mt-2 text-xs text-text-secondary">
+                  本月已生成 {usage.output?.successfulThisMonth ?? 0} 首
                 </p>
-                {usage.monthly?.limit !== -1 && (
-                  <div className="mt-2 h-1 rounded-full bg-border overflow-hidden">
-                    <div
-                      className="h-full bg-accent rounded-full"
-                      style={{ width: `${((usage.monthly?.used ?? 0) / (usage.monthly?.limit ?? 1)) * 100}%` }}
-                    />
-                  </div>
-                )}
+                {renderUsageProgress(usage.monthly)}
               </div>
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">
                   <Music className="w-4 h-4 text-accent" aria-hidden="true" />
                   <span className="text-sm text-text-secondary">{t('totalSongs')}</span>
                 </div>
-                <p className="text-2xl font-bold text-foreground">{songs.length}</p>
+                <p className="text-2xl font-bold text-foreground">{completedSongsCount}</p>
+                <p className="mt-2 text-xs text-text-secondary">仅统计成功生成</p>
               </div>
               <div className="p-4 rounded-xl bg-surface border border-border">
                 <div className="flex items-center gap-2 mb-2">

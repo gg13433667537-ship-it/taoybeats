@@ -38,6 +38,7 @@ export default function SelectorDrawer({
   const [searchQuery, setSearchQuery] = useState("")
   const [tempSelected, setTempSelected] = useState<string[]>(selectedValues)
   const drawerRef = useRef<HTMLDivElement>(null)
+  const closeTimeoutRef = useRef<number | null>(null)
   const [translateY, setTranslateY] = useState(0)
   const startYRef = useRef(0)
   const isDraggingRef = useRef(false)
@@ -61,16 +62,33 @@ export default function SelectorDrawer({
 
   // Handle open/close animations
   useEffect(() => {
+    if (closeTimeoutRef.current !== null) {
+      window.clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
+    }
+
     if (isOpen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsVisible(true)
       setTempSelected(selectedValues)
       requestAnimationFrame(() => setIsAnimating(true))
     } else {
+      if (!isVisible) return
       setIsAnimating(false)
-      setTimeout(() => setIsVisible(false), 300)
+      closeTimeoutRef.current = window.setTimeout(() => {
+        setIsVisible(false)
+        closeTimeoutRef.current = null
+      }, 300)
     }
-  }, [isOpen, selectedValues])
+  }, [isOpen, isVisible, selectedValues])
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current !== null) {
+        window.clearTimeout(closeTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Close on escape key
   useEffect(() => {

@@ -62,68 +62,87 @@ function getSongsMap(): Map<string, Song> {
 const FREE_DAILY_LIMIT = 3
 const FREE_MONTHLY_LIMIT = 10
 
-// Lyrics segment size for MiniMax API (~400 chars per segment to stay under ~5 min limit)
-const LYRICS_SEGMENT_SIZE = 400
-const MIN_LYRICS_FOR_SPLIT = 500 // Only split if lyrics exceed this length
+const MAX_SINGLE_PASS_LYRICS_LENGTH = 1800
+const MAX_SINGLE_PASS_LINE_COUNT = 64
+const MAX_SINGLE_PASS_LINE_LENGTH = 80
 
 function getDateKey(): string {
   return new Date().toISOString().split('T')[0]
 }
 
-/**
- * Split lyrics into segments of approximately LYRICS_SEGMENT_SIZE characters.
- * Attempts to split at line breaks or sentence boundaries for better readability.
- */
-function splitLyricsIntoSegments(lyrics: string | undefined): { segments: string[]; needsSplit: boolean } {
+function truncateLine(line: string): string {
+  const trimmed = line.trim()
+  if (trimmed.length <= MAX_SINGLE_PASS_LINE_LENGTH) {
+    return trimmed
+  }
+
+  return `${trimmed.slice(0, MAX_SINGLE_PASS_LINE_LENGTH - 1).trimEnd()}…`
+}
+
+function compressLyricsForSinglePass(lyrics: string | undefined): {
+  lyrics: string
+  applied: boolean
+  originalLength: number
+  compressedLength: number
+} {
   if (!lyrics) {
-    return { segments: [], needsSplit: false }
-  }
-
-  if (lyrics.length <= MIN_LYRICS_FOR_SPLIT) {
-    return { segments: [lyrics], needsSplit: false }
-  }
-
-  const segments: string[] = []
-  const lines = lyrics.split('\n')
-  let currentSegment = ''
-  let currentLength = 0
-
-  for (const line of lines) {
-    const lineLength = line.length
-
-    // If adding this line would exceed segment size
-    if (currentLength + lineLength > LYRICS_SEGMENT_SIZE && currentSegment.length > 0) {
-      // Save current segment and start a new one
-      segments.push(currentSegment.trim())
-      currentSegment = ''
-      currentLength = 0
-
-      // If single line is longer than segment size, break it anyway
-      if (lineLength > LYRICS_SEGMENT_SIZE) {
-        // Break long line into smaller pieces
-        let remaining = line
-        while (remaining.length > LYRICS_SEGMENT_SIZE) {
-          segments.push(remaining.slice(0, LYRICS_SEGMENT_SIZE))
-          remaining = remaining.slice(LYRICS_SEGMENT_SIZE)
-        }
-        currentSegment = remaining
-        currentLength = remaining.length
-      } else {
-        currentSegment = line
-        currentLength = lineLength
-      }
-    } else {
-      currentSegment += (currentSegment ? '\n' : '') + line
-      currentLength += lineLength
+    return {
+      lyrics: '',
+      applied: false,
+      originalLength: 0,
+      compressedLength: 0,
     }
   }
 
-  // Add remaining content
-  if (currentSegment.trim()) {
-    segments.push(currentSegment.trim())
+  const normalizedLines = lyrics
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+
+  const withinSinglePassBudget =
+    lyrics.length <= MAX_SINGLE_PASS_LYRICS_LENGTH &&
+    normalizedLines.length <= MAX_SINGLE_PASS_LINE_COUNT
+
+  if (withinSinglePassBudget) {
+    return {
+      lyrics,
+      applied: false,
+      originalLength: lyrics.length,
+      compressedLength: lyrics.length,
+    }
   }
 
-  return { segments, needsSplit: segments.length > 1 }
+  if (normalizedLines.length === 0) {
+    return {
+      lyrics: '',
+      applied: false,
+      originalLength: lyrics.length,
+      compressedLength: 0,
+    }
+  }
+
+  const step = Math.max(1, Math.ceil(normalizedLines.length / MAX_SINGLE_PASS_LINE_COUNT))
+  const selectedLines = normalizedLines
+    .filter((_, index) => index % step === 0)
+    .map(truncateLine)
+
+  let compressedLyrics = selectedLines.join('\n')
+
+  while (compressedLyrics.length > MAX_SINGLE_PASS_LYRICS_LENGTH && selectedLines.length > 1) {
+    selectedLines.pop()
+    compressedLyrics = selectedLines.join('\n')
+  }
+
+  if (compressedLyrics.length > MAX_SINGLE_PASS_LYRICS_LENGTH) {
+    compressedLyrics = compressedLyrics.slice(0, MAX_SINGLE_PASS_LYRICS_LENGTH).trimEnd()
+  }
+
+  return {
+    lyrics: compressedLyrics,
+    applied: compressedLyrics !== lyrics,
+    originalLength: lyrics.length,
+    compressedLength: compressedLyrics.length,
+  }
 }
 
 function getMonthKey(): string {
@@ -329,6 +348,7 @@ export async function GET(request: NextRequest) {
       isInstrumental: false,
       status: s.status,
       moderationStatus: "APPROVED" as const,
+      providerTaskId: s.providerTaskId || undefined,
       audioUrl: s.audioUrl || undefined,
       coverUrl: s.coverUrl || undefined,
       shareToken: s.shareToken || undefined,
@@ -412,8 +432,7 @@ export async function POST(request: NextRequest) {
     const sanitizedTitle = sanitizeString(title)
     const sanitizedLyricsInput = lyrics ? sanitizeString(lyrics) : undefined
 
-    // Split lyrics into segments if too long for single MiniMax generation
-    const { segments: lyricsSegments, needsSplit } = splitLyricsIntoSegments(sanitizedLyricsInput)
+    const compressedLyrics = compressLyricsForSinglePass(sanitizedLyricsInput)
 
     const sanitizedMood = sanitizeString(mood)
     const sanitizedGenre = genre.map((g: string) => sanitizeString(g)).filter((g: string) => g.length > 0)
@@ -425,7 +444,7 @@ export async function POST(request: NextRequest) {
     // Validation - lyrics not required if instrumental or if lyricsOptimizer is enabled
     const instrumental = isInstrumental === true || isInstrumental === "true"
     const enableLyricsOptimizer = lyricsOptimizer === true || lyricsOptimizer === "true"
-    if (!instrumental && lyricsSegments.length === 0 && !enableLyricsOptimizer) {
+    if (!instrumental && !compressedLyrics.lyrics.trim() && !enableLyricsOptimizer) {
       return NextResponse.json(
         { error: "Missing required fields: title, lyrics, genre, mood" },
         { status: 400 }
@@ -535,11 +554,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate partGroupId for multi-part songs
-    const partGroupId = needsSplit ? crypto.randomUUID() : undefined
-    const totalParts = lyricsSegments.length
-
-    // Build common song properties (shared across all segments)
+    // Build song properties
     const commonSongProps = {
       userId: user.id,
       title: sanitizedTitle,
@@ -565,69 +580,54 @@ export async function POST(request: NextRequest) {
     }
 
     const songsMap = getSongsMap()
-    const createdSongs: Array<{ id: string; part: number; shareToken: string }> = []
     const now = new Date().toISOString()
+    const songId = crypto.randomUUID()
+    const shareToken = crypto.randomUUID().slice(0, 8)
+    const song: Song = {
+      id: songId,
+      ...commonSongProps,
+      lyrics: compressedLyrics.lyrics || undefined,
+      status: "PENDING",
+      providerTaskId: undefined,
+      errorMessage: undefined,
+      audioUrl: undefined,
+      videoUrl: undefined,
+      coverUrl: undefined,
+      shareToken,
+      createdAt: now,
+      updatedAt: now,
+    }
 
-    // If no lyrics segments (empty lyrics with lyricsOptimizer enabled), create a single song
-    const segmentsToCreate = lyricsSegments.length > 0 ? lyricsSegments : ['']
+    songsMap.set(songId, song)
 
-    // Create song records for each segment
-    for (let partIndex = 0; partIndex < segmentsToCreate.length; partIndex++) {
-      const segmentLyrics = segmentsToCreate[partIndex]
-      const partNumber = partIndex + 1
-      const songId = crypto.randomUUID()
-      const shareToken = partNumber === 1 ? crypto.randomUUID().slice(0, 8) : undefined // Only first part gets shareToken
-
-      const song: Song = {
-        id: songId,
-        ...commonSongProps,
-        lyrics: segmentLyrics,
-        status: "PENDING",
-        audioUrl: undefined,
-        videoUrl: undefined,
-        coverUrl: undefined,
-        shareToken,
-        partGroupId,
-        part: partNumber,
-        createdAt: now,
-        updatedAt: now,
-      }
-
-      songsMap.set(songId, song)
-
-      // Persist to Prisma - if this fails, no songs are created
-      try {
-        await prisma.song.create({
-          data: {
-            id: songId,
-            title: song.title,
-            lyrics: song.lyrics || null,
-            genre: song.genre,
-            mood: song.mood || null,
-            instruments: song.instruments,
-            referenceSinger: song.referenceSinger || null,
-            referenceSong: song.referenceSong || null,
-            userNotes: song.userNotes || null,
-            status: "PENDING",
-            audioUrl: null,
-            coverUrl: null,
-            shareToken: shareToken || null,
-            userId: user.id,
-            partGroupId: partGroupId || null,
-            part: partNumber,
-            forkedFrom: song.forkedFrom || null,
-            originalOwnerId: song.originalOwnerId || null,
-          },
-        })
-      } catch (prismaError) {
-        console.error("Failed to persist song to Prisma, continuing with memory fallback:", prismaError)
-      }
-
-      createdSongs.push({ id: songId, part: partNumber, shareToken: shareToken || '' })
+    try {
+      await prisma.song.create({
+        data: {
+          id: songId,
+          title: song.title,
+          lyrics: song.lyrics || null,
+          genre: song.genre,
+          mood: song.mood || null,
+          instruments: song.instruments,
+          referenceSinger: song.referenceSinger || null,
+          referenceSong: song.referenceSong || null,
+          userNotes: song.userNotes || null,
+          status: "PENDING",
+          providerTaskId: null,
+          errorMessage: null,
+          audioUrl: null,
+          coverUrl: null,
+          shareToken,
+          userId: user.id,
+          forkedFrom: song.forkedFrom || null,
+          originalOwnerId: song.originalOwnerId || null,
+        },
+      })
+    } catch (prismaError) {
+      console.error("Failed to persist song to Prisma, continuing with memory fallback:", prismaError)
     }
 
     // Increment usage in database ONLY after all songs are successfully created
-    // Count each segment as one usage (user is generating one song, just split into parts)
     try {
       await incrementUsage(user.id)
     } catch (dbError) {
@@ -635,33 +635,25 @@ export async function POST(request: NextRequest) {
       // Songs were created, but usage increment failed - not critical
     }
 
-    // Start real generation in background for each segment
-    for (const { id, part } of createdSongs) {
-      const song = songsMap.get(id)
-      if (song) {
-        generateMusic(id, song, apiKey, apiUrl).catch((err) => {
-          console.error(`[Generate] Song ${id} (part ${part}) background generation failed:`, err)
-        })
-      }
-    }
+    const initiatedSong = await initiateMusicGeneration(songId, song, apiKey, apiUrl)
+    songsMap.set(songId, initiatedSong)
 
-    // Return primary song info (first part) plus multi-part info
-    const primarySong = createdSongs[0]
     const isAdmin = user.role === 'ADMIN'
     return NextResponse.json({
-      id: primarySong.id,
-      shareToken: primarySong.shareToken,
-      status: "PENDING",
+      id: songId,
+      shareToken,
+      status: initiatedSong.status || "PENDING",
+      audioUrl: initiatedSong.audioUrl,
       usage: isAdmin ? { unlimited: true } : {
         daily: { used: user.dailyUsage + 1, limit: FREE_DAILY_LIMIT },
         monthly: { used: user.monthlyUsage + 1, limit: FREE_MONTHLY_LIMIT },
       },
-      multiPart: needsSplit ? {
-        isMultiPart: true,
-        partGroupId,
-        totalParts,
-        parts: createdSongs.map(s => ({ id: s.id, part: s.part })),
-      } : undefined,
+      compression: {
+        applied: compressedLyrics.applied,
+        reason: compressedLyrics.applied ? 'lyrics_too_long' : null,
+        originalLength: compressedLyrics.originalLength,
+        compressedLength: compressedLyrics.compressedLength,
+      },
     })
   } catch (error) {
     console.error("Error creating song:", error)
@@ -675,24 +667,51 @@ export async function POST(request: NextRequest) {
 // Helper to update song in both memory and Prisma
 async function updateSongStatus(
   songId: string,
-  updates: Partial<Pick<Song, 'status' | 'audioUrl' | 'videoUrl' | 'error'>>,
+  updates: Partial<Pick<Song, 'status' | 'audioUrl' | 'videoUrl' | 'error' | 'errorMessage'>> & { providerTaskId?: string | null },
   currentSong: Song
 ): Promise<void> {
   const songsMap = getSongsMap()
   const now = new Date().toISOString()
+  const hasProviderTaskIdUpdate = Object.prototype.hasOwnProperty.call(updates, 'providerTaskId')
+  const { providerTaskId, ...songUpdates } = updates
+  const nextSong: Song = {
+    ...currentSong,
+    ...songUpdates,
+    ...(typeof updates.error !== 'undefined' ? { errorMessage: updates.error } : {}),
+    ...(hasProviderTaskIdUpdate ? { providerTaskId: providerTaskId || undefined } : {}),
+    updatedAt: now,
+  }
 
   // Update memory cache
-  songsMap.set(songId, { ...currentSong, ...updates, updatedAt: now })
+  songsMap.set(songId, nextSong)
 
   // Update Prisma database (error field is not stored in Prisma, only in memory)
   try {
+    const prismaUpdates: Record<string, unknown> = {}
+
+    if (typeof updates.status !== 'undefined') {
+      prismaUpdates.status = updates.status
+    }
+
+    if (typeof updates.audioUrl !== 'undefined') {
+      prismaUpdates.audioUrl = updates.audioUrl || null
+    }
+
+    if (typeof updates.videoUrl !== 'undefined') {
+      prismaUpdates.coverUrl = updates.videoUrl || null
+    }
+
+    if (typeof updates.error !== 'undefined' || typeof updates.errorMessage !== 'undefined') {
+      prismaUpdates.errorMessage = updates.errorMessage || updates.error || null
+    }
+
+    if (hasProviderTaskIdUpdate) {
+      prismaUpdates.providerTaskId = providerTaskId || null
+    }
+
     await prisma.song.update({
       where: { id: songId },
-      data: {
-        status: updates.status,
-        audioUrl: updates.audioUrl,
-        ...(updates.videoUrl && { coverUrl: updates.videoUrl }),
-      },
+      data: prismaUpdates,
     })
   } catch (dbError) {
     console.error(`[Generate] Failed to update Prisma for song ${songId}:`, dbError)
@@ -700,19 +719,16 @@ async function updateSongStatus(
   }
 }
 
-async function generateMusic(
+async function initiateMusicGeneration(
   songId: string,
   song: Song,
   apiKey: string,
   apiUrl?: string
-) {
+) : Promise<Song> {
   const songsMap = getSongsMap()
+  const resolvedApiUrl = apiUrl || 'https://api.minimaxi.com'
 
   try {
-    // Update status to GENERATING
-    await updateSongStatus(songId, { status: "GENERATING" }, song)
-
-    // Call Music API
     const taskId = await musicProvider.generate({
       title: song.title,
       lyrics: song.lyrics || '',
@@ -723,6 +739,7 @@ async function generateMusic(
       referenceSong: song.referenceSong,
       userNotes: song.userNotes,
       isInstrumental: song.isInstrumental,
+      voiceId: song.voiceId,
       referenceAudio: song.referenceAudio || song.referenceAudioUrl,
       model: song.model || 'music-2.6',
       outputFormat: song.outputFormat,
@@ -730,79 +747,40 @@ async function generateMusic(
       sampleRate: song.sampleRate,
       bitrate: song.bitrate,
       aigcWatermark: song.aigcWatermark,
-    }, apiKey, apiUrl || 'https://api.minimaxi.com')
+    }, apiKey, resolvedApiUrl)
 
-    // Poll for progress
-    const maxWaitTime = 10 * 60 * 1000 // 10 minutes max
-    const pollInterval = 5000 // 5 seconds
-    const startTime = Date.now()
+    if (taskId.startsWith('audio:')) {
+      const sourceAudioUrl = taskId.slice(6)
+      let finalAudioUrl = sourceAudioUrl
 
-    while (Date.now() - startTime < maxWaitTime) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval))
-
-      const progress = await musicProvider.getProgress(taskId, apiKey, apiUrl || 'https://api.minimaxi.com')
-
-      // Update song with latest status in both memory and DB
-      const currentSong = songsMap.get(songId)
-      if (!currentSong) break
+      try {
+        finalAudioUrl = await uploadAudioFromUrl(sourceAudioUrl, songId)
+        console.log(`[Generate] Song ${songId} uploaded to R2: ${finalAudioUrl}`)
+      } catch (r2Error) {
+        console.error(`[Generate] Song ${songId} R2 upload failed, using provider URL:`, r2Error)
+      }
 
       await updateSongStatus(songId, {
-        status: progress.status,
-        audioUrl: progress.audioUrl,
-        videoUrl: progress.videoUrl,
-      }, currentSong)
-
-      if (progress.status === 'COMPLETED') {
-        console.log(`[Generate] Song ${songId} completed, audioUrl: ${progress.audioUrl}`)
-
-        // Upload to R2 and store R2 URL (fallback to MiniMax URL on failure)
-        let finalAudioUrl = progress.audioUrl
-        if (progress.audioUrl) {
-          try {
-            finalAudioUrl = await uploadAudioFromUrl(progress.audioUrl, songId)
-            console.log(`[Generate] Song ${songId} uploaded to R2: ${finalAudioUrl}`)
-          } catch (r2Error) {
-            console.error(`[Generate] Song ${songId} R2 upload failed, using MiniMax URL:`, r2Error)
-          }
-        }
-
-        // Update with final URL (R2 or MiniMax fallback)
-        const currentSongAfterComplete = songsMap.get(songId)
-        if (currentSongAfterComplete) {
-          await updateSongStatus(songId, {
-            status: 'COMPLETED',
-            audioUrl: finalAudioUrl,
-            videoUrl: progress.videoUrl,
-          }, currentSongAfterComplete)
-        }
-        return // Successful completion
-      }
-
-      if (progress.status === 'FAILED') {
-        console.error(`[Generate] Song ${songId} failed:`, progress.error)
-        // Store the error message
-        const currentSongAfterFail = songsMap.get(songId)
-        if (currentSongAfterFail) {
-          await updateSongStatus(songId, {
-            status: 'FAILED',
-            error: progress.error || 'MiniMax generation failed',
-          }, currentSongAfterFail)
-        }
-        return // Explicit failure
-      }
+        status: 'COMPLETED',
+        audioUrl: finalAudioUrl,
+        providerTaskId: null,
+      }, song)
+    } else {
+      await updateSongStatus(songId, {
+        status: 'GENERATING',
+        providerTaskId: taskId,
+      }, song)
     }
 
-    // Timeout or unexpected state - update final status
-    const finalSong = songsMap.get(songId)
-    if (finalSong && finalSong.status !== 'COMPLETED' && finalSong.status !== 'FAILED') {
-      await updateSongStatus(songId, { status: 'FAILED' }, finalSong)
-    }
+    return songsMap.get(songId) || song
   } catch (error) {
-    console.error(`[Generate] Song ${songId} error:`, error)
+    console.error(`[Generate] Song ${songId} initiation error:`, error)
     const currentSong = songsMap.get(songId) || song
     await updateSongStatus(songId, {
       status: 'FAILED',
       error: error instanceof Error ? error.message : 'Generation failed',
+      providerTaskId: null,
     }, currentSong)
+    return songsMap.get(songId) || currentSong
   }
 }

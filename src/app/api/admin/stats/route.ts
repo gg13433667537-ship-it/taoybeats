@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { prisma } from "@/lib/db"
 import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 
 
@@ -20,21 +21,6 @@ interface AdminLog {
   details?: Record<string, unknown>
   createdAt: string
 }
-
-interface AdminSong {
-  id: string
-  userId: string
-  status: string
-}
-
-if (!global.users) global.users = new Map()
-if (!global.songs) global.songs = new Map()
-if (!global.adminLogs) global.adminLogs = new Map()
-
-const adminLogs = global.adminLogs as Map<string, AdminLog>
-
-const users = global.users
-const songs = global.songs
 
 function getSessionUser(request: NextRequest): SessionUser | null {
   const sessionToken = request.cookies.get('session-token')?.value
@@ -57,6 +43,18 @@ function isAdmin(user: SessionUser | null): boolean {
   return user?.role === 'ADMIN'
 }
 
+function getStartOfToday(): Date {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function getStartOfMonth(): Date {
+  const date = getStartOfToday()
+  date.setDate(1)
+  return date
+}
+
 // GET /api/admin/stats - Get system statistics
 export async function GET(request: NextRequest) {
   // Rate limiting for admin endpoint
@@ -71,49 +69,77 @@ export async function GET(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
   }
 
-  const allUsers = Array.from(users.values())
-  const allSongs = Array.from((songs as Map<string, AdminSong>).values())
-  const allLogs = Array.from(adminLogs.values())
+  try {
+    const startOfToday = getStartOfToday()
+    const startOfMonth = getStartOfMonth()
 
-  // Calculate stats
-  const totalUsers = allUsers.length
-  const totalSongs = allSongs.length
-  const activeUsers = allUsers.filter(u => u.isActive !== false).length
-  const adminUsers = allUsers.filter(u => u.role === 'ADMIN').length
-  const proUsers = allUsers.filter(u => u.tier === 'PRO').length
+    const [
+      totalUsers,
+      activeUsers,
+      adminUsers,
+      proUsers,
+      usageUsers,
+      totalSongs,
+      pendingSongs,
+      generatingSongs,
+      completedSongs,
+      failedSongs,
+      successfulToday,
+      successfulThisMonth,
+      recentLogs,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { isActive: true } }),
+      prisma.user.count({ where: { role: 'ADMIN' } }),
+      prisma.user.count({ where: { tier: 'PRO' } }),
+      prisma.user.findMany({
+        select: {
+          dailyUsage: true,
+          monthlyUsage: true,
+        },
+      }),
+      prisma.song.count(),
+      prisma.song.count({ where: { status: 'PENDING' } }),
+      prisma.song.count({ where: { status: 'GENERATING' } }),
+      prisma.song.count({ where: { status: 'COMPLETED' } }),
+      prisma.song.count({ where: { status: 'FAILED' } }),
+      prisma.song.count({ where: { status: 'COMPLETED', createdAt: { gte: startOfToday } } }),
+      prisma.song.count({ where: { status: 'COMPLETED', createdAt: { gte: startOfMonth } } }),
+      prisma.adminLog.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ])
 
-  // Songs by status
-  const songsByStatus = {
-    PENDING: allSongs.filter(s => s.status === 'PENDING').length,
-    GENERATING: allSongs.filter(s => s.status === 'GENERATING').length,
-    COMPLETED: allSongs.filter(s => s.status === 'COMPLETED').length,
-    FAILED: allSongs.filter(s => s.status === 'FAILED').length,
+    const totalDailyUsage = usageUsers.reduce((sum, current) => sum + (current.dailyUsage || 0), 0)
+    const totalMonthlyUsage = usageUsers.reduce((sum, current) => sum + (current.monthlyUsage || 0), 0)
+
+    return applySecurityHeaders(NextResponse.json({
+      users: {
+        total: totalUsers,
+        active: activeUsers,
+        admins: adminUsers,
+        pro: proUsers,
+      },
+      songs: {
+        total: totalSongs,
+        byStatus: {
+          PENDING: pendingSongs,
+          GENERATING: generatingSongs,
+          COMPLETED: completedSongs,
+          FAILED: failedSongs,
+        },
+        successfulToday,
+        successfulThisMonth,
+      },
+      usage: {
+        daily: totalDailyUsage,
+        monthly: totalMonthlyUsage,
+      },
+      logs: recentLogs,
+    }))
+  } catch (error) {
+    console.error("Admin stats error:", error)
+    return applySecurityHeaders(NextResponse.json({ error: "Failed to retrieve admin stats" }, { status: 500 }))
   }
-
-  // Recent logs (last 20)
-  const recentLogs = allLogs
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 20)
-
-  // Daily/Monthly usage totals
-  const totalDailyUsage = allUsers.reduce((sum, u) => sum + (u.dailyUsage || 0), 0)
-  const totalMonthlyUsage = allUsers.reduce((sum, u) => sum + (u.monthlyUsage || 0), 0)
-
-  return applySecurityHeaders(NextResponse.json({
-    users: {
-      total: totalUsers,
-      active: activeUsers,
-      admins: adminUsers,
-      pro: proUsers,
-    },
-    songs: {
-      total: totalSongs,
-      byStatus: songsByStatus,
-    },
-    usage: {
-      daily: totalDailyUsage,
-      monthly: totalMonthlyUsage,
-    },
-    logs: recentLogs,
-  }))
 }

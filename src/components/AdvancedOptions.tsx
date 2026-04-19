@@ -295,6 +295,11 @@ export default function AdvancedOptions({
             <p className="text-xs text-text-muted mb-3">
               {t('referenceAudioDesc')}
             </p>
+            <p className="text-xs text-text-muted mb-3">
+              {model === 'music-cover'
+                ? '当前为翻唱模式，参考音频会直接作为模型输入。'
+                : '当前为标准歌曲生成模式，参考音频更适合作为间接风格参考；若要直接依赖参考音频，请切换到翻唱模式。'}
+            </p>
 
             {/* URL Input Option */}
             <div className="mb-3">

@@ -189,13 +189,13 @@ vi.mock('@/lib/security', async () => {
 // Reset global state before each test
 beforeEach(() => {
   // Re-initialize global Maps if they were cleared
-  if (!(global as any).users || !(global as any).users instanceof Map) {
+  if (!(global as any).users || !((global as any).users instanceof Map)) {
     (global as any).users = new Map()
   }
-  if (!(global as any).songs || !(global as any).songs instanceof Map) {
+  if (!(global as any).songs || !((global as any).songs instanceof Map)) {
     (global as any).songs = new Map()
   }
-  if (!(global as any).adminLogs || !(global as any).adminLogs instanceof Map) {
+  if (!(global as any).adminLogs || !((global as any).adminLogs instanceof Map)) {
     (global as any).adminLogs = new Map()
   }
 

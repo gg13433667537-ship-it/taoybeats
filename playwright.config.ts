@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const disableWebServer = process.env.PLAYWRIGHT_DISABLE_WEBSERVER === '1'
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000'
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -11,7 +12,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['html']] : [['html', { open: 'never' }]],
 
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -43,7 +44,7 @@ export default defineConfig({
     ? undefined
     : {
         command: 'npm run dev',
-        url: 'http://localhost:3000',
+        url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120 * 1000,
       },

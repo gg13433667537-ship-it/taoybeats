@@ -113,7 +113,7 @@ function getAuthSecret(): string {
   return secret
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Apply security headers to all responses

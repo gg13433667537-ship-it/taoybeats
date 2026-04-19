@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { prisma } from "@/lib/db"
+import { getSongFromDb, refreshGeneratingSong } from "@/app/api/songs/[id]/route"
 
 // Initialize global songs map if not exists
 if (typeof global.songs === 'undefined') global.songs = new Map()
@@ -23,43 +23,31 @@ if (typeof global.songs === 'undefined') global.songs = new Map()
 // Helper to get song from database or memory cache
 async function getSongById(id: string): Promise<Song | null> {
   // Try memory cache first
-  const cachedSong = global.songs?.get(id) as Song | undefined
-  if (cachedSong) {
-    return cachedSong
-  }
+  const cachedSong = global.songs?.get(id) as (Song & Record<string, unknown>) | undefined
+  const hasProviderTaskId = cachedSong
+    ? typeof cachedSong.providerTaskId === "string" ||
+      typeof cachedSong.taskId === "string" ||
+      typeof cachedSong.minimaxTaskId === "string"
+    : false
 
   // Fall back to database
   try {
-    const dbSong = await prisma.song.findUnique({
-      where: { id },
-    })
+    const dbSong =
+      !cachedSong || (cachedSong.status === "GENERATING" && !hasProviderTaskId)
+        ? await getSongFromDb(id)
+        : null
+
     if (dbSong) {
-      const song: Song = {
-        id: dbSong.id,
-        title: dbSong.title,
-        lyrics: dbSong.lyrics || undefined,
-        genre: dbSong.genre,
-        mood: dbSong.mood || undefined,
-        instruments: dbSong.instruments,
-        referenceSinger: dbSong.referenceSinger || undefined,
-        referenceSong: dbSong.referenceSong || undefined,
-        userNotes: dbSong.userNotes || undefined,
-        isInstrumental: false,
-        status: dbSong.status as Song['status'],
-        moderationStatus: "APPROVED" as const,
-        audioUrl: dbSong.audioUrl || undefined,
-        coverUrl: dbSong.coverUrl || undefined,
-        shareToken: dbSong.shareToken || undefined,
-        userId: dbSong.userId,
-        createdAt: dbSong.createdAt.toISOString(),
-        updatedAt: dbSong.updatedAt.toISOString(),
-      }
-      // Update cache
-      global.songs?.set(id, song)
-      return song
+      const refreshedSong = await refreshGeneratingSong(dbSong)
+      global.songs?.set(id, refreshedSong)
+      return refreshedSong
     }
   } catch (dbError) {
     console.error("Database lookup failed:", dbError)
+  }
+
+  if (cachedSong) {
+    return await refreshGeneratingSong(cachedSong)
   }
 
   return null
@@ -129,8 +117,14 @@ export async function GET(
         progress: song.status === 'PENDING' ? 5 : song.status === 'GENERATING' ? 50 : song.status === 'COMPLETED' ? 100 : 0,
         stage: song.status === 'PENDING' ? 'Queued...' : song.status === 'GENERATING' ? 'Creating your music...' : song.status === 'COMPLETED' ? 'Complete!' : 'Unknown',
         audioUrl: song.audioUrl,
+        error: (song as Song & { error?: string }).error,
         timestamp: new Date().toISOString(),
       })
+
+      if (song.status === "COMPLETED" || song.status === "FAILED") {
+        controller.close()
+        return
+      }
 
       // Poll for updates until completed/failed or timeout
       while (Date.now() - startTime < maxDuration) {

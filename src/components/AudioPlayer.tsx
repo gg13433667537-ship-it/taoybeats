@@ -202,6 +202,7 @@ export default function AudioPlayer({
     const audio = audioRef.current
     if (!audio) return
     setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    setIsLoading(false)
   }, [])
 
   const handleAudioError = useCallback(() => {

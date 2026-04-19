@@ -17,6 +17,7 @@ test("createUserEditFormState seeds controlled modal fields from the selected us
       role: "ADMIN",
       tier: "PRO",
       isActive: false,
+      addCredits: 0,
     },
   )
 })

@@ -1,1 +1,1 @@
-ALTER TABLE "Song" ADD COLUMN "forkedFrom" TEXT;
+ALTER TABLE "Song" ADD COLUMN IF NOT EXISTS "forkedFrom" TEXT;

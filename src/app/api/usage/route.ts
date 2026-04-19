@@ -11,6 +11,18 @@ function getMonthKey(): string {
   return new Date().toISOString().slice(0, 7) // YYYY-MM
 }
 
+function getStartOfToday(): Date {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function getStartOfMonth(): Date {
+  const date = getStartOfToday()
+  date.setDate(1)
+  return date
+}
+
 async function getUserUsageFromDB(userId: string): Promise<{ daily: number; monthly: number; tier: string; role: string }> {
   const today = getDateKey()
   const thisMonth = getMonthKey()
@@ -65,6 +77,33 @@ async function getUserUsageFromDB(userId: string): Promise<{ daily: number; mont
   }
 }
 
+async function getSuccessfulSongCounts(userId: string): Promise<{ successfulToday: number; successfulThisMonth: number }> {
+  const startOfToday = getStartOfToday()
+  const startOfMonth = getStartOfMonth()
+
+  const [successfulToday, successfulThisMonth] = await Promise.all([
+    prisma.song.count({
+      where: {
+        userId,
+        status: 'COMPLETED',
+        createdAt: { gte: startOfToday },
+      },
+    }),
+    prisma.song.count({
+      where: {
+        userId,
+        status: 'COMPLETED',
+        createdAt: { gte: startOfMonth },
+      },
+    }),
+  ])
+
+  return {
+    successfulToday,
+    successfulThisMonth,
+  }
+}
+
 export async function GET(request: NextRequest) {
   // Apply rate limiting
   const rateLimitResponse = rateLimitMiddleware(request, DEFAULT_RATE_LIMIT, "usage")
@@ -79,8 +118,9 @@ export async function GET(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({
       userId: null,
       tier: 'GUEST',
-      daily: { used: 0, limit: 0, remaining: 0 },
-      monthly: { used: 0, limit: 0, remaining: 0 },
+      daily: { used: 0, limit: 0, remaining: 0, unlimited: false },
+      monthly: { used: 0, limit: 0, remaining: 0, unlimited: false },
+      output: { successfulToday: 0, successfulThisMonth: 0 },
     }))
   }
 
@@ -90,8 +130,9 @@ export async function GET(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({
       userId: null,
       tier: 'GUEST',
-      daily: { used: 0, limit: 0, remaining: 0 },
-      monthly: { used: 0, limit: 0, remaining: 0 },
+      daily: { used: 0, limit: 0, remaining: 0, unlimited: false },
+      monthly: { used: 0, limit: 0, remaining: 0, unlimited: false },
+      output: { successfulToday: 0, successfulThisMonth: 0 },
     }))
   }
 
@@ -103,8 +144,9 @@ export async function GET(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({
       userId: null,
       tier: 'GUEST',
-      daily: { used: 0, limit: 0, remaining: 0 },
-      monthly: { used: 0, limit: 0, remaining: 0 },
+      daily: { used: 0, limit: 0, remaining: 0, unlimited: false },
+      monthly: { used: 0, limit: 0, remaining: 0, unlimited: false },
+      output: { successfulToday: 0, successfulThisMonth: 0 },
     }))
   }
 
@@ -118,12 +160,21 @@ export async function GET(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({ error: 'Database error' }, { status: 500 }))
   }
 
+  let output
+  try {
+    output = await getSuccessfulSongCounts(userId)
+  } catch (dbError) {
+    console.error("Failed to count successful songs:", dbError)
+    return applySecurityHeaders(NextResponse.json({ error: 'Database error' }, { status: 500 }))
+  }
+
   const tier = usage.tier || 'FREE'
   console.log(`[USAGE API GET] Final tier for userId ${userId}: ${tier}`)
 
   // Calculate limits based on tier and role - ADMIN and PRO have unlimited access
-  const limits = (tier === 'PRO' || usage.role === 'ADMIN')
-    ? { dailyLimit: -1, monthlyLimit: -1 }
+  const isUnlimited = tier === 'PRO' || usage.role === 'ADMIN'
+  const limits = isUnlimited
+    ? { dailyLimit: null, monthlyLimit: null }
     : { dailyLimit: 3, monthlyLimit: 10 }
 
   return applySecurityHeaders(NextResponse.json({
@@ -132,13 +183,16 @@ export async function GET(request: NextRequest) {
     daily: {
       used: usage.daily,
       limit: limits.dailyLimit,
-      remaining: Math.max(0, limits.dailyLimit - usage.daily),
+      remaining: limits.dailyLimit === null ? null : Math.max(0, limits.dailyLimit - usage.daily),
+      unlimited: isUnlimited,
     },
     monthly: {
       used: usage.monthly,
       limit: limits.monthlyLimit,
-      remaining: limits.monthlyLimit === -1 ? -1 : Math.max(0, limits.monthlyLimit - usage.monthly),
+      remaining: limits.monthlyLimit === null ? null : Math.max(0, limits.monthlyLimit - usage.monthly),
+      unlimited: isUnlimited,
     },
+    output,
   }))
 }
 

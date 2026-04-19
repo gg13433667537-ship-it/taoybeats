@@ -5,7 +5,11 @@ export interface UserEditFormState {
   addCredits: number
 }
 
-export function createUserEditFormState(user: UserEditFormState): UserEditFormState {
+type UserEditFormSeed = Omit<UserEditFormState, "addCredits"> & {
+  addCredits?: number
+}
+
+export function createUserEditFormState(user: UserEditFormSeed): UserEditFormState {
   return {
     role: user.role,
     tier: user.tier,

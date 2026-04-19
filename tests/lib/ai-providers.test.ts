@@ -83,6 +83,48 @@ describe('musicProvider', () => {
     expect(result).toBe('audio:https://cdn.minimax.example/song.mp3')
   })
 
+  it('omits unsupported direct voice control fields from standard music generation payloads', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          task_id: 'task-standard-1',
+          status: 1,
+        },
+        base_resp: {
+          status_code: 0,
+          status_msg: 'success',
+        },
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await musicProvider.generate({
+      title: 'Voice Audit',
+      lyrics: 'some lyrics',
+      genre: ['pop'],
+      mood: 'happy',
+      instruments: ['piano'],
+      voiceId: 'voice-123',
+      referenceAudio: 'https://example.com/reference.mp3',
+      lyricsOptimizer: true,
+      outputFormat: 'mp3',
+    }, 'test-key', 'https://api.minimaxi.com')
+
+    const [, requestInit] = fetchMock.mock.calls[0]
+    const body = JSON.parse(String(requestInit?.body))
+
+    expect(body.voice_id).toBeUndefined()
+    expect(body.reference_audio).toBeUndefined()
+    expect(body.lyrics_optimizer).toBe(true)
+    expect(body.audio_setting).toEqual({
+      sample_rate: 44100,
+      bitrate: 256000,
+      format: 'mp3',
+    })
+  })
+
   it('maps nested music_generation_info responses with data.audio to a completed song', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

@@ -1,6 +1,6 @@
 // Shared types for in-memory storage
 
-export type UserRole = 'USER' | 'ADMIN'
+export type UserRole = 'USER' | 'PRO' | 'ADMIN'
 export type UserTier = 'FREE' | 'PRO'
 export type SongStatus = 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED'
 export type ModerationStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
@@ -50,6 +50,7 @@ export interface Song {
   aigcWatermark?: boolean
   status: SongStatus
   moderationStatus: ModerationStatus
+  providerTaskId?: string
   audioUrl?: string
   videoUrl?: string
   coverUrl?: string
@@ -62,6 +63,7 @@ export interface Song {
   createdAt: string
   updatedAt: string
   error?: string           // Error message if generation failed
+  errorMessage?: string
 }
 
 // Structured reference lyrics for learning songwriting style
@@ -99,6 +101,7 @@ export interface Preset {
   mood: string
   instruments: string[]
   isInstrumental: boolean
+  duration: number
   shareToken?: string
   createdAt: string
   updatedAt: string

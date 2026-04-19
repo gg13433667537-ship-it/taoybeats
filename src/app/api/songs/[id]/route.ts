@@ -1,9 +1,198 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
+import { musicProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { sanitizeString, validateRequiredString, validateOptionalString, validateStringArray, MAX_LENGTHS } from "@/lib/security"
 import { prisma } from "@/lib/db"
 
+if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
+if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || "https://api.minimaxi.com"
+
+const PROVIDER_TASK_ID_FIELDS = ["providerTaskId", "taskId", "minimaxTaskId"] as const
+const ERROR_FIELDS = ["error", "errorMessage", "generationError"] as const
+
+type SongRecord = Song & Record<string, unknown>
+
+function readStringField(
+  record: Record<string, unknown> | null | undefined,
+  fields: readonly string[]
+): string | undefined {
+  if (!record) {
+    return undefined
+  }
+
+  for (const field of fields) {
+    const value = record[field]
+    if (typeof value === "string" && value.length > 0) {
+      return value
+    }
+  }
+
+  return undefined
+}
+
+function toSongRecord(dbSong: Record<string, any>): SongRecord {
+  const song: SongRecord = {
+    id: dbSong.id,
+    title: dbSong.title,
+    lyrics: dbSong.lyrics || undefined,
+    genre: dbSong.genre,
+    mood: dbSong.mood || undefined,
+    instruments: dbSong.instruments,
+    referenceSinger: dbSong.referenceSinger || undefined,
+    referenceSong: dbSong.referenceSong || undefined,
+    userNotes: dbSong.userNotes || undefined,
+    isInstrumental: false,
+    status: dbSong.status as Song["status"],
+    moderationStatus: "APPROVED",
+    providerTaskId: dbSong.providerTaskId || undefined,
+    audioUrl: dbSong.audioUrl || undefined,
+    coverUrl: dbSong.coverUrl || undefined,
+    shareToken: dbSong.shareToken || undefined,
+    userId: dbSong.userId,
+    partGroupId: dbSong.partGroupId || undefined,
+    part: dbSong.part || undefined,
+    createdAt: dbSong.createdAt.toISOString(),
+    updatedAt: dbSong.updatedAt.toISOString(),
+  }
+
+  for (const field of PROVIDER_TASK_ID_FIELDS) {
+    const value = dbSong[field]
+    if (typeof value === "string" && value.length > 0) {
+      song[field] = value
+    }
+  }
+
+  for (const field of ERROR_FIELDS) {
+    if (field in dbSong) {
+      const value = dbSong[field]
+      song[field] = typeof value === "string" && value.length > 0 ? value : undefined
+    }
+  }
+
+  return song
+}
+
+export async function getSongFromDb(id: string): Promise<SongRecord | null> {
+  try {
+    const dbSong = await prisma.song.findUnique({
+      where: { id },
+    })
+
+    if (!dbSong) {
+      return null
+    }
+
+    return toSongRecord(dbSong as Record<string, any>)
+  } catch (dbError) {
+    console.error("Prisma lookup failed:", dbError)
+    return null
+  }
+}
+
+async function persistSongRefresh(
+  song: SongRecord,
+  updates: Partial<SongRecord> & { status: Song["status"] }
+): Promise<SongRecord> {
+  const refreshedSong: SongRecord = {
+    ...song,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  }
+
+  const songsMap = global.songs as Map<string, SongRecord> | undefined
+  songsMap?.set(song.id, refreshedSong)
+
+  const prismaData: Record<string, unknown> = {
+    status: refreshedSong.status,
+    audioUrl: refreshedSong.audioUrl || null,
+  }
+
+  prismaData.providerTaskId = refreshedSong.providerTaskId || null
+
+  const errorField = ERROR_FIELDS.find((field) => field in song)
+  const errorValue = readStringField(refreshedSong, ERROR_FIELDS)
+  if (errorField) {
+    prismaData[errorField] = errorValue || null
+  }
+
+  try {
+    await prisma.song.update({
+      where: { id: song.id },
+      data: prismaData as any,
+    })
+  } catch (dbError) {
+    console.error("Prisma refresh update failed:", dbError)
+  }
+
+  return refreshedSong
+}
+
+export async function refreshGeneratingSong(song: SongRecord): Promise<SongRecord> {
+  if (song.status !== "GENERATING") {
+    return song
+  }
+
+  const taskId = readStringField(song, PROVIDER_TASK_ID_FIELDS)
+  if (!taskId) {
+    return song
+  }
+
+  const apiKey = global.systemApiKey || process.env.MINIMAX_API_KEY
+  const apiUrl = global.systemApiUrl || process.env.MINIMAX_API_URL || "https://api.minimaxi.com"
+  if (!apiKey) {
+    return song
+  }
+
+  try {
+    const progress = await musicProvider.getProgress(taskId, apiKey, apiUrl)
+
+    if (progress.status === "COMPLETED") {
+      return persistSongRefresh(song, {
+        status: "COMPLETED",
+        providerTaskId: undefined,
+        error: undefined,
+        errorMessage: undefined,
+        audioUrl: progress.audioUrl || song.audioUrl,
+      })
+    }
+
+    if (progress.status === "FAILED") {
+      return persistSongRefresh(song, {
+        status: "FAILED",
+        providerTaskId: undefined,
+        error: progress.error || "MiniMax generation failed",
+      })
+    }
+
+    if (progress.status !== song.status) {
+      return persistSongRefresh(song, {
+        status: progress.status,
+        audioUrl: progress.audioUrl || song.audioUrl,
+      })
+    }
+  } catch (error) {
+    console.error("MiniMax refresh failed:", error)
+  }
+
+  return song
+}
+
+async function getRefreshableSong(
+  id: string,
+  cachedSong?: SongRecord
+): Promise<SongRecord | null> {
+  if (cachedSong && (cachedSong.status !== "GENERATING" || readStringField(cachedSong, PROVIDER_TASK_ID_FIELDS))) {
+    return cachedSong
+  }
+
+  const dbSong = await getSongFromDb(id)
+  if (dbSong) {
+    return dbSong
+  }
+
+  return cachedSong || null
+}
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
   const sessionToken = request.cookies.get('session-token')?.value
@@ -29,53 +218,12 @@ export async function GET(
     const { id } = await params
 
     // Try in-memory cache first
-    const songsMap = global.songs as Map<string, Song> | undefined
-    if (songsMap) {
-      const song = songsMap.get(id)
-      if (song) {
-        return NextResponse.json(song)
-      }
-    }
-
-    // Fall back to Prisma database
-    try {
-      const dbSong = await prisma.song.findUnique({
-        where: { id },
-      })
-
-      if (dbSong) {
-        const song: Song = {
-          id: dbSong.id,
-          title: dbSong.title,
-          lyrics: dbSong.lyrics || undefined,
-          genre: dbSong.genre,
-          mood: dbSong.mood || undefined,
-          instruments: dbSong.instruments,
-          referenceSinger: dbSong.referenceSinger || undefined,
-          referenceSong: dbSong.referenceSong || undefined,
-          userNotes: dbSong.userNotes || undefined,
-          isInstrumental: false,
-          status: dbSong.status as Song['status'],
-          moderationStatus: dbSong.moderationStatus as Song['moderationStatus'],
-          audioUrl: dbSong.audioUrl || undefined,
-          coverUrl: dbSong.coverUrl || undefined,
-          shareToken: dbSong.shareToken || undefined,
-          userId: dbSong.userId,
-          partGroupId: dbSong.partGroupId || undefined,
-          part: dbSong.part || undefined,
-          createdAt: dbSong.createdAt.toISOString(),
-          updatedAt: dbSong.updatedAt.toISOString(),
-        }
-
-        // Update in-memory cache
-        if (songsMap) {
-          songsMap.set(id, song)
-        }
-
-        return NextResponse.json(song)
-      }
-    } catch (dbError) {
-      console.error("Prisma lookup failed:", dbError)
+    const songsMap = global.songs as Map<string, SongRecord> | undefined
+    const song = await getRefreshableSong(id, songsMap?.get(id))
+    if (song) {
+      const refreshedSong = await refreshGeneratingSong(song)
+      songsMap?.set(id, refreshedSong)
+      return NextResponse.json(refreshedSong)
     }
 
     return NextResponse.json({ error: "Song not found" }, { status: 404 })
@@ -106,26 +254,7 @@ export async function PATCH(
       try {
         const dbSong = await prisma.song.findUnique({ where: { id } })
         if (dbSong) {
-          song = {
-            id: dbSong.id,
-            title: dbSong.title,
-            lyrics: dbSong.lyrics || undefined,
-            genre: dbSong.genre,
-            mood: dbSong.mood || undefined,
-            instruments: dbSong.instruments,
-            referenceSinger: dbSong.referenceSinger || undefined,
-            referenceSong: dbSong.referenceSong || undefined,
-            userNotes: dbSong.userNotes || undefined,
-            isInstrumental: false,
-            status: dbSong.status as Song['status'],
-            moderationStatus: dbSong.moderationStatus as Song['moderationStatus'],
-            audioUrl: dbSong.audioUrl || undefined,
-            coverUrl: dbSong.coverUrl || undefined,
-            shareToken: dbSong.shareToken || undefined,
-            userId: dbSong.userId,
-            createdAt: dbSong.createdAt.toISOString(),
-            updatedAt: dbSong.updatedAt.toISOString(),
-          }
+          song = toSongRecord(dbSong as Record<string, any>)
         }
       } catch (dbError) {
         console.error("Prisma lookup failed:", dbError)
@@ -247,8 +376,6 @@ export async function PATCH(
           referenceSinger: updatedSong.referenceSinger,
           referenceSong: updatedSong.referenceSong,
           userNotes: updatedSong.userNotes,
-          isInstrumental: updatedSong.isInstrumental,
-          voiceId: updatedSong.voiceId,
           status: updatedSong.status,
         },
       })
@@ -287,26 +414,7 @@ export async function DELETE(
       try {
         const dbSong = await prisma.song.findUnique({ where: { id } })
         if (dbSong) {
-          song = {
-            id: dbSong.id,
-            title: dbSong.title,
-            lyrics: dbSong.lyrics || undefined,
-            genre: dbSong.genre,
-            mood: dbSong.mood || undefined,
-            instruments: dbSong.instruments,
-            referenceSinger: dbSong.referenceSinger || undefined,
-            referenceSong: dbSong.referenceSong || undefined,
-            userNotes: dbSong.userNotes || undefined,
-            isInstrumental: false,
-            status: dbSong.status as Song['status'],
-            moderationStatus: dbSong.moderationStatus as Song['moderationStatus'],
-            audioUrl: dbSong.audioUrl || undefined,
-            coverUrl: dbSong.coverUrl || undefined,
-            shareToken: dbSong.shareToken || undefined,
-            userId: dbSong.userId,
-            createdAt: dbSong.createdAt.toISOString(),
-            updatedAt: dbSong.updatedAt.toISOString(),
-          }
+          song = toSongRecord(dbSong as Record<string, any>)
         }
       } catch (dbError) {
         console.error("Prisma lookup failed:", dbError)

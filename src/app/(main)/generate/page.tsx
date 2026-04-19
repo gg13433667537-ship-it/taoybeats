@@ -15,6 +15,9 @@ import PersonaSelector from "@/components/PersonaSelector"
 import AdvancedOptions from "@/components/AdvancedOptions"
 import GenerationProgress from "@/components/GenerationProgress"
 import { useToast } from "@/components/Toast"
+import type { MultiPartInfo } from "@/lib/song-multipart"
+
+type TranslateFn = ReturnType<typeof useI18n>["t"]
 
 // Genre options (English values for API)
 const GENRES = [
@@ -40,7 +43,7 @@ const INSTRUMENT_GROUPS: Record<string, string[]> = {
 }
 
 // Helper to get translated genre label
-const getGenreLabel = (genre: string, t: (key: string) => string): string => {
+const getGenreLabel = (genre: string, t: TranslateFn): string => {
   const labels: Record<string, string> = {
     'Pop': t('genrePop'),
     'Hip-Hop': t('genreHipHop'),
@@ -62,7 +65,7 @@ const getGenreLabel = (genre: string, t: (key: string) => string): string => {
 }
 
 // Helper to get translated mood label
-const getMoodLabel = (mood: string, t: (key: string) => string): string => {
+const getMoodLabel = (mood: string, t: TranslateFn): string => {
   const labels: Record<string, string> = {
     'Happy': t('moodHappy'),
     'Sad': t('moodSad'),
@@ -83,7 +86,7 @@ const getMoodLabel = (mood: string, t: (key: string) => string): string => {
 }
 
 // Helper to get translated instrument label
-const getInstrumentLabel = (instrument: string, t: (key: string) => string): string => {
+const getInstrumentLabel = (instrument: string, t: TranslateFn): string => {
   const labels: Record<string, string> = {
     'Guitar': t('instrumentGuitar'),
     'Violin': t('instrumentViolin'),
@@ -117,7 +120,7 @@ const getInstrumentLabel = (instrument: string, t: (key: string) => string): str
 }
 
 // Helper to get translated instrument group name
-const getInstrumentGroupLabel = (group: string, t: (key: string) => string): string => {
+const getInstrumentGroupLabel = (group: string, t: TranslateFn): string => {
   const labels: Record<string, string> = {
     'Strings': t('instrumentStrings'),
     'Keyboard': t('instrumentKeyboard'),
@@ -131,13 +134,13 @@ const getInstrumentGroupLabel = (group: string, t: (key: string) => string): str
 }
 
 // Selector drawer options factory
-const createGenreOptions = (t: (key: string) => string): SelectOption[] =>
+const createGenreOptions = (t: TranslateFn): SelectOption[] =>
   GENRES.map(g => ({ value: g, label: getGenreLabel(g, t) }))
 
-const createMoodOptions = (t: (key: string) => string): SelectOption[] =>
+const createMoodOptions = (t: TranslateFn): SelectOption[] =>
   MOODS.map(m => ({ value: m, label: getMoodLabel(m, t) }))
 
-const createInstrumentOptions = (t: (key: string) => string): SelectOption[] =>
+const createInstrumentOptions = (t: TranslateFn): SelectOption[] =>
   Object.entries(INSTRUMENT_GROUPS).flatMap(
     ([group, instruments]) => instruments.map(i => ({
       value: i,
@@ -147,6 +150,24 @@ const createInstrumentOptions = (t: (key: string) => string): SelectOption[] =>
   )
 
 type GenerationStage = 'idle' | 'initializing' | 'generating' | 'finalizing' | 'completed' | 'failed'
+
+const CLIENT_MAX_SINGLE_PASS_LYRICS_LENGTH = 1800
+const CLIENT_MAX_SINGLE_PASS_LINE_COUNT = 64
+
+function shouldWarnForLyricsCompression(rawLyrics: string): boolean {
+  const trimmedLyrics = rawLyrics.trim()
+  if (!trimmedLyrics) {
+    return false
+  }
+
+  const lineCount = trimmedLyrics
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .length
+
+  return trimmedLyrics.length > CLIENT_MAX_SINGLE_PASS_LYRICS_LENGTH || lineCount > CLIENT_MAX_SINGLE_PASS_LINE_COUNT
+}
 
 export default function GeneratePage() {
   const router = useRouter()
@@ -256,17 +277,13 @@ export default function GeneratePage() {
   const [generationStage, setGenerationStage] = useState<GenerationStage>('idle')
   const [progress, setProgress] = useState(0)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [resultDurationLabel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [stageMessage, setStageMessage] = useState<string>('')
   const [forkError, setForkError] = useState<string | null>(null)
 
   // Multi-part song state
-  const [multiPartInfo, setMultiPartInfo] = useState<{
-    isMultiPart: boolean
-    partGroupId: string
-    totalParts: number
-    parts: { id: string; part: number }[]
-  } | null>(null)
+  const [multiPartInfo, setMultiPartInfo] = useState<MultiPartInfo | null>(null)
   const [playlistUrls, setPlaylistUrls] = useState<string[]>([])
   const [playlistSongIds, setPlaylistSongIds] = useState<string[]>([])
   const [showMultiPartMessage, setShowMultiPartMessage] = useState(false)
@@ -333,7 +350,16 @@ export default function GeneratePage() {
     setGenerationStage('initializing')
     setProgress(0)
     setAudioUrl(null)
+    setMultiPartInfo(null)
+    setPlaylistUrls([])
+    setPlaylistSongIds([])
+    setShowMultiPartMessage(false)
+    setIsPollingRemainingParts(false)
     setStageMessage('Initializing...')
+
+    if (!isInstrumental && shouldWarnForLyricsCompression(lyrics)) {
+      showToast("info", "歌词过长，系统会先自动压缩到适合 5 分钟内生成的版本，再开始生成。")
+    }
 
     try {
       // Create song record via API
@@ -378,24 +404,36 @@ export default function GeneratePage() {
       }
 
       const responseData = await createResponse.json()
-      const { id: newSongId, multiPart } = responseData
+      const { id: newSongId, compression } = responseData
       setSongId(newSongId)
-      if (multiPart) {
-        setMultiPartInfo(multiPart)
+
+      if (compression?.applied) {
+        showToast("info", "歌词已自动压缩，当前生成使用的是适合 5 分钟内完成的版本。")
       }
 
       // SSE connection state
       let eventSource: EventSource | null = null
       let retryCount = 0
       let connectionTimeout: ReturnType<typeof setTimeout> | null = null
+      let statusPollingTimeout: ReturnType<typeof setTimeout> | null = null
+      let statusPollingAttempts = 0
       const maxRetries = 5
       const baseDelay = 1000
       const connectionTimeoutMs = 30000 // 30 seconds timeout for initial connection
+      const statusPollingIntervalMs = 3000
+      const maxStatusPollingAttempts = Math.ceil((30 * 60 * 1000) / statusPollingIntervalMs)
 
       const clearConnectionTimeout = () => {
         if (connectionTimeout) {
           clearTimeout(connectionTimeout)
           connectionTimeout = null
+        }
+      }
+
+      const clearStatusPollingTimeout = () => {
+        if (statusPollingTimeout) {
+          clearTimeout(statusPollingTimeout)
+          statusPollingTimeout = null
         }
       }
 
@@ -405,6 +443,94 @@ export default function GeneratePage() {
           eventSource.close()
           eventSource = null
         }
+      }
+
+      const handleCompletedSong = (completedSongId: string, completedAudioUrl: string) => {
+        setError(null)
+        setGenerationStage('completed')
+        setAudioUrl(completedAudioUrl)
+        setPlaylistUrls([completedAudioUrl])
+        setPlaylistSongIds([completedSongId])
+        clearStatusPollingTimeout()
+      }
+
+      const applyPolledSongStatus = (song: { id?: string; status?: string; audioUrl?: string | null; error?: string | null }) => {
+        switch (song.status) {
+          case 'PENDING':
+            setError(null)
+            setGenerationStage('initializing')
+            setStageMessage('Queued. Waiting for generation to begin...')
+            return false
+          case 'GENERATING':
+            setError(null)
+            setGenerationStage('generating')
+            setStageMessage('Realtime connection lost. Still checking generation status...')
+            return false
+          case 'COMPLETED':
+            if (song.audioUrl) {
+              handleCompletedSong(song.id || newSongId, song.audioUrl)
+              return true
+            }
+            setGenerationStage('finalizing')
+            setStageMessage('Generation finished. Finalizing audio...')
+            return false
+          case 'FAILED':
+            clearStatusPollingTimeout()
+            setGenerationStage('failed')
+            setError(song.error || 'Generation failed')
+            return true
+          default:
+            return false
+        }
+      }
+
+      const pollSongStatus = async () => {
+        clearStatusPollingTimeout()
+
+        try {
+          const response = await fetch(`/api/songs/${newSongId}`)
+          if (!response.ok) {
+            throw new Error('Failed to fetch latest song status')
+          }
+
+          const song = await response.json()
+
+          if (applyPolledSongStatus(song)) {
+            return
+          }
+
+          statusPollingAttempts++
+          if (statusPollingAttempts >= maxStatusPollingAttempts) {
+            setGenerationStage('failed')
+            setError('Unable to confirm generation status. Please refresh and check again.')
+            return
+          }
+
+          statusPollingTimeout = setTimeout(() => {
+            void pollSongStatus()
+          }, statusPollingIntervalMs)
+        } catch {
+          statusPollingAttempts++
+          if (statusPollingAttempts >= maxStatusPollingAttempts) {
+            setGenerationStage('failed')
+            setError('Unable to confirm generation status. Please refresh and check again.')
+            return
+          }
+
+          setGenerationStage('generating')
+          setStageMessage('Realtime connection lost. Retrying status check...')
+          statusPollingTimeout = setTimeout(() => {
+            void pollSongStatus()
+          }, statusPollingIntervalMs)
+        }
+      }
+
+      const fallbackToStatusPolling = () => {
+        closeEventSource()
+        setError(null)
+        setGenerationStage('generating')
+        setStageMessage('Realtime connection lost. Checking latest song status...')
+        void pollSongStatus()
       }
 
       const connectSSE = () => {
@@ -417,9 +543,7 @@ export default function GeneratePage() {
         // Set connection timeout
         clearConnectionTimeout()
         connectionTimeout = setTimeout(() => {
-          closeEventSource()
-          setGenerationStage('failed')
-          setError('Connection timeout. The server took too long to respond. Please try again.')
+          fallbackToStatusPolling()
         }, connectionTimeoutMs)
 
         eventSource = new EventSource(`/api/songs/${newSongId}/stream`)
@@ -427,6 +551,7 @@ export default function GeneratePage() {
         eventSource.onmessage = (event) => {
           retryCount = 0 // Reset retry count on successful message
           clearConnectionTimeout() // Clear timeout on any message received
+          clearStatusPollingTimeout()
 
           const data = JSON.parse(event.data)
           setProgress(data.progress || 0)
@@ -437,24 +562,16 @@ export default function GeneratePage() {
 
           switch (data.status) {
             case 'PENDING':
+              setError(null)
               setGenerationStage('initializing')
               break
             case 'GENERATING':
+              setError(null)
               setGenerationStage('generating')
               break
             case 'COMPLETED':
-              setGenerationStage('completed')
               if (data.audioUrl) {
-                setAudioUrl(data.audioUrl)
-                setPlaylistUrls([data.audioUrl])
-                setPlaylistSongIds([newSongId])
-
-                // If multi-part song, start polling for remaining parts
-                if (multiPartInfo && multiPartInfo.isMultiPart && multiPartInfo.totalParts > 1) {
-                  setShowMultiPartMessage(true)
-                  // Start polling for remaining parts
-                  pollRemainingParts(multiPartInfo.partGroupId, data.songId || newSongId, data.audioUrl, multiPartInfo.totalParts, multiPartInfo.parts)
-                }
+                handleCompletedSong(data.songId || newSongId, data.audioUrl)
               }
               closeEventSource()
               break
@@ -483,8 +600,7 @@ export default function GeneratePage() {
             setError(`Connection lost. Reconnecting in ${Math.round(delay/1000)}s... (Attempt ${retryCount}/${maxRetries})`)
             setTimeout(connectSSE, delay)
           } else {
-            setGenerationStage('failed')
-            setError('Connection lost after multiple attempts. Please try again.')
+            fallbackToStatusPolling()
           }
         }
       }
@@ -1043,6 +1159,9 @@ export default function GeneratePage() {
                     <label className="block text-sm font-medium text-text-secondary mb-2">
                       {t('voiceSelector')}
                     </label>
+                    <p className="text-xs text-text-muted mb-2">
+                      音色与 Persona 当前通过提示词、参考歌手和后续参考音频流程间接影响歌曲效果，不保证精确锁定歌声音色。
+                    </p>
                     <div className="flex gap-2">
                       <VoiceSelector
                         selectedVoiceId={selectedVoiceId}
@@ -1126,16 +1245,22 @@ export default function GeneratePage() {
               {audioUrl && (
                 <section className="p-6 rounded-2xl bg-surface border border-border">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-foreground">
-                      {multiPartInfo?.isMultiPart && showMultiPartMessage
-                        ? `${title} (Part 1/${multiPartInfo.totalParts})`
-                        : title}
-                    </h2>
-                    {isPollingRemainingParts && multiPartInfo && (
-                      <span className="text-xs px-2 py-1 rounded bg-accent/20 text-accent animate-pulse">
-                        Generating parts {playlistUrls.length + 1}-{multiPartInfo.totalParts}...
-                      </span>
-                    )}
+                    <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                    <div className="rounded-xl border border-border bg-background/60 p-3">
+                      <p className="text-xs text-text-muted mb-1">状态</p>
+                      <p className="text-sm font-medium text-foreground">已完成</p>
+                    </div>
+                    <div className="rounded-xl border border-border bg-background/60 p-3">
+                      <p className="text-xs text-text-muted mb-1">格式</p>
+                      <p className="text-sm font-medium text-foreground">{outputFormat.toUpperCase()}</p>
+                    </div>
+                    <div className="rounded-xl border border-border bg-background/60 p-3">
+                      <p className="text-xs text-text-muted mb-1">时长</p>
+                      <p className="text-sm font-medium text-foreground">{resultDurationLabel || '加载后显示'}</p>
+                    </div>
                   </div>
 
                   <AudioPlayer
@@ -1146,17 +1271,6 @@ export default function GeneratePage() {
                     playlist={playlistUrls.length > 1 ? playlistUrls : undefined}
                     playlistSongIds={playlistSongIds.length > 1 ? playlistSongIds : undefined}
                   />
-
-                  {/* Multi-part message */}
-                  {showMultiPartMessage && multiPartInfo && (
-                    <div className="mt-4 p-3 rounded-lg bg-accent/10 border border-accent/20 text-sm text-text-secondary">
-                      <p className="font-medium text-foreground mb-1">Multi-part song detected</p>
-                      <p>This song is split into {multiPartInfo.totalParts} parts for optimal quality. All parts will play automatically in sequence.</p>
-                      {isPollingRemainingParts && (
-                        <p className="mt-1 text-xs text-accent">Waiting for remaining parts to complete...</p>
-                      )}
-                    </div>
-                  )}
 
                   {/* Actions */}
                   <div className="flex gap-3 mt-4">

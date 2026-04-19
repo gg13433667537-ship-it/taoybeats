@@ -36,6 +36,19 @@ interface ErrorState {
   message: string
 }
 
+const MOOD_LABEL_KEYS = {
+  Happy: 'moodHappy',
+  Sad: 'moodSad',
+  Energetic: 'moodEnergetic',
+  Calm: 'moodCalm',
+  Romantic: 'moodRomantic',
+  Epic: 'moodEpic',
+  Dark: 'moodDark',
+  Dreamy: 'moodDreamy',
+  Festive: 'moodFestive',
+  Uplifting: 'moodUplifting',
+} as const
+
 export default function DiscoverPage() {
   const router = useRouter()
   const { t } = useI18n()
@@ -55,7 +68,7 @@ export default function DiscoverPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const GENRES = ["Pop", "Hip-Hop", "Rock", "Electronic", "R&B", "Jazz", "Classical", "Country", "Folk", "Metal", "Indie", "Mandopop", "K-Pop", "Latin"]
-  const MOODS = ["Happy", "Sad", "Energetic", "Calm", "Romantic", "Epic", "Dark", "Dreamy", "Festive", "Uplifting"]
+  const MOODS = Object.keys(MOOD_LABEL_KEYS) as Array<keyof typeof MOOD_LABEL_KEYS>
 
   const fetchSongs = useCallback(async (pageNum: number) => {
     setLoading(true)
@@ -252,7 +265,7 @@ export default function DiscoverPage() {
                   >
                     <option value="">{t('discoverAllMoods')}</option>
                     {MOODS.map(m => (
-                      <option key={m} value={m}>{t(`mood${m}`)}</option>
+                      <option key={m} value={m}>{t(MOOD_LABEL_KEYS[m])}</option>
                     ))}
                   </select>
                 </div>

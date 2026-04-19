@@ -1,9 +1,6 @@
 # Dependencies
 node_modules/
 
-# Prisma
-prisma/migrations/
-
 # Environment files
 .env
 .env.local

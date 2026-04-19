@@ -306,7 +306,7 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         // For iOS Safari, we need to resume AudioContext if suspended
-        if (typeof AudioContext !== 'undefined' && AudioContext.prototype.resume) {
+        if (typeof AudioContext !== 'undefined') {
           const audioContext = new AudioContext()
           if (audioContext.state === 'suspended') {
             await audioContext.resume()
