@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
-import Stripe from "stripe"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { applySecurityHeaders, rateLimitMiddleware, STRICT_RATE_LIMIT } from "@/lib/security"
+import { getStripeServerConfig } from "@/lib/stripe-config"
+import { getStripeClient } from "@/lib/stripe-server"
 
 
 if (!global.users) global.users = new Map()
-
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY
-if (!stripeSecretKey) {
-  console.error("STRIPE_SECRET_KEY environment variable is not set")
-}
-
-const stripe = new Stripe(stripeSecretKey || "sk_test_placeholder")
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
   const sessionToken = request.cookies.get('session-token')?.value
@@ -47,7 +41,17 @@ export async function POST(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
 
+  const { isServerConfigured } = getStripeServerConfig()
+  if (!isServerConfigured) {
+    return applySecurityHeaders(NextResponse.json({ error: "Billing is not configured" }, { status: 503 }))
+  }
+
   try {
+    const stripe = getStripeClient()
+    if (!stripe) {
+      return applySecurityHeaders(NextResponse.json({ error: "Billing is not configured" }, { status: 503 }))
+    }
+
     const body = await request.json()
     const { priceId } = body
 

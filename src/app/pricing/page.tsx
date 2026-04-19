@@ -5,17 +5,19 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Music, Check, Zap, Loader2 } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
+import { getStripePriceConfig } from "@/lib/stripe-config"
 
 export default function PricingPage() {
   const { t } = useI18n()
   const router = useRouter()
   const [annual, setAnnual] = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
+  const [billingMessage, setBillingMessage] = useState<string | null>(null)
 
-  // Stripe Price IDs (replace with actual Stripe price IDs)
+  const stripePriceConfig = getStripePriceConfig()
   const STRIPE_PRICE_IDS = {
-    pro_monthly: process.env.NEXT_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || "price_monthly_placeholder",
-    pro_annual: process.env.NEXT_PUBLIC_STRIPE_PRO_ANNUAL_PRICE_ID || "price_annual_placeholder",
+    pro_monthly: stripePriceConfig.monthlyPriceId,
+    pro_annual: stripePriceConfig.annualPriceId,
   }
 
   const handleCheckout = async (planId: string) => {
@@ -24,7 +26,13 @@ export default function PricingPage() {
       return
     }
 
+    if (!stripePriceConfig.isPricingConfigured) {
+      setBillingMessage("Billing configuration is not ready yet.")
+      return
+    }
+
     setIsCheckingOut(true)
+    setBillingMessage(null)
     try {
       // Fetch profile to check if user is logged in and get user info
       const profileRes = await fetch('/api/auth/profile')
@@ -217,7 +225,7 @@ export default function PricingPage() {
 
               <button
                 onClick={() => handleCheckout(plan.id)}
-                disabled={isCheckingOut}
+                disabled={isCheckingOut || (plan.id === 'pro' && !stripePriceConfig.isPricingConfigured)}
                 className={`block w-full py-3 rounded-xl text-center font-medium transition-colors disabled:opacity-50 ${
                   plan.popular
                     ? 'bg-accent hover:bg-accent-hover text-white'
@@ -234,6 +242,12 @@ export default function PricingPage() {
             </div>
           ))}
         </div>
+
+        {billingMessage ? (
+          <p className="mx-auto mt-6 max-w-4xl rounded-xl border border-border bg-surface px-4 py-3 text-center text-sm text-text-secondary">
+            {billingMessage}
+          </p>
+        ) : null}
 
         {/* FAQ */}
         <div className="mt-16 max-w-2xl mx-auto">

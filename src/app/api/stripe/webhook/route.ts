@@ -1,25 +1,32 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { User } from "@/lib/types"
-import Stripe from "stripe"
 import { applySecurityHeaders } from "@/lib/security"
-
-// Validate that Stripe secret key is configured
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY
-if (!stripeSecretKey) {
-  console.error("STRIPE_SECRET_KEY environment variable is not set")
-}
-
-const stripe = new Stripe(stripeSecretKey || "sk_test_placeholder")
+import { getStripeServerConfig } from "@/lib/stripe-config"
+import { getStripeClient } from "@/lib/stripe-server"
 
 // Raw body needed for Stripe signature verification
 export async function POST(request: NextRequest) {
+  const { isWebhookConfigured, webhookSecret } = getStripeServerConfig()
+  if (!isWebhookConfigured || !webhookSecret) {
+    return applySecurityHeaders(NextResponse.json(
+      { error: "Billing webhook is not configured" },
+      { status: 503 }
+    ))
+  }
+
+  const stripe = getStripeClient()
+  if (!stripe) {
+    return applySecurityHeaders(NextResponse.json(
+      { error: "Billing webhook is not configured" },
+      { status: 503 }
+    ))
+  }
+
   const body = await request.text()
   const sig = request.headers.get("stripe-signature")
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 
   // Reject requests without required signature in production
-  if (!webhookSecret || !sig) {
-    console.error("Webhook missing signature or secret")
+  if (!sig) {
     return applySecurityHeaders(NextResponse.json(
       { error: "Webhook configuration error" },
       { status: 500 }
