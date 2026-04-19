@@ -128,6 +128,7 @@ interface SessionUser {
   id: string
   email?: string
   name?: string
+  role: string
   tier: string
   dailyUsage: number
   monthlyUsage: number
@@ -184,6 +185,7 @@ async function getOrCreateUserFromDB(userId: string, email?: string): Promise<Se
     id: user.id,
     email: user.email || undefined,
     name: user.name || undefined,
+    role: user.role,
     tier: user.tier,
     dailyUsage: user.dailyUsage,
     monthlyUsage: user.monthlyUsage,
@@ -431,7 +433,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Check usage limits (from Prisma - already reset if needed by getSessionUser)
-    if (user.tier === 'FREE') {
+    // Admins bypass usage limits
+    if (user.tier === 'FREE' && user.role !== 'ADMIN') {
       if (user.dailyUsage >= FREE_DAILY_LIMIT) {
         return NextResponse.json(
           {
@@ -577,11 +580,12 @@ export async function POST(request: NextRequest) {
 
     // Return primary song info (first part) plus multi-part info
     const primarySong = createdSongs[0]
+    const isAdmin = user.role === 'ADMIN'
     return NextResponse.json({
       id: primarySong.id,
       shareToken: primarySong.shareToken,
       status: "PENDING",
-      usage: {
+      usage: isAdmin ? { unlimited: true } : {
         daily: { used: user.dailyUsage + 1, limit: FREE_DAILY_LIMIT },
         monthly: { used: user.monthlyUsage + 1, limit: FREE_MONTHLY_LIMIT },
       },

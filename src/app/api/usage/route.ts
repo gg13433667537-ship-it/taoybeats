@@ -120,9 +120,9 @@ export async function GET(request: NextRequest) {
   const tier = usage.tier || 'FREE'
   console.log(`[USAGE API GET] Final tier for userId ${userId}: ${tier}`)
 
-  // Calculate limits based on tier
-  const limits = tier === 'PRO'
-    ? { dailyLimit: 50, monthlyLimit: -1 }
+  // Calculate limits based on tier - ADMIN and PRO have unlimited access
+  const limits = (tier === 'PRO' || tier === 'ADMIN')
+    ? { dailyLimit: -1, monthlyLimit: -1 }
     : { dailyLimit: 3, monthlyLimit: 10 }
 
   return applySecurityHeaders(NextResponse.json({
@@ -176,9 +176,9 @@ export async function POST(request: NextRequest) {
   const tier = usage.tier || 'FREE'
   const { daily, monthly } = usage
 
-  // Calculate limits based on tier
-  const limits = tier === 'PRO'
-    ? { dailyLimit: 50, monthlyLimit: -1 }
+  // Calculate limits based on tier - ADMIN and PRO have unlimited access
+  const limits = (tier === 'PRO' || tier === 'ADMIN')
+    ? { dailyLimit: -1, monthlyLimit: -1 }
     : { dailyLimit: 3, monthlyLimit: 10 }
 
   if (daily >= limits.dailyLimit) {
