@@ -17,8 +17,11 @@ async function getUserUsageFromDB(userId: string): Promise<{ daily: number; mont
 
   // Get or create user record in DB
   let user = await prisma.user.findUnique({ where: { id: userId } })
+  console.log(`[getUserUsageFromDB] Looking up userId: ${userId}, found: ${user ? 'yes' : 'no'}, tier: ${user?.tier}`)
 
   if (!user) {
+    // Create user if doesn't exist - THIS IS THE BUG! If user exists in Prisma but with different id...
+    console.log(`[getUserUsageFromDB] User not found, creating new user with tier=FREE for userId: ${userId}`)
     // Create user if doesn't exist
     user = await prisma.user.create({
       data: {
@@ -91,8 +94,10 @@ export async function GET(request: NextRequest) {
     }))
   }
 
-  const userId = payload.id || payload.email
+  const userId = payload.id
+  console.log(`[USAGE API GET] Session verified - payload.id: ${payload.id}, payload.email: ${payload.email}`)
   if (!userId) {
+    console.error(`[USAGE API GET] ERROR: No userId in session payload!`)
     // Return graceful degradation for missing user ID instead of 401
     return applySecurityHeaders(NextResponse.json({
       userId: null,
@@ -106,12 +111,14 @@ export async function GET(request: NextRequest) {
   let usage
   try {
     usage = await getUserUsageFromDB(userId)
+    console.log(`[USAGE API GET] userId: ${userId}, tier from DB: ${usage.tier}`)
   } catch (dbError) {
     console.error("Prisma lookup failed:", dbError)
     return applySecurityHeaders(NextResponse.json({ error: 'Database error' }, { status: 500 }))
   }
 
   const tier = usage.tier || 'FREE'
+  console.log(`[USAGE API GET] Final tier for userId ${userId}: ${tier}`)
 
   // Calculate limits based on tier
   const limits = tier === 'PRO'

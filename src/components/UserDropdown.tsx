@@ -25,12 +25,14 @@ export default function UserDropdown() {
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Fetch user profile on mount
+  // Fetch user profile on mount and when pathname changes
   useEffect(() => {
     const fetchProfile = async () => {
       setAuthState('loading')
       try {
+        console.log("[UserDropdown] Fetching profile...")
         const res = await fetch("/api/auth/profile")
+        console.log("[UserDropdown] Profile response status:", res.status)
         if (res.status === 401) {
           // Not logged in - clear any stale data and show logged-out state
           setUser(null)
@@ -39,6 +41,7 @@ export default function UserDropdown() {
         }
         if (res.ok) {
           const data = await res.json()
+          console.log("[UserDropdown] Profile data:", data)
           if (data.user) {
             setUser(data.user)
             setAuthState('authenticated')
@@ -48,15 +51,15 @@ export default function UserDropdown() {
         // Unexpected response - treat as not logged in
         setUser(null)
         setAuthState('unauthenticated')
-      } catch {
+      } catch (error) {
         // Network error - treat as not logged in but log for debugging
-        console.error("Profile fetch failed")
+        console.error("Profile fetch failed", error)
         setUser(null)
         setAuthState('unauthenticated')
       }
     }
     fetchProfile()
-  }, [])
+  }, [pathname])
 
   // Click outside to close dropdown
   useEffect(() => {

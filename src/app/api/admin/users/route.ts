@@ -5,31 +5,11 @@ import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware } from "@/
 import { sanitizeString, validateEnum } from "@/lib/security"
 import { prisma } from "@/lib/db"
 
-// In-memory user storage (shared with other routes for demo)
-
 interface SessionUser {
   id: string
   email: string
   role: UserRole
 }
-
-interface AdminLog {
-  id: string
-  adminId: string
-  adminEmail: string
-  action: string
-  targetId?: string
-  targetType?: string
-  details?: Record<string, unknown>
-  createdAt: string
-}
-
-if (!global.users) global.users = new Map()
-if (!global.songs) global.songs = new Map()
-if (!global.adminLogs) global.adminLogs = new Map()
-
-const users = global.users
-const adminLogs = global.adminLogs
 
 function getSessionUser(request: NextRequest): SessionUser | null {
   const sessionToken = request.cookies.get('session-token')?.value
@@ -50,20 +30,6 @@ function getSessionUser(request: NextRequest): SessionUser | null {
 
 function isAdmin(user: SessionUser | null): boolean {
   return user?.role === 'ADMIN'
-}
-
-function logAdminAction(adminId: string, adminEmail: string, action: string, targetId?: string, targetType?: string, details?: Record<string, unknown>) {
-  const log: AdminLog = {
-    id: crypto.randomUUID(),
-    adminId,
-    adminEmail,
-    action,
-    targetId,
-    targetType,
-    details,
-    createdAt: new Date().toISOString(),
-  }
-  adminLogs.set(log.id, log)
 }
 
 // GET /api/admin/users - List users with pagination
@@ -90,32 +56,38 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const offset = (page - 1) * limit
 
-    let allUsers = Array.from(users.values())
+    // Build where clause for search
+    const where = search ? {
+      OR: [
+        { email: { contains: search, mode: 'insensitive' as const } },
+        { name: { contains: search, mode: 'insensitive' as const } },
+      ],
+    } : {}
 
-    // Filter by search
-    if (search) {
-      const searchLower = search.toLowerCase()
-      allUsers = allUsers.filter(u =>
-        u.email?.toLowerCase().includes(searchLower) ||
-        u.name?.toLowerCase().includes(searchLower)
-      )
-    }
-
-    const total = allUsers.length
-    const paginatedUsers = allUsers.slice(offset, offset + limit).map(u => ({
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      role: u.role,
-      isActive: u.isActive,
-      tier: u.tier,
-      dailyUsage: u.dailyUsage,
-      monthlyUsage: u.monthlyUsage,
-      createdAt: u.createdAt,
-    }))
+    // Fetch users from Prisma with pagination
+    const [allUsers, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip: offset,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          tier: true,
+          dailyUsage: true,
+          monthlyUsage: true,
+          createdAt: true,
+        },
+      }),
+      prisma.user.count({ where }),
+    ])
 
     return NextResponse.json({
-      users: paginatedUsers,
+      users: allUsers,
       pagination: {
         page,
         limit,
@@ -129,7 +101,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH /api/admin/users - Update user role/status
+// PATCH /api/admin/users - Update user role/status/tier/credits
 export async function PATCH(request: NextRequest) {
   // Rate limiting for admin endpoint
   const rateLimitResponse = rateLimitMiddleware(request, STRICT_RATE_LIMIT, ":admin:users:update")
@@ -191,51 +163,72 @@ export async function PATCH(request: NextRequest) {
       return applySecurityHeaders(NextResponse.json({ error: "resetMonthlyUsage must be a boolean" }, { status: 400 }))
     }
 
-    const targetUser = users.get(sanitizedUserId)
+    // Check if user exists in Prisma
+    const targetUser = await prisma.user.findUnique({
+      where: { id: sanitizedUserId },
+    })
+
     if (!targetUser) {
       return applySecurityHeaders(NextResponse.json({ error: "User not found" }, { status: 404 }))
     }
 
-    const updates: Record<string, unknown> = {}
-    if (role !== undefined) updates.role = role
-    if (isActive !== undefined) updates.isActive = isActive
-    if (tier !== undefined) updates.tier = tier
+    // Build update data for Prisma
+    const updateData: Record<string, unknown> = {}
 
-    // Handle credits management
+    if (role !== undefined) {
+      // Map role string to Role enum
+      updateData.role = role
+    }
+    if (isActive !== undefined) updateData.isActive = isActive
+    if (tier !== undefined) updateData.tier = tier
+
+    // Handle credits - add to monthlyUsage (credits spent)
+    // addCredits reduces the usage counter (giving user more generations available)
     if (typeof addCredits === "number" && addCredits > 0) {
-      // Add credits to monthly usage (negative values reduce usage)
-      targetUser.monthlyUsage = Math.max(0, targetUser.monthlyUsage - addCredits)
-      updates.addedCredits = addCredits
+      // Subtract from monthlyUsage to give user more available generations
+      const newMonthlyUsage = Math.max(0, targetUser.monthlyUsage - addCredits)
+      updateData.monthlyUsage = newMonthlyUsage
     }
 
     if (resetDailyUsage) {
-      targetUser.dailyUsage = 0
-      updates.resetDailyUsage = true
+      updateData.dailyUsage = 0
     }
 
     if (resetMonthlyUsage) {
-      targetUser.monthlyUsage = 0
-      updates.resetMonthlyUsage = true
+      updateData.monthlyUsage = 0
     }
 
-    Object.assign(targetUser, updates)
+    // Update user in Prisma
+    const updatedUser = await prisma.user.update({
+      where: { id: sanitizedUserId },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        tier: true,
+        dailyUsage: true,
+        monthlyUsage: true,
+        createdAt: true,
+      },
+    })
 
-    // Persist tier changes to Prisma database (for usage API which reads from DB)
-    if (tier !== undefined) {
-      try {
-        await prisma.user.update({
-          where: { id: sanitizedUserId },
-          data: { tier },
-        })
-      } catch (prismaError) {
-        console.error("Failed to update tier in Prisma:", prismaError)
-        // Continue anyway - in-memory update is still valid
-      }
-    }
+    // Log admin action
+    await prisma.adminLog.create({
+      data: {
+        adminId: user.id,
+        adminEmail: user.email,
+        action: 'UPDATE_USER',
+        targetId: sanitizedUserId,
+        targetType: 'USER',
+        details: JSON.parse(JSON.stringify(updateData)),
+      },
+    })
 
-    logAdminAction(user.id, user.email, 'UPDATE_USER', sanitizedUserId, 'USER', updates)
-
-    return NextResponse.json({ success: true, user: targetUser })
+    console.log(`[ADMIN PATCH] Updated user ${sanitizedUserId} tier to ${updatedUser.tier}`)
+    return NextResponse.json({ success: true, user: updatedUser })
   } catch (error) {
     console.error("Admin update user error:", error)
     return applySecurityHeaders(NextResponse.json({ error: "Failed to update user" }, { status: 500 }))

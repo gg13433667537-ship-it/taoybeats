@@ -57,6 +57,8 @@ export interface Song {
   userId: string
   forkedFrom?: string
   originalOwnerId?: string  // Original song owner's ID for attribution
+  partGroupId?: string      // Groups multi-part songs together
+  part?: number             // Part number for multi-part songs (1 = first part)
   createdAt: string
   updatedAt: string
 }

@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const user = await getCurrentUser(request)
+    console.log("[Profile API] getCurrentUser result:", user)
     if (!user) {
       const duration = Date.now() - startTime
       logger.api.response("GET", endpoint, 401, duration, { requestId })
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
       where: { id: user.id },
       select: { id: true, email: true, name: true, role: true, tier: true }
     })
+    console.log("[Profile API] DB lookup for user.id:", user.id, "result:", existingUser)
     if (!existingUser) {
       const duration = Date.now() - startTime
       logger.api.response("GET", endpoint, 404, duration, { requestId })

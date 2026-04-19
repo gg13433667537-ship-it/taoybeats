@@ -53,6 +53,11 @@ export default function DashboardPage() {
   const [copiedSongId, setCopiedSongId] = useState<string | null>(null)
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [showPlaylistModal, setShowPlaylistModal] = useState(false)
+
+  // Debug showPlaylistModal changes
+  useEffect(() => {
+    console.log("[DEBUG] showPlaylistModal changed to:", showPlaylistModal)
+  }, [showPlaylistModal])
   const [showPlaylistDropdown, setShowPlaylistDropdown] = useState<string | null>(null)
   const [newPlaylistName, setNewPlaylistName] = useState('')
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('')
@@ -142,6 +147,7 @@ export default function DashboardPage() {
       }
 
       if (songOptionsRef.current && !songOptionsRef.current.contains(event.target as Node)) {
+        console.log("[DEBUG] click-outside closing song options dropdown")
         setShowSongOptions(null)
       }
     }
@@ -174,18 +180,28 @@ export default function DashboardPage() {
 
   // Create playlist
   const handleCreatePlaylist = async () => {
-    if (!newPlaylistName.trim()) return
+    console.log("[DEBUG] handleCreatePlaylist called, newPlaylistName:", newPlaylistName)
+    if (!newPlaylistName.trim()) {
+      console.log("[DEBUG] handleCreatePlaylist: empty name, returning early")
+      return
+    }
     try {
+      console.log("[DEBUG] handleCreatePlaylist: making POST request to /api/playlists")
       const res = await fetch("/api/playlists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newPlaylistName, description: newPlaylistDesc }),
       })
+      console.log("[DEBUG] handleCreatePlaylist: response status:", res.status)
       if (res.ok) {
+        console.log("[DEBUG] handleCreatePlaylist: success, resetting form and closing modal")
         setNewPlaylistName("")
         setNewPlaylistDesc("")
         setShowPlaylistModal(false)
         fetchPlaylists()
+      } else {
+        const errorData = await res.json().catch(() => ({}))
+        console.log("[DEBUG] handleCreatePlaylist: error response:", errorData)
       }
     } catch (error) {
       console.error("Error creating playlist:", error)
@@ -226,25 +242,30 @@ export default function DashboardPage() {
 
   // Delete song
   const handleDeleteSong = async (songId: string) => {
+    console.log("[DEBUG] handleDeleteSong called with songId:", songId)
     setDeletingSongId(songId)
     setShowSongOptions(null)
     try {
+      console.log("[DEBUG] Making DELETE request to /api/songs/", songId)
       const res = await fetch(`/api/songs/${songId}`, { method: "DELETE" })
+      console.log("[DEBUG] DELETE response status:", res.status)
       if (res.ok) {
+        console.log("[DEBUG] DELETE successful, refreshing songs list")
         // Refresh songs from server
         const songsRes = await fetch("/api/songs")
         if (songsRes.ok) {
           const songsData = await songsRes.json()
           setSongs(songsData.songs || [])
         }
-        showToast("success", t("songDeleted") || "Song deleted successfully")
+        showToast("success", "Song deleted successfully")
       } else {
+        console.log("[DEBUG] DELETE failed, showing error toast")
         const errorData = await res.json().catch(() => ({}))
-        showToast("error", errorData.error || t("deleteFailed") || "Failed to delete song")
+        showToast("error", errorData.error || "Failed to delete song")
       }
     } catch (error) {
-      console.error("Error deleting song:", error)
-      showToast("error", t("deleteFailed") || "Failed to delete song")
+      console.error("[DEBUG] Error deleting song:", error)
+      showToast("error", "Failed to delete song")
     } finally {
       setDeletingSongId(null)
     }
@@ -681,6 +702,7 @@ export default function DashboardPage() {
                         <div className="relative" ref={songOptionsRef}>
                           <button
                             onClick={() => {
+                              console.log("[DEBUG] Three-dot menu clicked, current showSongOptions:", showSongOptions, "song.id:", song.id)
                               setShowSongOptions(showSongOptions === song.id ? null : song.id)
                             }}
                             aria-label="More options"
@@ -692,7 +714,11 @@ export default function DashboardPage() {
                           {showSongOptions === song.id && (
                             <div className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-surface border border-border shadow-lg overflow-hidden z-50">
                               <button
-                                onClick={() => handleDeleteSong(song.id)}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation()
+                                  console.log("[DEBUG] Delete button onMouseDown fired for song:", song.id)
+                                  handleDeleteSong(song.id)
+                                }}
                                 disabled={deletingSongId === song.id}
                                 className="w-full flex items-center gap-3 px-4 py-3 text-sm text-error hover:bg-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
@@ -701,7 +727,7 @@ export default function DashboardPage() {
                                 ) : (
                                   <Trash2 className="w-4 h-4" aria-hidden="true" />
                                 )}
-                                {deletingSongId === song.id ? t('deleting') || 'Deleting...' : t('deleteSong')}
+                                {deletingSongId === song.id ? 'Deleting...' : t('deleteSong')}
                               </button>
                             </div>
                           )}
@@ -720,8 +746,9 @@ export default function DashboardPage() {
               <h2 className="text-lg font-semibold text-foreground">{t('playlists')}</h2>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
+                onClick={() => {
+                  alert("Create Playlist button clicked!")
+                  console.log("[DEBUG] Create Playlist button clicked - opening modal")
                   setShowPlaylistModal(true)
                 }}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-accent hover:bg-accent/10 transition-colors"
@@ -778,7 +805,7 @@ export default function DashboardPage() {
 
       {/* Create Playlist Modal */}
       {showPlaylistModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => console.log("[DEBUG] Modal backdrop clicked")}>
           <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-foreground">{t('createPlaylist')}</h2>
@@ -812,7 +839,10 @@ export default function DashboardPage() {
                 />
               </div>
               <button
-                onClick={handleCreatePlaylist}
+                onClick={() => {
+                  console.log("[DEBUG] Modal Create Playlist button clicked, newPlaylistName:", newPlaylistName, "disabled:", !newPlaylistName.trim())
+                  handleCreatePlaylist()
+                }}
                 disabled={!newPlaylistName.trim()}
                 className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >

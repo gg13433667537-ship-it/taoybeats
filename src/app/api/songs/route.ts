@@ -56,36 +56,68 @@ function getSongsMap(): Map<string, Song> {
 const FREE_DAILY_LIMIT = 3
 const FREE_MONTHLY_LIMIT = 10
 
-// Lyrics limits for MiniMax API (approximately 500 chars = ~5 min of audio)
-const MAX_LYRICS_LENGTH = 500
-const LYRICS_TRUNCATE_WARNING = "Lyrics were truncated because they exceeded the maximum length supported by a single generation. The full lyrics will be split into multiple parts in a future update."
+// Lyrics segment size for MiniMax API (~400 chars per segment to stay under ~5 min limit)
+const LYRICS_SEGMENT_SIZE = 400
+const MIN_LYRICS_FOR_SPLIT = 500 // Only split if lyrics exceed this length
 
 function getDateKey(): string {
   return new Date().toISOString().split('T')[0]
 }
 
-// Helper to truncate lyrics if too long (MiniMax limit ~500 chars per generation)
-function truncateLyricsIfNeeded(lyrics: string | undefined): { truncatedLyrics: string | undefined; wasTruncated: boolean; warning?: string } {
+/**
+ * Split lyrics into segments of approximately LYRICS_SEGMENT_SIZE characters.
+ * Attempts to split at line breaks or sentence boundaries for better readability.
+ */
+function splitLyricsIntoSegments(lyrics: string | undefined): { segments: string[]; needsSplit: boolean } {
   if (!lyrics) {
-    return { truncatedLyrics: lyrics, wasTruncated: false }
+    return { segments: [], needsSplit: false }
   }
 
-  // Count Chinese characters + English characters
-  // Chinese chars are typically 1 character but take more space
-  // For simplicity, use total string length as proxy
-  const totalLength = lyrics.length
-
-  if (totalLength <= MAX_LYRICS_LENGTH) {
-    return { truncatedLyrics: lyrics, wasTruncated: false }
+  if (lyrics.length <= MIN_LYRICS_FOR_SPLIT) {
+    return { segments: [lyrics], needsSplit: false }
   }
 
-  // Truncate to MAX_LYRICS_LENGTH characters
-  const truncated = lyrics.slice(0, MAX_LYRICS_LENGTH)
-  return {
-    truncatedLyrics: truncated,
-    wasTruncated: true,
-    warning: LYRICS_TRUNCATE_WARNING
+  const segments: string[] = []
+  const lines = lyrics.split('\n')
+  let currentSegment = ''
+  let currentLength = 0
+
+  for (const line of lines) {
+    const lineLength = line.length
+
+    // If adding this line would exceed segment size
+    if (currentLength + lineLength > LYRICS_SEGMENT_SIZE && currentSegment.length > 0) {
+      // Save current segment and start a new one
+      segments.push(currentSegment.trim())
+      currentSegment = ''
+      currentLength = 0
+
+      // If single line is longer than segment size, break it anyway
+      if (lineLength > LYRICS_SEGMENT_SIZE) {
+        // Break long line into smaller pieces
+        let remaining = line
+        while (remaining.length > LYRICS_SEGMENT_SIZE) {
+          segments.push(remaining.slice(0, LYRICS_SEGMENT_SIZE))
+          remaining = remaining.slice(LYRICS_SEGMENT_SIZE)
+        }
+        currentSegment = remaining
+        currentLength = remaining.length
+      } else {
+        currentSegment = line
+        currentLength = lineLength
+      }
+    } else {
+      currentSegment += (currentSegment ? '\n' : '') + line
+      currentLength += lineLength
+    }
   }
+
+  // Add remaining content
+  if (currentSegment.trim()) {
+    segments.push(currentSegment.trim())
+  }
+
+  return { segments, needsSplit: segments.length > 1 }
 }
 
 function getMonthKey(): string {
@@ -224,6 +256,8 @@ export async function GET(request: NextRequest) {
       coverUrl: s.coverUrl || undefined,
       shareToken: s.shareToken || undefined,
       userId: s.userId,
+      partGroupId: s.partGroupId || undefined,
+      part: s.part || undefined,
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),
     }))
@@ -299,8 +333,8 @@ export async function POST(request: NextRequest) {
     const sanitizedTitle = sanitizeString(title)
     const sanitizedLyricsInput = lyrics ? sanitizeString(lyrics) : undefined
 
-    // Truncate lyrics if too long for MiniMax single-generation limit
-    const { truncatedLyrics: sanitizedLyrics, wasTruncated, warning: lyricsWarning } = truncateLyricsIfNeeded(sanitizedLyricsInput)
+    // Split lyrics into segments if too long for single MiniMax generation
+    const { segments: lyricsSegments, needsSplit } = splitLyricsIntoSegments(sanitizedLyricsInput)
 
     const sanitizedMood = sanitizeString(mood)
     const sanitizedGenre = genre.map((g: string) => sanitizeString(g)).filter((g: string) => g.length > 0)
@@ -311,7 +345,7 @@ export async function POST(request: NextRequest) {
 
     // Validation - lyrics not required if instrumental
     const instrumental = isInstrumental === true || isInstrumental === "true"
-    if (!instrumental && !sanitizedLyrics) {
+    if (!instrumental && lyricsSegments.length === 0) {
       return NextResponse.json(
         { error: "Missing required fields: title, lyrics, genre, mood" },
         { status: 400 }
@@ -420,16 +454,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create song record with sanitized values
-    const songId = crypto.randomUUID()
-    const now = new Date().toISOString()
-    const shareToken = crypto.randomUUID().slice(0, 8)
+    // Generate partGroupId for multi-part songs
+    const partGroupId = needsSplit ? crypto.randomUUID() : undefined
+    const totalParts = lyricsSegments.length
 
-    const song: Song = {
-      id: songId,
+    // Build common song properties (shared across all segments)
+    const commonSongProps = {
       userId: user.id,
       title: sanitizedTitle,
-      lyrics: sanitizedLyrics,
       genre: sanitizedGenre,
       mood: sanitizedMood,
       instruments: sanitizedInstruments || [],
@@ -446,70 +478,109 @@ export async function POST(request: NextRequest) {
       sampleRate: (validatedSampleRate || 44100) as 16000 | 24000 | 32000 | 44100,
       bitrate: (validatedBitrate || 256000) as 32000 | 64000 | 128000 | 256000,
       aigcWatermark: aigcWatermark === true || aigcWatermark === "true",
-      status: "PENDING",
-      moderationStatus: "APPROVED", // Auto-approve for MVP
-      shareToken,
-      createdAt: now,
-      updatedAt: now,
+      moderationStatus: "APPROVED" as const,
     }
 
     const songsMap = getSongsMap()
-    songsMap.set(songId, song)
+    const createdSongs: Array<{ id: string; part: number; shareToken: string }> = []
+    const now = new Date().toISOString()
 
-    // Persist to Prisma - if this fails, the song cannot be created
-    try {
-      await prisma.song.create({
-        data: {
-          id: songId,
-          title: song.title,
-          lyrics: song.lyrics || null,
-          genre: song.genre,
-          mood: song.mood || null,
-          instruments: song.instruments,
-          referenceSinger: song.referenceSinger || null,
-          referenceSong: song.referenceSong || null,
-          userNotes: song.userNotes || null,
-          status: "PENDING",
-          audioUrl: null,
-          coverUrl: null,
-          shareToken: shareToken,
-          userId: user.id,
-        },
-      })
-    } catch (prismaError) {
-      console.error("Failed to persist song to Prisma:", prismaError)
-      // Clean up in-memory song since we couldn't persist
-      songsMap.delete(songId)
-      return NextResponse.json(
-        { error: "Failed to create song. Please try again." },
-        { status: 500 }
-      )
+    // Create song records for each segment
+    for (let partIndex = 0; partIndex < lyricsSegments.length; partIndex++) {
+      const segmentLyrics = lyricsSegments[partIndex]
+      const partNumber = partIndex + 1
+      const songId = crypto.randomUUID()
+      const shareToken = partNumber === 1 ? crypto.randomUUID().slice(0, 8) : undefined // Only first part gets shareToken
+
+      const song: Song = {
+        id: songId,
+        ...commonSongProps,
+        lyrics: segmentLyrics,
+        status: "PENDING",
+        audioUrl: undefined,
+        videoUrl: undefined,
+        coverUrl: undefined,
+        shareToken,
+        partGroupId,
+        part: partNumber,
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      songsMap.set(songId, song)
+
+      // Persist to Prisma - if this fails, no songs are created
+      try {
+        await prisma.song.create({
+          data: {
+            id: songId,
+            title: song.title,
+            lyrics: song.lyrics || null,
+            genre: song.genre,
+            mood: song.mood || null,
+            instruments: song.instruments,
+            referenceSinger: song.referenceSinger || null,
+            referenceSong: song.referenceSong || null,
+            userNotes: song.userNotes || null,
+            status: "PENDING",
+            audioUrl: null,
+            coverUrl: null,
+            shareToken: shareToken || null,
+            userId: user.id,
+            partGroupId: partGroupId || null,
+            part: partNumber,
+          },
+        })
+        createdSongs.push({ id: songId, part: partNumber, shareToken: shareToken || '' })
+      } catch (prismaError) {
+        console.error("Failed to persist song to Prisma:", prismaError)
+        // Clean up any songs already created
+        for (const created of createdSongs) {
+          songsMap.delete(created.id)
+          await prisma.song.delete({ where: { id: created.id } }).catch(() => {})
+        }
+        return NextResponse.json(
+          { error: "Failed to create song. Please try again." },
+          { status: 500 }
+        )
+      }
     }
 
-    // Increment usage in database ONLY after song is successfully created
+    // Increment usage in database ONLY after all songs are successfully created
+    // Count each segment as one usage (user is generating one song, just split into parts)
     try {
       await incrementUsage(user.id)
     } catch (dbError) {
       console.error("Failed to increment usage in Prisma:", dbError)
-      // Song was created, but usage increment failed - this is not critical
-      // The user might get an extra generation, but it's better than failing the request
+      // Songs were created, but usage increment failed - not critical
     }
 
-    // Start real generation in background
-    generateMusic(songId, song, apiKey, apiUrl).catch((err) => {
-      console.error(`[Generate] Song ${songId} background generation failed:`, err)
-    })
+    // Start real generation in background for each segment
+    for (const { id, part } of createdSongs) {
+      const song = songsMap.get(id)
+      if (song) {
+        generateMusic(id, song, apiKey, apiUrl).catch((err) => {
+          console.error(`[Generate] Song ${id} (part ${part}) background generation failed:`, err)
+        })
+      }
+    }
 
+    // Return primary song info (first part) plus multi-part info
+    const primarySong = createdSongs[0]
     return NextResponse.json({
-      id: songId,
-      shareToken,
+      id: primarySong.id,
+      shareToken: primarySong.shareToken,
       status: "PENDING",
       usage: {
         daily: { used: user.dailyUsage + 1, limit: FREE_DAILY_LIMIT },
         monthly: { used: user.monthlyUsage + 1, limit: FREE_MONTHLY_LIMIT },
       },
-      lyricsTruncated: wasTruncated,
-      warning: lyricsWarning,
+      multiPart: needsSplit ? {
+        isMultiPart: true,
+        partGroupId,
+        totalParts,
+        parts: createdSongs.map(s => ({ id: s.id, part: s.part })),
+      } : undefined,
     })
   } catch (error) {
     console.error("Error creating song:", error)
