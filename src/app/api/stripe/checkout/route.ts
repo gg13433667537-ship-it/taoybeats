@@ -23,9 +23,25 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
   }
 }
 
+// Trusted price ID whitelist - only these IDs are accepted
+function getTrustedPriceIds(): string[] {
+  const trustedIds: string[] = []
+  const proMonthly = process.env.STRIPE_PRICE_ID_PRO_MONTHLY
+  const proAnnual = process.env.STRIPE_PRICE_ID_PRO_ANNUAL
+  if (proMonthly) trustedIds.push(proMonthly)
+  if (proAnnual) trustedIds.push(proAnnual)
+  return trustedIds
+}
+
 // Validate Stripe price ID format (starts with 'price_')
 function isValidPriceId(priceId: unknown): priceId is string {
   return typeof priceId === 'string' && /^price_[a-zA-Z0-9]{24,}$/.test(priceId)
+}
+
+// Validate priceId is in trusted whitelist
+function isTrustedPriceId(priceId: string): boolean {
+  const trustedIds = getTrustedPriceIds()
+  return trustedIds.length > 0 && trustedIds.includes(priceId)
 }
 
 export async function POST(request: NextRequest) {
@@ -62,6 +78,11 @@ export async function POST(request: NextRequest) {
 
     if (!isValidPriceId(priceId)) {
       return applySecurityHeaders(NextResponse.json({ error: "Invalid Price ID format" }, { status: 400 }))
+    }
+
+    // Validate priceId is in trusted whitelist
+    if (!isTrustedPriceId(priceId)) {
+      return applySecurityHeaders(NextResponse.json({ error: "Invalid Price ID" }, { status: 400 }))
     }
 
     // Create Stripe Checkout Session
