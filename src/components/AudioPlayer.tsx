@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useReducer } from "react"
 import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Download, AlertCircle, Loader2 } from "lucide-react"
 import { downloadSongFile } from "@/lib/song-download"
 
@@ -18,6 +18,60 @@ interface AudioPlayerProps {
   playlistArtists?: string[]
 }
 
+// Player state for useReducer to batch related updates
+interface PlayerState {
+  isPlaying: boolean
+  currentTime: number
+  duration: number
+  volume: number
+  isMuted: boolean
+  isLoading: boolean
+  loadError: string | null
+}
+
+type PlayerAction =
+  | { type: 'RESET' }
+  | { type: 'SET_PLAYING'; isPlaying: boolean }
+  | { type: 'SET_CURRENT_TIME'; currentTime: number }
+  | { type: 'SET_DURATION'; duration: number }
+  | { type: 'SET_VOLUME'; volume: number; isMuted?: boolean }
+  | { type: 'SET_LOADING'; isLoading: boolean }
+  | { type: 'SET_ERROR'; error: string | null }
+  | { type: 'SET_ALL'; isPlaying: boolean; currentTime: number; duration: number; isLoading: boolean; loadError: null }
+
+function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
+  switch (action.type) {
+    case 'RESET':
+      return { ...state, isPlaying: false, currentTime: 0, duration: 0, isLoading: true, loadError: null }
+    case 'SET_PLAYING':
+      return { ...state, isPlaying: action.isPlaying }
+    case 'SET_CURRENT_TIME':
+      return { ...state, currentTime: action.currentTime }
+    case 'SET_DURATION':
+      return { ...state, duration: action.duration }
+    case 'SET_VOLUME':
+      return { ...state, volume: action.volume, isMuted: action.isMuted ?? state.isMuted }
+    case 'SET_LOADING':
+      return { ...state, isLoading: action.isLoading }
+    case 'SET_ERROR':
+      return { ...state, loadError: action.error, isLoading: false }
+    case 'SET_ALL':
+      return { ...state, isPlaying: action.isPlaying, currentTime: action.currentTime, duration: action.duration, isLoading: action.isLoading, loadError: action.loadError }
+    default:
+      return state
+  }
+}
+
+const initialPlayerState: PlayerState = {
+  isPlaying: false,
+  currentTime: 0,
+  duration: 0,
+  volume: 1,
+  isMuted: false,
+  isLoading: false,
+  loadError: null,
+}
+
 export default function AudioPlayer({
   src,
   title,
@@ -33,14 +87,11 @@ export default function AudioPlayer({
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const pendingAutoplayRef = useRef(false)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [volume, setVolume] = useState(1)
-  const [isMuted, setIsMuted] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [playerState, dispatch] = useReducer(playerReducer, initialPlayerState)
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0)
+
+  // Destructure for convenience
+  const { isPlaying, currentTime, duration, volume, isMuted, isLoading, loadError } = playerState
 
   const effectiveSongId = playlistSongIds && playlistSongIds.length > 0
     ? playlistSongIds[currentTrackIndex]
@@ -62,8 +113,8 @@ export default function AudioPlayer({
     : artist
 
   const handleTrackFinished = useCallback(() => {
-    setIsPlaying(false)
-    setCurrentTime(0)
+    dispatch({ type: 'SET_PLAYING', isPlaying: false })
+    dispatch({ type: 'SET_CURRENT_TIME', currentTime: 0 })
     if (playlist && playlist.length > 1 && currentTrackIndex < playlist.length - 1) {
       pendingAutoplayRef.current = true
       setCurrentTrackIndex((prev) => prev + 1)
@@ -75,11 +126,7 @@ export default function AudioPlayer({
   useEffect(() => {
     if (!effectiveSrc) return
 
-    setIsPlaying(false)
-    setCurrentTime(0)
-    setDuration(0)
-    setIsLoading(true)
-    setLoadError(null)
+    dispatch({ type: 'RESET' })
     const audio = audioRef.current
     if (!audio) return
 
@@ -120,7 +167,7 @@ export default function AudioPlayer({
       await audio.play()
     } catch (error) {
       console.error('Playback failed:', error)
-      setLoadError(error instanceof Error ? error.message : 'Failed to play audio')
+      dispatch({ type: 'SET_ERROR', error: error instanceof Error ? error.message : 'Failed to play audio' })
     }
   }, [isPlaying])
 
@@ -130,8 +177,8 @@ export default function AudioPlayer({
 
     const nextMuted = !isMuted
     audio.muted = nextMuted
-    setIsMuted(nextMuted)
-  }, [isMuted])
+    dispatch({ type: 'SET_VOLUME', volume, isMuted: nextMuted })
+  }, [isMuted, volume])
 
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value)
@@ -139,8 +186,7 @@ export default function AudioPlayer({
       audioRef.current.volume = newVolume
       audioRef.current.muted = newVolume === 0
     }
-    setVolume(newVolume)
-    setIsMuted(newVolume === 0)
+    dispatch({ type: 'SET_VOLUME', volume: newVolume, isMuted: newVolume === 0 })
   }, [])
 
   const skip = useCallback((seconds: number) => {
@@ -149,8 +195,8 @@ export default function AudioPlayer({
 
     const newTime = Math.max(0, Math.min(duration, audio.currentTime + seconds))
     audio.currentTime = newTime
-    setCurrentTime(newTime)
-  }, [])
+    dispatch({ type: 'SET_CURRENT_TIME', currentTime: newTime })
+  }, [duration])
 
   const goToNextTrack = useCallback(() => {
     if (!playlist || currentTrackIndex >= playlist.length - 1) return
@@ -163,7 +209,7 @@ export default function AudioPlayer({
 
     if (currentTime > 3 && audio) {
       audio.currentTime = 0
-      setCurrentTime(0)
+      dispatch({ type: 'SET_CURRENT_TIME', currentTime: 0 })
       return
     }
 
@@ -177,7 +223,7 @@ export default function AudioPlayer({
     if (audioRef.current) {
       audioRef.current.currentTime = newTime
     }
-    setCurrentTime(newTime)
+    dispatch({ type: 'SET_CURRENT_TIME', currentTime: newTime })
   }, [])
 
   const handleCanPlay = useCallback(async () => {
@@ -185,13 +231,12 @@ export default function AudioPlayer({
     if (!audio) return
 
     const nextDuration = Number.isFinite(audio.duration) ? audio.duration : 0
-    setDuration(nextDuration)
     if (nextDuration > 0) {
       onDurationResolved?.(nextDuration)
     }
-    setIsLoading(false)
 
     if (!pendingAutoplayRef.current) {
+      dispatch({ type: 'SET_ALL', isPlaying: false, currentTime: 0, duration: nextDuration, isLoading: false, loadError: null })
       return
     }
 
@@ -201,7 +246,7 @@ export default function AudioPlayer({
       await audio.play()
     } catch (error) {
       console.error('Playback failed:', error)
-      setLoadError(error instanceof Error ? error.message : 'Failed to play audio')
+      dispatch({ type: 'SET_ERROR', error: error instanceof Error ? error.message : 'Failed to play audio' })
     }
   }, [onDurationResolved])
 
@@ -209,18 +254,17 @@ export default function AudioPlayer({
     const audio = audioRef.current
     if (!audio) return
     const nextDuration = Number.isFinite(audio.duration) ? audio.duration : 0
-    setDuration(nextDuration)
     if (nextDuration > 0) {
       onDurationResolved?.(nextDuration)
     }
-    setIsLoading(false)
+    dispatch({ type: 'SET_DURATION', duration: nextDuration })
+    dispatch({ type: 'SET_LOADING', isLoading: false })
   }, [onDurationResolved])
 
   const handleAudioError = useCallback(() => {
     const message = getMediaErrorMessage()
     console.error('Audio element error:', message, audioRef.current?.error)
-    setIsLoading(false)
-    setLoadError(message)
+    dispatch({ type: 'SET_ERROR', error: message })
   }, [getMediaErrorMessage])
 
   const formatTime = (time: number): string => {
@@ -276,14 +320,18 @@ export default function AudioPlayer({
         src={effectiveSrc}
         preload="metadata"
         onLoadStart={() => {
-          setIsLoading(true)
-          setLoadError(null)
+          dispatch({ type: 'SET_LOADING', isLoading: true })
+          dispatch({ type: 'SET_ERROR', error: null })
         }}
         onLoadedMetadata={handleLoadedMetadata}
         onCanPlay={handleCanPlay}
-        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
+        onTimeUpdate={() => {
+          if (audioRef.current) {
+            dispatch({ type: 'SET_CURRENT_TIME', currentTime: audioRef.current.currentTime })
+          }
+        }}
+        onPlay={() => dispatch({ type: 'SET_PLAYING', isPlaying: true })}
+        onPause={() => dispatch({ type: 'SET_PLAYING', isPlaying: false })}
         onEnded={handleTrackFinished}
         onError={handleAudioError}
       />

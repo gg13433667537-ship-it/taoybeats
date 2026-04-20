@@ -31,7 +31,8 @@ function readStringField(
   return undefined
 }
 
-function toSongRecord(dbSong: Record<string, any>): SongRecord {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toSongRecord(dbSong: any): SongRecord {
   const song: SongRecord = {
     id: dbSong.id,
     title: dbSong.title,
@@ -88,7 +89,7 @@ export async function getSongFromDb(id: string): Promise<SongRecord | null> {
       return null
     }
 
-    return toSongRecord(dbSong as Record<string, any>)
+    return toSongRecord(dbSong)
   } catch (dbError) {
     console.error("Prisma lookup failed:", dbError)
     return null
@@ -124,7 +125,7 @@ async function persistSongRefresh(
   try {
     await prisma.song.update({
       where: { id: song.id },
-      data: prismaData as any,
+      data: prismaData as Record<string, unknown>,
     })
   } catch (dbError) {
     console.error("Prisma refresh update failed:", dbError)
@@ -259,7 +260,7 @@ export async function PATCH(
       try {
         const dbSong = await prisma.song.findUnique({ where: { id } })
         if (dbSong) {
-          song = toSongRecord(dbSong as Record<string, any>)
+          song = toSongRecord(dbSong)
         }
       } catch (dbError) {
         console.error("Prisma lookup failed:", dbError)
@@ -429,7 +430,7 @@ export async function DELETE(
       try {
         const dbSong = await prisma.song.findUnique({ where: { id } })
         if (dbSong) {
-          song = toSongRecord(dbSong as Record<string, any>)
+          song = toSongRecord(dbSong)
         }
       } catch (dbError) {
         console.error("Prisma lookup failed:", dbError)

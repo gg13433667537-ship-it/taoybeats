@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 async function loadDownloadSongFile() {
   const moduleUrl = pathToFileURL(resolve(process.cwd(), "src/lib/song-download.ts")).href
-  const module = await import(/* @vite-ignore */ moduleUrl)
-  return module.downloadSongFile
+  const songModule = await import(/* @vite-ignore */ moduleUrl)
+  return songModule.downloadSongFile
 }
 
 describe("song download helper", () => {

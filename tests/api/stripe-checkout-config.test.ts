@@ -67,7 +67,7 @@ describe("stripe checkout env handling", () => {
       createMockNextRequest("http://localhost:3000/api/stripe/checkout", {
         body: { priceId: "price_123456789012345678901234" },
         cookies: [{ name: "session-token", value: sessionToken }],
-      }) as any
+      }) as Request
     )
 
     const data = await response.json()

@@ -30,32 +30,48 @@ function createMockNextRequest(
 
 describe("Usage API", () => {
   beforeEach(() => {
-    vi.mocked(prisma.user.findUnique).mockReset()
-    vi.mocked(prisma.song.count).mockReset()
-    vi.mocked(prisma.user.update).mockReset()
+    vi.clearAllMocks()
   })
 
   it("returns explicit unlimited flags and successful output counters for unlimited users", async () => {
-    const sessionToken = createSessionToken({
-      id: "admin-1",
-      email: "admin@example.com",
-      role: "ADMIN",
-      createdAt: new Date().toISOString(),
-    } as any)
+    const today = new Date().toISOString().split('T')[0]
+    const thisMonth = new Date().toISOString().slice(0, 7)
 
+    // Set up findUnique to return admin user with PRO tier
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "admin-1",
       role: "ADMIN",
       tier: "PRO",
       dailyUsage: 2,
       monthlyUsage: 8,
-      dailyResetAt: "2026-04-19",
-      monthlyResetAt: "2026-04",
+      dailyResetAt: today,
+      monthlyResetAt: thisMonth,
     } as any)
 
+    // Mock update to return user with updated dates (not needed for this test but avoids errors)
+    vi.mocked(prisma.user.update).mockImplementation(async ({ where, data }: any) => {
+      return {
+        id: where.id,
+        role: data.role || "ADMIN",
+        tier: data.tier || "PRO",
+        dailyUsage: data.dailyUsage ?? 2,
+        monthlyUsage: data.monthlyUsage ?? 8,
+        dailyResetAt: data.dailyResetAt || today,
+        monthlyResetAt: data.monthlyResetAt || thisMonth,
+      } as any
+    })
+
+    // Mock song.count for successful output
     vi.mocked(prisma.song.count)
       .mockResolvedValueOnce(4)
       .mockResolvedValueOnce(11)
+
+    const sessionToken = createSessionToken({
+      id: "admin-1",
+      email: "admin@example.com",
+      role: "ADMIN",
+      createdAt: new Date().toISOString(),
+    } as any)
 
     const response = await getUsage(
       createMockNextRequest("http://localhost:3000/api/usage", sessionToken) as any
@@ -82,26 +98,44 @@ describe("Usage API", () => {
   })
 
   it("returns remaining quota plus successful output counters for limited users", async () => {
-    const sessionToken = createSessionToken({
-      id: "user-1",
-      email: "user@example.com",
-      role: "USER",
-      createdAt: new Date().toISOString(),
-    } as any)
+    const today = new Date().toISOString().split('T')[0]
+    const thisMonth = new Date().toISOString().slice(0, 7)
 
+    // Set up findUnique to return free tier user
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "user-1",
       role: "USER",
       tier: "FREE",
       dailyUsage: 1,
       monthlyUsage: 3,
-      dailyResetAt: "2026-04-19",
-      monthlyResetAt: "2026-04",
+      dailyResetAt: today,
+      monthlyResetAt: thisMonth,
     } as any)
 
+    // Mock update to return user with updated dates
+    vi.mocked(prisma.user.update).mockImplementation(async ({ where, data }: any) => {
+      return {
+        id: where.id,
+        role: data.role || "USER",
+        tier: data.tier || "FREE",
+        dailyUsage: data.dailyUsage ?? 1,
+        monthlyUsage: data.monthlyUsage ?? 3,
+        dailyResetAt: data.dailyResetAt || today,
+        monthlyResetAt: data.monthlyResetAt || thisMonth,
+      } as any
+    })
+
+    // Mock song.count for successful output
     vi.mocked(prisma.song.count)
       .mockResolvedValueOnce(1)
       .mockResolvedValueOnce(3)
+
+    const sessionToken = createSessionToken({
+      id: "user-1",
+      email: "user@example.com",
+      role: "USER",
+      createdAt: new Date().toISOString(),
+    } as any)
 
     const response = await getUsage(
       createMockNextRequest("http://localhost:3000/api/usage", sessionToken) as any

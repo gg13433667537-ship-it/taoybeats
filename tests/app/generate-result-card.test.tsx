@@ -50,14 +50,16 @@ vi.mock("@/components/ThemeToggle", () => ({
 vi.mock("@/components/AudioPlayer", async () => {
   const React = await import("react")
 
-  return {
-    default: ({ src, onDurationResolved }: { src?: string; onDurationResolved?: (seconds: number) => void }) => {
-      React.useEffect(() => {
-        if (src) onDurationResolved?.(187)
-      }, [src, onDurationResolved])
+  function MockAudioPlayer({ src, onDurationResolved }: { src?: string; onDurationResolved?: (seconds: number) => void }) {
+    React.useEffect(() => {
+      if (src) onDurationResolved?.(187)
+    }, [src, onDurationResolved])
 
-      return <div data-testid="audio-player">{src || "no-audio"}</div>
-    },
+    return <div data-testid="audio-player">{src || "no-audio"}</div>
+  }
+
+  return {
+    default: MockAudioPlayer,
   }
 })
 
