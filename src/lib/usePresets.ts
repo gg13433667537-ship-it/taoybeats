@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 
+// Browser-compatible random bytes generator
+function getRandomBytesBase64(length: number): string {
+  const bytes = new Uint8Array(length)
+  self.crypto.getRandomValues(bytes)
+  return btoa(String.fromCharCode(...bytes))
+}
+
 export interface Preset {
   id: string
   userId?: string
@@ -188,7 +195,7 @@ export function usePresets() {
   // Share preset (generate share token)
   const sharePreset = useCallback(async (id: string): Promise<string | null> => {
     // Generate share token locally for now
-    const shareToken = crypto.randomBytes(24).toString('base64')
+    const shareToken = getRandomBytesBase64(24)
 
     // Update server
     try {

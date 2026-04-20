@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
 import type { Preset } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { sanitizeString, validateRequiredString, validateOptionalString, validateStringArray, validateNumber, validateUUID, validateBoolean, MAX_LENGTHS, applySecurityHeaders } from "@/lib/security"

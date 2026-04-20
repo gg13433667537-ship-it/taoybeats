@@ -97,18 +97,13 @@ async function verifyTokenEdge(token: string, secret: string): Promise<{ role: s
   }
 }
 
-// Get AUTH_SECRET for middleware (throws if not configured in production)
+// Get AUTH_SECRET for middleware (fail-closed if not configured)
 function getAuthSecret(): string {
   const secret = process.env.AUTH_SECRET
   if (!secret) {
-    // If no AUTH_SECRET is configured, use a fallback for local development
-    // In production, this should be set via Vercel environment variables
-    if (process.env.NODE_ENV === "development") {
-      return "development-secret-key"
-    }
-    // For production without AUTH_SECRET, derive from other env vars or use fallback
-    console.warn("AUTH_SECRET not configured, using temporary fallback key")
-    return process.env.VERCEL_GIT_COMMIT_SHA || "production-fallback-key"
+    // Fail-closed: if AUTH_SECRET is not configured, return empty string
+    // The calling code should reject the request when secret is empty
+    return ""
   }
   return secret
 }
@@ -174,6 +169,11 @@ export async function proxy(request: NextRequest) {
 
   // Admin routes - require ADMIN role
   if (adminRoutes.some((route) => pathname.startsWith(route))) {
+    const secret = getAuthSecret()
+    if (!secret) {
+      // AUTH_SECRET not configured - fail closed, redirect to dashboard
+      return NextResponse.redirect(new URL("/dashboard", request.url))
+    }
     if (!isAuthenticated) {
       const loginUrl = new URL("/login", request.url)
       loginUrl.searchParams.set("redirect", pathname)
