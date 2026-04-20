@@ -119,6 +119,7 @@ export const miniMaxProvider: AIProvider = {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(buildGenerationRequestBody(params)),
+      signal: AbortSignal.timeout(30000),
     })
 
     if (!response.ok) {
@@ -149,6 +150,7 @@ export const miniMaxProvider: AIProvider = {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
+      signal: AbortSignal.timeout(30000),
     })
 
     if (!response.ok) {
@@ -173,6 +175,7 @@ export const miniMaxProvider: AIProvider = {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
+      signal: AbortSignal.timeout(30000),
     })
 
     if (!response.ok) {
@@ -201,6 +204,7 @@ export const miniMaxProvider: AIProvider = {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(buildContinuationRequestBody(params)),
+      signal: AbortSignal.timeout(30000),
     })
 
     if (!response.ok) {
