@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { getSongFromDb, refreshGeneratingSong } from "@/app/api/songs/[id]/route"
+import { applySecurityHeaders } from "@/lib/security"
 
 // Initialize global songs map if not exists
 if (typeof global.songs === 'undefined') global.songs = new Map()
@@ -200,7 +201,7 @@ export async function GET(
     },
   })
 
-  return new Response(stream, {
+  return applySecurityHeaders(new NextResponse(stream, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -208,5 +209,5 @@ export async function GET(
       "X-Accel-Buffering": "no",
       "Retry": "3000",
     },
-  })
+  }), 'api')
 }

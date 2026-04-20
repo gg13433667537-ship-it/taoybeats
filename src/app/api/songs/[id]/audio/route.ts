@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { uploadAndWaitForR2 } from "@/lib/r2-upload-queue"
 import { prisma } from "@/lib/db"
+import { applySecurityHeaders } from "@/lib/security"
 
 function isR2Url(url: string): boolean {
   const r2PublicUrl = process.env.R2_PUBLIC_URL || ''
@@ -103,10 +104,10 @@ export async function GET(
       }
     }
 
-    return new NextResponse(audioResponse.body, {
+    return applySecurityHeaders(new NextResponse(audioResponse.body, {
       status: audioResponse.status,
       headers,
-    })
+    }), 'api')
   } catch (error) {
     console.error("[Audio Proxy] Internal error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
