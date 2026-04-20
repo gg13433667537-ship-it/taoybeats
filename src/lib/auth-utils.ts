@@ -67,7 +67,7 @@ export function verifySessionToken(
     }
 
     // Check if all sessions were revoked after this token was issued
-    if (options?.sessionsRevokedAt && payload.iat < options.sessionsRevokedAt) {
+    if (options?.sessionsRevokedAt && payload.iat * 1000 < options.sessionsRevokedAt) {
       console.error("Session token revoked by logout-all")
       return null
     }
