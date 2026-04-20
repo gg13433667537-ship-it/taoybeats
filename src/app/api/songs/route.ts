@@ -38,7 +38,7 @@ import { checkDuplicateGeneration } from "@/lib/cache"
 import { prisma } from "@/lib/db"
 import { prepareLyricsForModel } from "@/lib/minimax-music"
 import { rateLimitMiddleware, DEFAULT_RATE_LIMIT, sanitizeString, validateRequiredString, validateOptionalString, validateStringArray, validateNumber, MAX_LENGTHS } from "@/lib/security"
-import { uploadAudioFromUrl } from "@/lib/r2-storage"
+import { queueR2Upload } from "@/lib/r2-upload-queue"
 import crypto from "crypto"
 
 // Shared global storage - ensure initialized
@@ -717,18 +717,12 @@ async function initiateMusicGeneration(
 
     if (taskId.startsWith('audio:')) {
       const sourceAudioUrl = taskId.slice(6)
-      let finalAudioUrl = sourceAudioUrl
-
-      try {
-        finalAudioUrl = await uploadAudioFromUrl(sourceAudioUrl, songId)
-        console.log(`[Generate] Song ${songId} uploaded to R2: ${finalAudioUrl}`)
-      } catch (r2Error) {
-        console.error(`[Generate] Song ${songId} R2 upload failed, using provider URL:`, r2Error)
-      }
+      // Queue background upload (non-blocking)
+      queueR2Upload(songId, sourceAudioUrl)
 
       await updateSongStatus(songId, {
         status: 'COMPLETED',
-        audioUrl: finalAudioUrl,
+        audioUrl: sourceAudioUrl,
         providerTaskId: null,
       }, song)
     } else {
@@ -736,6 +730,12 @@ async function initiateMusicGeneration(
         status: 'GENERATING',
         providerTaskId: taskId,
       }, song)
+
+      // Queue background upload for when audio is ready (async generation)
+      const updatedSong = songsMap.get(songId)
+      if (updatedSong?.audioUrl) {
+        queueR2Upload(songId, updatedSong.audioUrl)
+      }
     }
 
     return songsMap.get(songId) || song
