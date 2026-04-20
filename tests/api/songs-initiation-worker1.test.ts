@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/r2-storage", () => ({
   uploadAudioFromUrl: vi.fn(async (_audioUrl: string, songId: string) => `https://r2.example/${songId}.mp3`),
+  isR2Configured: vi.fn(() => true),
 }))
 
 import { POST as createSong } from "@/app/api/songs/route"

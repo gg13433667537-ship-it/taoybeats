@@ -108,6 +108,14 @@ export async function uploadAndWaitForR2(songId: string, audioUrl: string): Prom
     return audioUrl
   }
 
+  // If R2 is not configured, return original URL immediately
+  // This allows songs to still work (play/download) even without R2
+  const { isR2Configured } = await import('./r2-storage')
+  if (!isR2Configured()) {
+    console.log(`[R2Queue] R2 not configured, using original URL for song ${songId}`)
+    return audioUrl
+  }
+
   // If already in queue, wait for it
   if (isPendingUpload(songId)) {
     return waitForUpload(songId)
