@@ -25,6 +25,8 @@ model User {
   dailyResetAt  String?
   monthlyResetAt String?
   sessionsRevokedAt DateTime? // Timestamp when all sessions were revoked (for logout-all)
+  stripeCustomerId String?
+  stripeSubscriptionId String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -33,6 +35,7 @@ model User {
   songs    Song[]
   apiConfig ApiConfig?
   subscription Subscription?
+  playlists Playlist[]
 }
 
 enum Role {
@@ -108,6 +111,9 @@ model Song {
   audioUrl        String?
   coverUrl        String?
   shareToken      String?  @unique
+  isInstrumental  Boolean  @default(false)
+  voiceId         String?
+  referenceAudio  String?
   userId          String
   forkedFrom      String?  // Reference to original song ID if this was forked
   originalOwnerId String?  // Reference to original song owner's ID for attribution
