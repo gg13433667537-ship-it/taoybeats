@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { X, Loader2, Sparkles, RefreshCw, Check, AlertCircle } from "lucide-react"
 
 interface LyricsAssistantModalProps {
@@ -107,11 +107,18 @@ export default function LyricsAssistantModal({
     handleOpenChange(isOpen)
   }, [isOpen, handleOpenChange])
 
-  // Auto-save to localStorage
+  // Auto-save to localStorage - use refs to avoid stale closures
+  const stateRef = useRef({ title, framework, selectedStyles, mood, editedLyrics, generatedLyrics })
+
+  useEffect(() => {
+    stateRef.current = { title, framework, selectedStyles, mood, editedLyrics, generatedLyrics }
+  }, [title, framework, selectedStyles, mood, editedLyrics, generatedLyrics])
+
   useEffect(() => {
     if (!isOpen || !generatedLyrics) return
 
     const interval = setInterval(() => {
+      const { title, framework, selectedStyles, mood, editedLyrics, generatedLyrics } = stateRef.current
       const draft: LyricsDraft = {
         title,
         framework,
@@ -124,7 +131,7 @@ export default function LyricsAssistantModal({
     }, 30000)
 
     return () => clearInterval(interval)
-  })
+  }, [isOpen, generatedLyrics])
 
   // Toggle style selection
   const toggleStyle = (style: string) => {
