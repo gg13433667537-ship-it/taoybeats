@@ -49,16 +49,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null
         }
 
-        // For demo user, we do a simple check since we can't bcrypt the demo password easily
-        // In production, always use: await bcrypt.compare(password, user.passwordHash)
-        if (email === "demo@taoybeats.com" && password === "demo123") {
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-          }
-        }
-
         // For any real user, use bcrypt comparison
         try {
           const isValid = await bcrypt.compare(password, user.passwordHash)

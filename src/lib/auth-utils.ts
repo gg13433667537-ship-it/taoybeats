@@ -4,15 +4,10 @@ import type { User } from "./types"
 export function getSecretKey(): string {
   const secret = process.env.AUTH_SECRET
   if (!secret) {
-    // If no AUTH_SECRET is configured, use a fallback for local development
-    // In production, this should be set via Vercel environment variables
-    if (process.env.NODE_ENV === "development") {
-      return "development-secret-key"
-    }
-    // For production without AUTH_SECRET, derive from other env vars or use fallback
+    // If no AUTH_SECRET is configured, generate a secure random fallback
     // This allows the app to function while warning in logs
-    console.warn("AUTH_SECRET not configured, using temporary fallback key")
-    return process.env.VERCEL_GIT_COMMIT_SHA || "production-fallback-key"
+    console.warn("AUTH_SECRET not configured, using secure random fallback key")
+    return crypto.randomBytes(32).toString('hex')
   }
   // Ensure minimum key length for HMAC-SHA256 in production
   if (secret.length < 32) {
@@ -72,7 +67,7 @@ export function verifySessionToken(
     }
 
     // Check if all sessions were revoked after this token was issued
-    if (options?.sessionsRevokedAt && payload.iat * 1000 < options.sessionsRevokedAt) {
+    if (options?.sessionsRevokedAt && payload.iat < options.sessionsRevokedAt) {
       console.error("Session token revoked by logout-all")
       return null
     }
