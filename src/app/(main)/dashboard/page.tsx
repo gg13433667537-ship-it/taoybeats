@@ -335,9 +335,14 @@ export default function DashboardPage() {
 
         // Fetch usage
         const usageRes = await fetch("/api/usage")
+        console.log("[Dashboard] usage API response status:", usageRes.status)
         if (usageRes.ok) {
           const usageData = await usageRes.json()
+          console.log("[Dashboard] usage data:", usageData)
           setUsage(usageData)
+        } else {
+          const errorText = await usageRes.text()
+          console.error("[Dashboard] usage API error:", usageRes.status, errorText)
         }
 
         // Fetch playlists
@@ -361,22 +366,25 @@ export default function DashboardPage() {
   useEffect(() => {
     // Check if there are any GENERATING songs
     const hasGeneratingSongs = songs.some(s => s.status === 'GENERATING')
-    if (!hasGeneratingSongs) return
 
     const pollInterval = setInterval(async () => {
       try {
-        const res = await fetch("/api/songs")
+        const res = await fetch(`/api/songs?page=${currentPage}&limit=${SONG_LIMIT}`)
         if (res.ok) {
           const data = await res.json()
           setSongs(data.songs || [])
+          if (data.pagination) {
+            setTotalPages(data.pagination.totalPages)
+            setTotalCount(data.pagination.totalCount)
+          }
         }
       } catch (error) {
         console.error("Error polling songs:", error)
       }
-    }, 5000) // Poll every 5 seconds
+    }, hasGeneratingSongs ? 5000 : 30000) // Poll every 5s if generating, every 30s as fallback
 
     return () => clearInterval(pollInterval)
-  }, [songs])
+  }, [songs, currentPage])
   // Intentionally depends on songs to re-check for GENERATING status after songs update
 
   // Create display list by grouping multi-part songs

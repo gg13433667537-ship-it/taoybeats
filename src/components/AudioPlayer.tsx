@@ -261,6 +261,17 @@ export default function AudioPlayer({
     dispatch({ type: 'SET_LOADING', isLoading: false })
   }, [onDurationResolved])
 
+  // Handle durationchange for streaming audio where duration isn't known upfront
+  const handleDurationChange = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    const nextDuration = Number.isFinite(audio.duration) ? audio.duration : 0
+    if (nextDuration > 0) {
+      dispatch({ type: 'SET_DURATION', duration: nextDuration })
+      onDurationResolved?.(nextDuration)
+    }
+  }, [onDurationResolved])
+
   const handleAudioError = useCallback(() => {
     const message = getMediaErrorMessage()
     console.error('Audio element error:', message, audioRef.current?.error)
@@ -324,6 +335,7 @@ export default function AudioPlayer({
           dispatch({ type: 'SET_ERROR', error: null })
         }}
         onLoadedMetadata={handleLoadedMetadata}
+        onDurationChange={handleDurationChange}
         onCanPlay={handleCanPlay}
         onTimeUpdate={() => {
           if (audioRef.current) {

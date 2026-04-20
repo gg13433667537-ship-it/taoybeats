@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { musicProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { prisma } from "@/lib/db"
 
 
 if (!global.users) global.users = new Map()
@@ -147,6 +148,17 @@ async function generateMusic(
 
       if (progress.status === 'COMPLETED') {
         console.log(`[Regenerate] Song ${songId} completed, audioUrl: ${progress.audioUrl}`)
+        // Persist audioUrl to database
+        if (progress.audioUrl) {
+          try {
+            await prisma.song.update({
+              where: { id: songId },
+              data: { audioUrl: progress.audioUrl },
+            })
+          } catch (dbError) {
+            console.error(`[Regenerate] Failed to persist audioUrl to database:`, dbError)
+          }
+        }
         break
       }
 

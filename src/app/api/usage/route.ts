@@ -23,57 +23,128 @@ function getStartOfMonth(): Date {
   return date
 }
 
-async function getUserUsageFromDB(userId: string): Promise<{ daily: number; monthly: number; tier: string; role: string }> {
+// Global in-memory fallback for demo users
+function getUsersMap(): Map<string, unknown> {
+  if (typeof global.users === 'undefined') global.users = new Map()
+  return global.users
+}
+
+async function getUserUsageFromDB(userId: string, email?: string): Promise<{ daily: number; monthly: number; tier: string; role: string }> {
   const today = getDateKey()
   const thisMonth = getMonthKey()
 
-  // Get or create user record in DB
-  let user = await prisma.user.findUnique({ where: { id: userId } })
-  console.log(`[getUserUsageFromDB] Looking up userId: ${userId}, found: ${user ? 'yes' : 'no'}, tier: ${user?.tier}`)
-
-  if (!user) {
-    // Create user if doesn't exist - THIS IS THE BUG! If user exists in Prisma but with different id...
-    console.log(`[getUserUsageFromDB] User not found, creating new user with tier=FREE for userId: ${userId}`)
-    // Create user if doesn't exist
-    user = await prisma.user.create({
-      data: {
+  // Try database first
+  try {
+    // Get or create user record in DB using upsert for atomic operation
+    let user = await prisma.user.upsert({
+      where: { id: userId },
+      create: {
         id: userId,
+        email: email || null,
+        name: email?.split('@')[0] || 'User',
         tier: 'FREE',
         dailyUsage: 0,
         monthlyUsage: 0,
         dailyResetAt: today,
         monthlyResetAt: thisMonth,
       },
+      update: {},
     })
-  }
+    console.log(`[getUserUsageFromDB] DB lookup success for userId: ${userId}, tier: ${user.tier}`)
 
-  // Check if we need to reset daily usage
-  if (user.dailyResetAt !== today) {
-    user = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        dailyUsage: 0,
-        dailyResetAt: today,
-      },
-    })
-  }
+    // Check if we need to reset daily usage
+    if (user.dailyResetAt !== today) {
+      user = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          dailyUsage: 0,
+          dailyResetAt: today,
+        },
+      })
+    }
 
-  // Check if we need to reset monthly usage
-  if (user.monthlyResetAt !== thisMonth) {
-    user = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        monthlyUsage: 0,
-        monthlyResetAt: thisMonth,
-      },
-    })
-  }
+    // Check if we need to reset monthly usage
+    if (user.monthlyResetAt !== thisMonth) {
+      user = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          monthlyUsage: 0,
+          monthlyResetAt: thisMonth,
+        },
+      })
+    }
 
-  return {
-    daily: user.dailyUsage,
-    monthly: user.monthlyUsage,
-    tier: user.tier,
-    role: user.role,
+    // Update in-memory cache
+    const memoryUser = {
+      id: user.id,
+      email: user.email || email || `${user.id}@local`,
+      name: user.name || email?.split('@')[0] || 'User',
+      role: user.role as 'USER' | 'PRO' | 'ADMIN',
+      tier: user.tier as 'FREE' | 'PRO',
+      isActive: true,
+      dailyUsage: user.dailyUsage,
+      monthlyUsage: user.monthlyUsage,
+      dailyResetAt: user.dailyResetAt || today,
+      monthlyResetAt: user.monthlyResetAt || thisMonth,
+      createdAt: user.createdAt?.toISOString() || new Date().toISOString(),
+    }
+    getUsersMap().set(memoryUser.id, memoryUser)
+    getUsersMap().set(memoryUser.email, memoryUser)
+
+    return {
+      daily: user.dailyUsage,
+      monthly: user.monthlyUsage,
+      tier: user.tier,
+      role: user.role,
+    }
+  } catch (dbError) {
+    console.error("[getUserUsageFromDB] Database error, falling back to memory:", dbError)
+    // Fallback to in-memory storage
+    const usersMap = getUsersMap()
+    const existingUser = usersMap.get(userId) || (email ? usersMap.get(email) : undefined)
+    const memoryUser = (existingUser as {
+      id: string
+      email: string
+      name: string
+      role: string
+      tier: string
+      dailyUsage: number
+      monthlyUsage: number
+      dailyResetAt: string
+      monthlyResetAt: string
+      createdAt: string
+    } | undefined) || {
+      id: userId,
+      email: email || `${userId}@local`,
+      name: email?.split('@')[0] || 'User',
+      role: 'USER',
+      tier: 'FREE',
+      dailyUsage: 0,
+      monthlyUsage: 0,
+      dailyResetAt: today,
+      monthlyResetAt: thisMonth,
+      createdAt: new Date().toISOString(),
+    }
+
+    // Reset usage if needed
+    if (memoryUser.dailyResetAt !== today) {
+      memoryUser.dailyUsage = 0
+      memoryUser.dailyResetAt = today
+    }
+    if (memoryUser.monthlyResetAt !== thisMonth) {
+      memoryUser.monthlyUsage = 0
+      memoryUser.monthlyResetAt = thisMonth
+    }
+
+    usersMap.set(memoryUser.id, memoryUser)
+    usersMap.set(memoryUser.email, memoryUser)
+
+    return {
+      daily: memoryUser.dailyUsage,
+      monthly: memoryUser.monthlyUsage,
+      tier: memoryUser.tier,
+      role: memoryUser.role,
+    }
   }
 }
 
@@ -132,7 +203,7 @@ export async function GET(request: NextRequest) {
   // Fetch user usage from Prisma database
   let usage
   try {
-    usage = await getUserUsageFromDB(userId)
+    usage = await getUserUsageFromDB(userId, payload.email)
     console.log(`[USAGE API GET] userId: ${userId}, tier from DB: ${usage.tier}`)
   } catch (dbError) {
     console.error("Prisma lookup failed:", dbError)
@@ -194,6 +265,7 @@ export async function POST(request: NextRequest) {
   }
 
   const userId = payload.id || payload.email
+  const userEmail = payload.email
   if (!userId) {
     return applySecurityHeaders(NextResponse.json({ error: 'Invalid session' }, { status: 401 }))
   }
@@ -201,7 +273,7 @@ export async function POST(request: NextRequest) {
   // Fetch user usage from Prisma database
   let usage
   try {
-    usage = await getUserUsageFromDB(userId)
+    usage = await getUserUsageFromDB(userId, userEmail)
   } catch (dbError) {
     console.error("Prisma lookup failed:", dbError)
     return applySecurityHeaders(NextResponse.json({ error: 'Database error' }, { status: 500 }))
