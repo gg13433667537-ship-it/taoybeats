@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
+import { isIP } from "net"
 
 // ============================================================================
 // Rate Limiting
@@ -61,7 +62,8 @@ function getClientIP(request: NextRequest): string {
 
   // 2. Next.js built-in ip property (serverless environment variable)
   // This is set by the hosting platform and is generally trustworthy
-  const requestIp = request.ip
+  // Cast to access Vercel-injected property not in NextRequest type
+  const requestIp = (request as { ip?: string }).ip
   if (requestIp && isValidIP(requestIp)) {
     return requestIp
   }
@@ -93,22 +95,15 @@ function getClientIP(request: NextRequest): string {
 /**
  * Validate an IP address format to prevent injection attacks.
  * Returns true only for valid IPv4 or IPv6 addresses.
+ * Uses Node.js built-in isIP() for robust validation.
  */
 function isValidIP(ip: string): boolean {
   if (!ip || typeof ip !== "string" || ip.length > 45) {
     return false
   }
 
-  // IPv4 pattern: 0-255.0-255.0-255.0-255
-  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-
-  // IPv6 pattern (simplified but covers most formats)
-  const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,7}:$|^(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}$|^(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}$|^(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}$|^[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}$|^:(?::[0-9a-fA-F]{1,4}){1,7}$|^::$/
-
-  // Also check for IPv4-mapped IPv6 addresses: ::ffff:192.168.1.1
-  const ipv4MappedRegex = /^::ffff:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i
-
-  return ipv4Regex.test(ip) || ipv6Regex.test(ip) || ipv4MappedRegex.test(ip)
+  // Use Node.js built-in isIP() - returns 4 for IPv4, 6 for IPv6, 0 for invalid
+  return isIP(ip) !== 0
 }
 
 export function getRateLimitKey(request: NextRequest, suffix: string = ""): string {
