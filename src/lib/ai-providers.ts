@@ -112,6 +112,8 @@ export const miniMaxProvider: AIProvider = {
   async generate(params, apiKey, apiUrl) {
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
 
+    // Music generation can take up to 3-5 minutes for complex songs
+    // Set timeout to 5 minutes to avoid premature abortion
     const response = await fetch(`${baseUrl}/v1/music_generation`, {
       method: 'POST',
       headers: {
@@ -119,7 +121,7 @@ export const miniMaxProvider: AIProvider = {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(buildGenerationRequestBody(params)),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(300000), // 5 minutes
     })
 
     if (!response.ok) {
@@ -145,12 +147,14 @@ export const miniMaxProvider: AIProvider = {
 
     const baseUrl = apiUrl || 'https://api.minimaxi.com'
 
+    // Progress check polls for completion - generation can take 3-5 minutes
+    // Set timeout to 5 minutes to match generation timeout
     const response = await fetch(`${baseUrl}/v1/music_generation_info?task_id=${taskId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(300000), // 5 minutes for polling operation
     })
 
     if (!response.ok) {
@@ -204,7 +208,7 @@ export const miniMaxProvider: AIProvider = {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(buildContinuationRequestBody(params)),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(300000), // 5 minutes for continuation
     })
 
     if (!response.ok) {
