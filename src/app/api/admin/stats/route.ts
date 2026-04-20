@@ -4,22 +4,10 @@ import { verifySessionToken } from "@/lib/auth-utils"
 import { prisma } from "@/lib/db"
 import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 
-
 interface SessionUser {
   id: string
   email: string
   role: UserRole
-}
-
-interface AdminLog {
-  id: string
-  adminId: string
-  adminEmail: string
-  action: string
-  targetId?: string
-  targetType?: string
-  details?: Record<string, unknown>
-  createdAt: string
 }
 
 function getSessionUser(request: NextRequest): SessionUser | null {

@@ -16,7 +16,6 @@ import AdvancedOptions from "@/components/AdvancedOptions"
 import GenerationProgress from "@/components/GenerationProgress"
 import { getLyricsLimitForModel } from "@/lib/minimax-music"
 import { useToast } from "@/components/Toast"
-import type { MultiPartInfo } from "@/lib/song-multipart"
 import { downloadSongFile } from "@/lib/song-download"
 
 type TranslateFn = ReturnType<typeof useI18n>["t"]
@@ -340,11 +339,8 @@ export default function GeneratePage() {
   } | null>(null)
 
   // Multi-part song state
-  const [multiPartInfo, setMultiPartInfo] = useState<MultiPartInfo | null>(null)
   const [playlistUrls, setPlaylistUrls] = useState<string[]>([])
   const [playlistSongIds, setPlaylistSongIds] = useState<string[]>([])
-  const [showMultiPartMessage, setShowMultiPartMessage] = useState(false)
-  const [isPollingRemainingParts, setIsPollingRemainingParts] = useState(false)
 
   const applyGenerationPresentation = useCallback(
     (
@@ -432,11 +428,8 @@ export default function GeneratePage() {
     applyGenerationPresentation('PENDING', 0)
     setAudioUrl(null)
     setResultDurationLabel('--:--')
-    setMultiPartInfo(null)
     setPlaylistUrls([])
     setPlaylistSongIds([])
-    setShowMultiPartMessage(false)
-    setIsPollingRemainingParts(false)
     setLyricsCompressionSummary(null)
 
     const lyricsLimit = getLyricsLimitForModel(model, isInstrumental)
@@ -714,65 +707,6 @@ export default function GeneratePage() {
     }
   }
 
-  // Poll remaining parts for multi-part songs
-  const pollRemainingParts = useCallback(async (partGroupId: string, initialPartId: string, initialAudioUrl: string, totalParts: number, parts: { id: string; part: number }[]) => {
-    setIsPollingRemainingParts(true)
-    const completedParts = new Map<string, string>([[initialPartId, initialAudioUrl]])
-
-    const pollInterval = 5000 // 5 seconds
-    const maxWaitTime = 30 * 60 * 1000 // 30 minutes max for all parts
-    const startTime = Date.now()
-
-    const checkParts = async () => {
-      try {
-        // Fetch songs by partGroupId - we need to check which parts are complete
-        const partIds = parts.map(p => p.id)
-
-        for (const partId of partIds) {
-          if (completedParts.has(partId)) continue
-
-          try {
-            const res = await fetch(`/api/songs/${partId}`)
-            if (res.ok) {
-              const song = await res.json()
-              if (song.status === 'COMPLETED' && song.audioUrl) {
-                completedParts.set(partId, song.audioUrl)
-              }
-            }
-          } catch {
-            // Ignore individual part fetch errors
-          }
-        }
-
-        const orderedCompletedParts = parts
-          .filter((part) => completedParts.has(part.id))
-          .sort((a, b) => a.part - b.part)
-
-        setPlaylistUrls(orderedCompletedParts.map((part) => completedParts.get(part.id) || initialAudioUrl))
-        setPlaylistSongIds(orderedCompletedParts.map((part) => part.id))
-
-        // Check if we have all parts
-        if (completedParts.size >= totalParts) {
-          setIsPollingRemainingParts(false)
-          return
-        }
-
-        // Check timeout
-        if (Date.now() - startTime > maxWaitTime) {
-          setIsPollingRemainingParts(false)
-          return
-        }
-
-        // Continue polling
-        setTimeout(checkParts, pollInterval)
-      } catch {
-        // On error, continue polling
-        setTimeout(checkParts, pollInterval)
-      }
-    }
-
-    checkParts()
-  }, [])
 
   // Handle download - uses API proxy to avoid CORS issues with external audio URLs
   const handleDownload = async () => {
@@ -840,11 +774,8 @@ export default function GeneratePage() {
     setStageMessage('')
     setFieldErrors({})
     setSongId(null)
-    setMultiPartInfo(null)
     setPlaylistUrls([])
     setPlaylistSongIds([])
-    setShowMultiPartMessage(false)
-    setIsPollingRemainingParts(false)
   }
 
   // Handle lyrics confirmed from modal

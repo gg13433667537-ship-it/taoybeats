@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
+import { uploadAndWaitForR2 } from "@/lib/r2-upload-queue"
 import { prisma } from "@/lib/db"
+
+function isR2Url(url: string): boolean {
+  const r2PublicUrl = process.env.R2_PUBLIC_URL || ''
+  return r2PublicUrl.length > 0 && url.startsWith(r2PublicUrl)
+}
 
 async function getSongById(id: string): Promise<Song | null> {
   const songsMap = global.songs as Map<string, Song> | undefined
@@ -65,8 +71,19 @@ export async function GET(
       return NextResponse.json({ error: "Audio not available" }, { status: 404 })
     }
 
+    // Ensure audio is on R2 (wait for upload if needed)
+    let audioUrl = song.audioUrl
+    if (!isR2Url(audioUrl)) {
+      try {
+        audioUrl = await uploadAndWaitForR2(id, audioUrl)
+      } catch (error) {
+        console.error("[Audio Proxy] R2 upload failed, falling back to original URL:", error)
+        // Fall back to original URL even if R2 upload failed
+      }
+    }
+
     const range = request.headers.get("range")
-    const audioResponse = await fetch(song.audioUrl, {
+    const audioResponse = await fetch(audioUrl, {
       headers: range ? { Range: range } : undefined,
     })
 
