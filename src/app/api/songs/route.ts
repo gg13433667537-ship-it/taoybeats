@@ -38,7 +38,6 @@ import { checkDuplicateGeneration } from "@/lib/cache"
 import { prisma } from "@/lib/db"
 import { prepareLyricsForModel } from "@/lib/minimax-music"
 import { rateLimitMiddleware, DEFAULT_RATE_LIMIT, sanitizeString, validateRequiredString, validateOptionalString, validateStringArray, validateNumber, MAX_LENGTHS } from "@/lib/security"
-import { queueR2Upload } from "@/lib/r2-upload-queue"
 import crypto from "crypto"
 
 // Shared global storage - ensure initialized
@@ -761,12 +760,23 @@ async function initiateMusicGeneration(
 
     if (taskId.startsWith('audio:')) {
       const sourceAudioUrl = taskId.slice(6)
-      // Queue background upload (non-blocking)
-      queueR2Upload(songId, sourceAudioUrl)
+
+      // Wait for R2 upload to complete before marking COMPLETED
+      // This ensures audio is on R2 (permanent) before song is available for download
+      let finalAudioUrl = sourceAudioUrl
+      try {
+        const { uploadAndWaitForR2 } = await import('@/lib/r2-upload-queue')
+        finalAudioUrl = await uploadAndWaitForR2(songId, sourceAudioUrl)
+      } catch (error) {
+        // If R2 upload fails (e.g., R2 not configured), fall back to MiniMax URL
+        // The MiniMax URL may expire, but we still mark the song as COMPLETED
+        // so users can at least try to download it
+        console.error(`[Generate] R2 upload failed for song ${songId}, using MiniMax URL:`, error)
+      }
 
       await updateSongStatus(songId, {
         status: 'COMPLETED',
-        audioUrl: sourceAudioUrl,
+        audioUrl: finalAudioUrl,
         providerTaskId: null,
       }, song)
     } else {

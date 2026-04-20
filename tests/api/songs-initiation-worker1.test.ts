@@ -132,16 +132,16 @@ describe("POST /api/songs initiation flow", () => {
 
     expect(response.status).toBe(200)
     expect(data.status).toBe("COMPLETED")
-    // R2 upload is now async/queued, so audioUrl returns the MiniMax CDN URL immediately
-    // The R2 upload happens in background and will update audioUrl when complete
-    expect(data.audioUrl).toBe("https://cdn.minimax.example/immediate.mp3")
+    // R2 upload now completes synchronously before song is marked COMPLETED
+    // audioUrl returns the R2 URL (permanent storage)
+    expect(data.audioUrl).toBe("https://r2.example/immediate.mp3")
 
     const song = global.songs?.get(data.id) as any
     expect(song.status).toBe("COMPLETED")
-    expect(song.audioUrl).toBe("https://cdn.minimax.example/immediate.mp3")
+    expect(song.audioUrl).toBe("https://r2.example/immediate.mp3")
     expect(song.providerTaskId).toBeUndefined()
-    // uploadAudioFromUrl is called by the queue processor, but we can't easily test that
-    // since queueR2Upload triggers async processing
+    // uploadAudioFromUrl is called synchronously as part of song creation
+    expect(uploadAudioFromUrl).toHaveBeenCalledWith("https://cdn.minimax.example/immediate.mp3", data.id)
   })
 
   it("compresses long lyrics and persists a single provider task id for single-pass generation", async () => {
