@@ -32,6 +32,43 @@ function getFileExtension(contentType: string | null): string {
   return "mp3"
 }
 
+/**
+ * Sanitize a filename to be safe for ASCII header values
+ * Removes all non-ASCII and special characters
+ */
+function sanitizeAsciiFilename(filename: string, extension: string): string {
+  // Replace any non-ASCII, non-alphanumeric characters with underscore
+  const sanitized = filename.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'audio'
+  return `${sanitized}.${extension}`.toLowerCase()
+}
+
+/**
+ * Encode a filename using RFC 5987 (extended notation for non-ASCII in Content-Disposition)
+ * Example: "囚鸟.mp3" -> "UTF-8''%E5%9B%9A%E9%B8%9F.mp3"
+ */
+function encodeRFC5987Filename(filename: string): string {
+  // Split filename into name and extension parts properly
+  // Handle cases where filename has or doesn't have an extension
+  const lastDotIndex = filename.lastIndexOf('.')
+  const hasExtension = lastDotIndex > 0 && lastDotIndex < filename.length - 1
+  const name = hasExtension ? filename.substring(0, lastDotIndex) : filename
+  const ext = hasExtension ? filename.substring(lastDotIndex + 1) : 'mp3'
+
+  // Encode just the name part (not the extension)
+  const encoded = encodeURIComponent(name).replace(/['()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+  return `UTF-8''${encoded}.${ext}`
+}
+
+/**
+ * Build a Content-Disposition header value that is safe for both ASCII and non-ASCII filenames
+ * Uses RFC 5987 encoding for the extended filename* parameter
+ */
+function buildContentDisposition(filename: string, extension: string): string {
+  const asciiFilename = sanitizeAsciiFilename(filename, extension)
+  const rfc5987Filename = encodeRFC5987Filename(filename)
+  return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${rfc5987Filename.replace(/^UTF-8''/, '')}`
+}
+
 function applyBinarySecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set("X-Content-Type-Options", "nosniff")
   response.headers.set("X-Frame-Options", "SAMEORIGIN")
@@ -243,11 +280,13 @@ export async function GET(
 
     console.log(`[Download] Serving: ${filename}, size: ${contentLength}`)
 
+    const contentDisposition = buildContentDisposition(song.title, extension)
+
     return applyBinarySecurityHeaders(new NextResponse(new Uint8Array(body), {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': contentDisposition,
         'Content-Length': contentLength.toString(),
         'Cache-Control': 'private, no-cache, no-store, must-revalidate',
       },
