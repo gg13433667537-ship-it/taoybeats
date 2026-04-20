@@ -5,7 +5,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { uploadAndWaitForR2 } from "@/lib/r2-upload-queue"
 import { prisma } from "@/lib/db"
+
+function isR2Url(url: string): boolean {
+  const r2PublicUrl = process.env.R2_PUBLIC_URL || ''
+  return r2PublicUrl.length > 0 && url.startsWith(r2PublicUrl)
+}
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
   const sessionToken = request.cookies.get('session-token')?.value
@@ -79,11 +85,22 @@ export async function GET(
       return NextResponse.json({ error: "Audio not available" }, { status: 404 })
     }
 
-    // Fetch the audio from external URL
-    const audioResponse = await fetch(song.audioUrl)
+    // Ensure audio is on R2 (wait for upload if needed)
+    let audioUrl = song.audioUrl
+    if (!isR2Url(audioUrl)) {
+      try {
+        audioUrl = await uploadAndWaitForR2(id, audioUrl)
+      } catch (error) {
+        console.error("R2 upload failed, falling back to original URL:", error)
+        // Fall back to original URL even if R2 upload failed
+      }
+    }
+
+    // Fetch the audio
+    const audioResponse = await fetch(audioUrl)
 
     if (!audioResponse.ok) {
-      console.error("Failed to fetch audio from external URL:", audioResponse.status)
+      console.error("Failed to fetch audio:", audioResponse.status)
       return NextResponse.json({ error: "Failed to fetch audio" }, { status: 502 })
     }
 
@@ -92,7 +109,7 @@ export async function GET(
 
     // Determine content type from response or default to mp3
     const contentType = audioResponse.headers.get('content-type') || 'audio/mpeg'
-    const extension = getFileExtension(contentType, song.audioUrl)
+    const extension = getFileExtension(contentType, audioUrl)
 
     // Get filename from title or use default
     const filename = `${song.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_') || 'audio'}.${extension}`
