@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from "next/server"
+import { verifySessionToken } from "@/lib/auth-utils"
+import { applySecurityHeaders } from "@/lib/security"
 import type { Song } from "@/lib/types"
 
 // Global storage is shared from songs route
 
 export async function POST(request: NextRequest) {
+  // Verify session
+  const sessionToken = request.cookies.get('session-token')?.value
+  if (!sessionToken) {
+    return applySecurityHeaders(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+  }
+
+  const payload = verifySessionToken(sessionToken)
+  if (!payload) {
+    return applySecurityHeaders(NextResponse.json({ error: 'Invalid session' }, { status: 401 }))
+  }
+
+  const userId = payload.id || payload.email
+  if (!userId) {
+    return applySecurityHeaders(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+  }
+
   try {
     const body = await request.json()
     const { songIds } = body

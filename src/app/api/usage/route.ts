@@ -114,40 +114,19 @@ export async function GET(request: NextRequest) {
   // Get user ID from session token
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) {
-    // Return graceful degradation for unauthenticated requests instead of 401
-    return applySecurityHeaders(NextResponse.json({
-      userId: null,
-      tier: 'GUEST',
-      daily: { used: 0, limit: 0, remaining: 0, unlimited: false },
-      monthly: { used: 0, limit: 0, remaining: 0, unlimited: false },
-      output: { successfulToday: 0, successfulThisMonth: 0 },
-    }))
+    return applySecurityHeaders(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
   }
 
   const payload = verifySessionToken(sessionToken)
   if (!payload) {
-    // Return graceful degradation for invalid session instead of 401
-    return applySecurityHeaders(NextResponse.json({
-      userId: null,
-      tier: 'GUEST',
-      daily: { used: 0, limit: 0, remaining: 0, unlimited: false },
-      monthly: { used: 0, limit: 0, remaining: 0, unlimited: false },
-      output: { successfulToday: 0, successfulThisMonth: 0 },
-    }))
+    return applySecurityHeaders(NextResponse.json({ error: 'Invalid session' }, { status: 401 }))
   }
 
   const userId = payload.id
   console.log(`[USAGE API GET] Session verified - payload.id: ${payload.id}, payload.email: ${payload.email}`)
   if (!userId) {
     console.error(`[USAGE API GET] ERROR: No userId in session payload!`)
-    // Return graceful degradation for missing user ID instead of 401
-    return applySecurityHeaders(NextResponse.json({
-      userId: null,
-      tier: 'GUEST',
-      daily: { used: 0, limit: 0, remaining: 0, unlimited: false },
-      monthly: { used: 0, limit: 0, remaining: 0, unlimited: false },
-      output: { successfulToday: 0, successfulThisMonth: 0 },
-    }))
+    return applySecurityHeaders(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
   }
 
   // Fetch user usage from Prisma database
