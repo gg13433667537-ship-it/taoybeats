@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { ChevronDown, Plus, Trash2, Volume2, Loader2, AlertCircle } from "lucide-react"
 import CloneVoiceModal from "./CloneVoiceModal"
 
@@ -55,17 +55,20 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
   const [systemVoices, setSystemVoices] = useState<Voice[]>(defaultSystemVoices)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const loadVoices = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
-    const abortController = new AbortController()
+    // Abort any pending request before starting a new one
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = new AbortController()
 
     try {
       // API key is now handled server-side, no need to pass it from client
       const response = await fetch(`/api/voice/list?voice_type=all`, {
-        signal: abortController.signal,
+        signal: abortControllerRef.current!.signal,
       })
       const data = await response.json()
 
@@ -103,7 +106,7 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
       if (err instanceof Error && err.name === 'AbortError') return
       setError(err instanceof Error ? err.message : '获取音色列表失败')
     } finally {
-      if (abortController.signal.aborted) return
+      if (abortControllerRef.current?.signal.aborted) return
       setIsLoading(false)
     }
   }, [])
@@ -114,6 +117,11 @@ export default function VoiceSelector({ selectedVoiceId, onSelectVoice, apiKey }
     if (isOpen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       loadVoices()
+    }
+
+    // Cleanup: abort any in-flight request when isOpen changes or component unmounts
+    return () => {
+      abortControllerRef.current?.abort()
     }
   }, [isOpen, loadVoices])
 
