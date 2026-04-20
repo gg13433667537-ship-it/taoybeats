@@ -562,6 +562,9 @@ export function validateCSRFDoubleSubmit(request: NextRequest): boolean {
       .digest("hex")
 
     // Constant-time comparison to prevent timing attacks
+    if (signature.length !== expectedSignature.length) {
+      return false
+    }
     return crypto.timingSafeEqual(
       Buffer.from(signature),
       Buffer.from(expectedSignature)
