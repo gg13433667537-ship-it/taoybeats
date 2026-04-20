@@ -96,20 +96,39 @@ export async function getSongFromDb(id: string): Promise<SongRecord | null> {
   }
 }
 
-// Queue R2 upload when song completes with audioUrl
-async function queueR2UploadIfComplete(
+// Upload audio to R2 when song completes with audioUrl
+// This is now synchronous - waits for upload to complete before returning
+async function uploadAudioToR2IfComplete(
   song: SongRecord,
   updates: Partial<SongRecord> & { status: Song["status"] }
-): Promise<void> {
-  // Only queue if status is COMPLETED and audioUrl is set
+): Promise<{ audioUrl: string } | null> {
+  // Only upload if status is COMPLETED and audioUrl is set
   if (updates.status === "COMPLETED" && updates.audioUrl) {
     try {
-      const { queueR2Upload } = await import("@/lib/r2-upload-queue")
-      queueR2Upload(song.id, updates.audioUrl)
+      const { uploadAudioFromUrl, isR2Configured, extractObjectKeyFromUrl } = await import("@/lib/storage")
+
+      // Skip if already an R2 URL
+      if (extractObjectKeyFromUrl(updates.audioUrl)) {
+        console.log(`[Persist] Audio already in R2: ${updates.audioUrl}`)
+        return null
+      }
+
+      // Skip if R2 not configured
+      if (!isR2Configured()) {
+        console.log(`[Persist] R2 not configured, using original URL: ${updates.audioUrl}`)
+        return null
+      }
+
+      console.log(`[Persist] Uploading audio to R2 for song ${song.id}...`)
+      const result = await uploadAudioFromUrl(updates.audioUrl, song.id)
+      console.log(`[Persist] Audio uploaded to R2: ${result.r2Url}`)
+      return { audioUrl: result.r2Url }
     } catch (error) {
-      console.error("[Persist] Failed to queue R2 upload:", error)
+      console.error("[Persist] Failed to upload audio to R2:", error)
+      return null
     }
   }
+  return null
 }
 
 async function persistSongRefresh(
@@ -125,8 +144,11 @@ async function persistSongRefresh(
   const songsMap = global.songs as Map<string, SongRecord> | undefined
   songsMap?.set(song.id, refreshedSong)
 
-  // Queue R2 upload if song just completed with audio
-  await queueR2UploadIfComplete(song, updates)
+  // Upload to R2 synchronously if song just completed with audio
+  const r2UploadResult = await uploadAudioToR2IfComplete(song, updates)
+  if (r2UploadResult) {
+    refreshedSong.audioUrl = r2UploadResult.audioUrl
+  }
 
   const prismaData: Record<string, unknown> = {
     status: refreshedSong.status,

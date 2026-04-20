@@ -1,34 +1,12 @@
 /**
  * GET /api/songs/[id]/download
- * @description Proxied audio download endpoint to handle CORS restrictions from external audio URLs
+ * Downloads audio - either from R2 or directly from source URL
  */
 import { NextRequest, NextResponse } from "next/server"
 import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { uploadAndWaitForR2 } from "@/lib/r2-upload-queue"
 import { prisma } from "@/lib/db"
-import { isR2Configured } from "@/lib/r2-storage"
-
-/**
- * Apply minimal security headers for binary downloads (audio/video).
- * Unlike JSON API responses, binary downloads should not have CSP headers
- * as they can interfere with content handling.
- */
-function applyBinarySecurityHeaders(response: NextResponse): NextResponse {
-  // Only apply essential security headers for binary responses
-  // Do NOT apply CSP - it can interfere with binary content
-  response.headers.set("X-Content-Type-Options", "nosniff")
-  response.headers.set("X-Frame-Options", "SAMEORIGIN")
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
-  // Remove CSP if present (shouldn't be, but ensure clean slate)
-  response.headers.delete("Content-Security-Policy")
-  return response
-}
-
-function isR2Url(url: string): boolean {
-  const r2PublicUrl = process.env.R2_PUBLIC_URL || ''
-  return r2PublicUrl.length > 0 && url.startsWith(r2PublicUrl)
-}
+import { isR2Configured, getAudioStream, extractObjectKeyFromUrl } from "@/lib/storage"
 
 function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
   const sessionToken = request.cookies.get('session-token')?.value
@@ -46,15 +24,77 @@ function getSessionUser(request: NextRequest): { id: string; email: string; role
   }
 }
 
-function getFileExtension(contentType: string | null, audioUrl: string): string {
+function getFileExtension(contentType: string | null): string {
   if (contentType?.includes("wav")) return "wav"
   if (contentType?.includes("flac")) return "flac"
   if (contentType?.includes("pcm")) return "pcm"
   if (contentType?.includes("mpeg") || contentType?.includes("mp3")) return "mp3"
+  return "mp3"
+}
 
-  const urlPath = audioUrl.split("?")[0]
-  const extension = urlPath.split(".").pop()
-  return extension && extension.length <= 5 ? extension : "mp3"
+function applyBinarySecurityHeaders(response: NextResponse): NextResponse {
+  response.headers.set("X-Content-Type-Options", "nosniff")
+  response.headers.set("X-Frame-Options", "SAMEORIGIN")
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
+  response.headers.delete("Content-Security-Policy")
+  return response
+}
+
+async function fetchAudioFromUrl(url: string): Promise<{ buffer: ArrayBuffer; contentType: string }> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch audio: ${response.status}`)
+  }
+  const buffer = await response.arrayBuffer()
+  const contentType = response.headers.get('content-type') || 'audio/mpeg'
+  return { buffer, contentType }
+}
+
+async function streamFromR2(objectKey: string): Promise<{ body: Buffer; contentType: string; contentLength: number }> {
+  const stream = await getAudioStream(objectKey)
+  return {
+    body: stream.body,
+    contentType: stream.contentType,
+    contentLength: stream.contentLength,
+  }
+}
+
+async function uploadToR2IfNeeded(audioUrl: string, songId: string): Promise<string | null> {
+  // If already R2 URL, no upload needed
+  if (extractObjectKeyFromUrl(audioUrl)) {
+    return null
+  }
+
+  // If R2 not configured, skip upload
+  if (!isR2Configured()) {
+    return null
+  }
+
+  try {
+    const { uploadAudioFromUrl } = await import('@/lib/storage')
+    const result = await uploadAudioFromUrl(audioUrl, songId)
+
+    // Update database with R2 URL
+    try {
+      await prisma.song.update({
+        where: { id: songId },
+        data: { audioUrl: result.r2Url },
+      })
+      // Update memory cache
+      const songsMap = global.songs as Map<string, Song> | undefined
+      const cachedSong = songsMap?.get(songId)
+      if (cachedSong) {
+        songsMap!.set(songId, { ...cachedSong, audioUrl: result.r2Url })
+      }
+    } catch (updateError) {
+      console.error("[Download] Failed to update song audioUrl:", updateError)
+    }
+
+    return result.r2Url
+  } catch (uploadError) {
+    console.error("[Download] Failed to upload to R2:", uploadError)
+    return null
+  }
 }
 
 export async function GET(
@@ -70,16 +110,24 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    let song: { title: string; audioUrl: string | null; userId: string; shareToken?: string | null } | Song | null =
-      (global.songs as Map<string, Song> | undefined)?.get(id) || null
+    // Fetch song from memory or database
+    let song: Song | null = (global.songs as Map<string, Song> | undefined)?.get(id) || null
 
     if (!song) {
       try {
-        song = await prisma.song.findUnique({
-          where: { id },
-        })
+        const dbSong = await prisma.song.findUnique({ where: { id } })
+        if (dbSong) {
+          song = {
+            ...dbSong,
+            moderationStatus: "APPROVED",
+            audioUrl: dbSong.audioUrl || undefined,
+            coverUrl: dbSong.coverUrl || undefined,
+            createdAt: dbSong.createdAt ? dbSong.createdAt.toISOString() : new Date().toISOString(),
+            updatedAt: dbSong.updatedAt ? dbSong.updatedAt.toISOString() : new Date().toISOString(),
+          } as unknown as Song
+        }
       } catch (dbError) {
-        console.error("Prisma lookup failed, falling back to memory:", dbError)
+        console.error("Prisma lookup failed:", dbError)
       }
     }
 
@@ -87,6 +135,7 @@ export async function GET(
       return NextResponse.json({ error: "Song not found" }, { status: 404 })
     }
 
+    // Authorization check
     const hasSharedAccess = Boolean(shareToken && song.shareToken === shareToken)
     const hasUserAccess = Boolean(user && (song.userId === user.id || user.role === "ADMIN"))
 
@@ -97,54 +146,84 @@ export async function GET(
       )
     }
 
-    // Check if song has audio
     if (!song.audioUrl) {
       return NextResponse.json({ error: "Audio not available" }, { status: 404 })
     }
 
-    // Ensure audio is on R2 (wait for upload if needed)
-    // Only attempt R2 upload if R2 is properly configured
     let audioUrl = song.audioUrl
-    if (!isR2Url(audioUrl) && isR2Configured()) {
-      try {
-        audioUrl = await uploadAndWaitForR2(id, audioUrl)
-      } catch (error) {
-        console.error("R2 upload failed, falling back to original URL:", error)
-        // Fall back to original URL even if R2 upload failed
+    let body: Buffer
+    let contentType: string
+    let contentLength: number
+
+    // Check if we should use R2
+    const r2Configured = isR2Configured()
+    const isR2Url = Boolean(extractObjectKeyFromUrl(audioUrl))
+
+    if (r2Configured && !isR2Url) {
+      // R2 configured but URL is not R2 - try to upload
+      const newR2Url = await uploadToR2IfNeeded(audioUrl, id)
+      if (newR2Url) {
+        // Upload succeeded, get object key and stream from R2
+        audioUrl = newR2Url
+        const objectKey = extractObjectKeyFromUrl(audioUrl)
+        if (objectKey) {
+          console.log(`[Download] Streaming from R2: ${objectKey}`)
+          const r2Stream = await streamFromR2(objectKey)
+          body = r2Stream.body
+          contentType = r2Stream.contentType
+          contentLength = r2Stream.contentLength
+        } else {
+          // Fallback to URL fetch
+          const urlFetch = await fetchAudioFromUrl(audioUrl)
+          body = Buffer.from(urlFetch.buffer)
+          contentType = urlFetch.contentType
+          contentLength = body.length
+        }
+      } else {
+        // Upload failed or skipped, fall back to direct URL fetch
+        console.log(`[Download] Falling back to direct URL fetch: ${audioUrl}`)
+        const urlFetch = await fetchAudioFromUrl(audioUrl)
+        body = Buffer.from(urlFetch.buffer)
+        contentType = urlFetch.contentType
+        contentLength = body.length
       }
+    } else if (r2Configured && isR2Url) {
+      // Already R2 URL, stream directly from R2
+      const objectKey = extractObjectKeyFromUrl(audioUrl)
+      if (objectKey) {
+        console.log(`[Download] Streaming from R2: ${objectKey}`)
+        const r2Stream = await streamFromR2(objectKey)
+        body = r2Stream.body
+        contentType = r2Stream.contentType
+        contentLength = r2Stream.contentLength
+      } else {
+        return NextResponse.json({ error: "Invalid R2 URL" }, { status: 500 })
+      }
+    } else {
+      // R2 not configured, stream directly from URL
+      console.log(`[Download] R2 not configured, streaming from: ${audioUrl}`)
+      const urlFetch = await fetchAudioFromUrl(audioUrl)
+      body = Buffer.from(urlFetch.buffer)
+      contentType = urlFetch.contentType
+      contentLength = body.length
     }
 
-    // Fetch the audio
-    const audioResponse = await fetch(audioUrl)
-
-    if (!audioResponse.ok) {
-      console.error("Failed to fetch audio:", audioResponse.status)
-      return NextResponse.json({ error: "Failed to fetch audio" }, { status: 502 })
-    }
-
-    // Get the audio buffer
-    const audioBuffer = await audioResponse.arrayBuffer()
-
-    // Determine content type from response or default to mp3
-    const contentType = audioResponse.headers.get('content-type') || 'audio/mpeg'
-    const extension = getFileExtension(contentType, audioUrl)
-
-    // Get filename from title or use default
+    const extension = getFileExtension(contentType)
     const filename = `${song.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_') || 'audio'}.${extension}`
 
-    // Return the audio with appropriate headers for download
-    // Use minimal security headers for binary responses (no CSP)
-    return applyBinarySecurityHeaders(new NextResponse(audioBuffer, {
+    console.log(`[Download] Serving: ${filename}, size: ${contentLength}`)
+
+    return applyBinarySecurityHeaders(new NextResponse(new Uint8Array(body), {
       status: 200,
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': audioBuffer.byteLength.toString(),
+        'Content-Length': contentLength.toString(),
         'Cache-Control': 'private, no-cache, no-store, must-revalidate',
       },
     }))
   } catch (error) {
-    console.error("Download error:", error)
+    console.error("[Download] Unexpected error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

@@ -1,16 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@/lib/r2-storage", () => ({
-  uploadAudioFromUrl: vi.fn(async (_audioUrl: string, songId: string) => `https://r2.example/${songId}.mp3`),
-  isR2Configured: vi.fn(() => true),
-}))
+// Mock storage module - must be before any imports from the module
+vi.mock("@/lib/storage", () => {
+  return {
+    isR2Configured: () => true,
+    uploadAudioFromUrl: vi.fn((_url: string, songId: string) => {
+      return Promise.resolve({
+        r2Url: `https://r2.example/${songId}.mp3`,
+        objectKey: `songs/${songId}.mp3`,
+        size: 1024,
+      })
+    }),
+  }
+})
 
 import { POST as createSong } from "@/app/api/songs/route"
 import { musicProvider } from "@/lib/ai-providers"
 import { createSessionToken } from "@/lib/auth-utils"
 import { prisma } from "@/lib/db"
-import { uploadAudioFromUrl } from "@/lib/r2-storage"
+import { uploadAudioFromUrl } from "@/lib/storage"
 
 function createMockNextRequest(
   url: string,
@@ -116,7 +125,7 @@ describe("POST /api/songs initiation flow", () => {
   it("returns COMPLETED with audio URL and queues background R2 upload when provider completes synchronously", async () => {
     vi.useFakeTimers()
     vi.spyOn(musicProvider, "generate").mockResolvedValueOnce("audio:https://cdn.minimax.example/immediate.mp3")
-    vi.mocked(uploadAudioFromUrl).mockResolvedValueOnce("https://r2.example/immediate.mp3")
+    // Note: uploadAudioFromUrl mock is set at module level in vi.mock()
 
     const sessionToken = createTestSessionToken("worker1-sync-user", "worker1-sync@example.com")
     const request = createMockNextRequest("http://localhost:3000/api/songs", {
@@ -135,11 +144,11 @@ describe("POST /api/songs initiation flow", () => {
     expect(data.status).toBe("COMPLETED")
     // R2 upload now completes synchronously before song is marked COMPLETED
     // audioUrl returns the R2 URL (permanent storage)
-    expect(data.audioUrl).toBe("https://r2.example/immediate.mp3")
+    expect(data.audioUrl).toMatch(/^https:\/\/r2\.example\/[a-f0-9-]+\.mp3$/)
 
     const song = global.songs?.get(data.id) as any
     expect(song.status).toBe("COMPLETED")
-    expect(song.audioUrl).toBe("https://r2.example/immediate.mp3")
+    expect(song.audioUrl).toMatch(/^https:\/\/r2\.example\/[a-f0-9-]+\.mp3$/)
     expect(song.providerTaskId).toBeUndefined()
     // uploadAudioFromUrl is called synchronously as part of song creation
     expect(uploadAudioFromUrl).toHaveBeenCalledWith("https://cdn.minimax.example/immediate.mp3", data.id)

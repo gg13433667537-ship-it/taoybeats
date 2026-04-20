@@ -761,14 +761,22 @@ async function initiateMusicGeneration(
     if (taskId.startsWith('audio:')) {
       const sourceAudioUrl = taskId.slice(6)
 
-      // Wait for R2 upload to complete before marking COMPLETED
+      // Upload to R2 synchronously and wait for completion
       // This ensures audio is on R2 (permanent) before song is available for download
       let finalAudioUrl = sourceAudioUrl
       try {
-        const { uploadAndWaitForR2 } = await import('@/lib/r2-upload-queue')
-        finalAudioUrl = await uploadAndWaitForR2(songId, sourceAudioUrl)
+        const { uploadAudioFromUrl, isR2Configured } = await import('@/lib/storage')
+
+        if (isR2Configured()) {
+          console.log(`[Generate] Uploading audio to R2 for song ${songId}...`)
+          const uploadResult = await uploadAudioFromUrl(sourceAudioUrl, songId)
+          finalAudioUrl = uploadResult.r2Url
+          console.log(`[Generate] Audio uploaded to R2: ${finalAudioUrl}, size: ${uploadResult.size}`)
+        } else {
+          console.log(`[Generate] R2 not configured, using MiniMax URL for song ${songId}`)
+        }
       } catch (error) {
-        // If R2 upload fails (e.g., R2 not configured), fall back to MiniMax URL
+        // If R2 upload fails, fall back to MiniMax URL
         // The MiniMax URL may expire, but we still mark the song as COMPLETED
         // so users can at least try to download it
         console.error(`[Generate] R2 upload failed for song ${songId}, using MiniMax URL:`, error)
@@ -784,7 +792,7 @@ async function initiateMusicGeneration(
         status: 'GENERATING',
         providerTaskId: taskId,
       }, song)
-      // R2 upload will be queued when song completes with audioUrl in persistSongRefresh
+      // R2 upload will happen when song completes via persistSongRefresh
     }
 
     return songsMap.get(songId) || song
