@@ -62,6 +62,7 @@ function getSongsMap(): Map<string, Song> {
 // Free tier limits
 const FREE_DAILY_LIMIT = 3
 const FREE_MONTHLY_LIMIT = 10
+const PRO_DAILY_LIMIT = 50
 
 function getDateKey(): string {
   return new Date().toISOString().split('T')[0]
@@ -508,7 +509,9 @@ export async function POST(request: NextRequest) {
 
     // Check usage limits (from Prisma - already reset if needed by getSessionUser)
     // Admins bypass usage limits
-    if (user.tier === 'FREE' && user.role !== 'ADMIN') {
+    if (user.role === 'ADMIN') {
+      // Admin bypasses all limits
+    } else if (user.tier === 'FREE') {
       if (user.dailyUsage >= FREE_DAILY_LIMIT) {
         return NextResponse.json(
           {
@@ -528,6 +531,18 @@ export async function POST(request: NextRequest) {
             message: `You've used all ${FREE_MONTHLY_LIMIT} free generations this month. Upgrade to Pro for unlimited.`,
             monthly: { used: user.monthlyUsage, limit: FREE_MONTHLY_LIMIT },
             code: "MONTHLY_LIMIT_REACHED",
+          },
+          { status: 429 }
+        )
+      }
+    } else if (user.tier === 'PRO') {
+      if (user.dailyUsage >= PRO_DAILY_LIMIT) {
+        return NextResponse.json(
+          {
+            error: "Daily limit reached",
+            message: `You've used all ${PRO_DAILY_LIMIT} Pro generations today.`,
+            daily: { used: user.dailyUsage, limit: PRO_DAILY_LIMIT },
+            code: "DAILY_LIMIT_REACHED",
           },
           { status: 429 }
         )

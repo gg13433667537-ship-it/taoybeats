@@ -210,23 +210,26 @@ export async function POST(request: NextRequest) {
   const tier = usage.tier || 'FREE'
   const { daily, monthly } = usage
 
-  // Calculate limits based on tier and role - ADMIN and PRO have unlimited access
-  const limits = (tier === 'PRO' || usage.role === 'ADMIN')
-    ? { dailyLimit: -1, monthlyLimit: -1 }
-    : { dailyLimit: 3, monthlyLimit: 10 }
+  // PRO and ADMIN have unlimited access - skip limit checks entirely
+  const isUnlimited = tier === 'PRO' || usage.role === 'ADMIN'
 
-  if (daily >= limits.dailyLimit) {
-    return applySecurityHeaders(NextResponse.json(
-      { error: 'Daily limit reached', daily, monthly, limit: limits.dailyLimit },
-      { status: 429 }
-    ))
-  }
+  if (!isUnlimited) {
+    const dailyLimit = 3
+    const monthlyLimit = 10
 
-  if (limits.monthlyLimit !== -1 && monthly >= limits.monthlyLimit) {
-    return applySecurityHeaders(NextResponse.json(
-      { error: 'Monthly limit reached', daily, monthly, limit: limits.monthlyLimit },
-      { status: 429 }
-    ))
+    if (daily >= dailyLimit) {
+      return applySecurityHeaders(NextResponse.json(
+        { error: 'Daily limit reached', daily, monthly, limit: dailyLimit },
+        { status: 429 }
+      ))
+    }
+
+    if (monthly >= monthlyLimit) {
+      return applySecurityHeaders(NextResponse.json(
+        { error: 'Monthly limit reached', daily, monthly, limit: monthlyLimit },
+        { status: 429 }
+      ))
+    }
   }
 
   // Increment usage in database
