@@ -95,8 +95,8 @@ export async function middleware(request: NextRequest) {
   // Verify the session token
   const secret = getAuthSecret()
   if (!secret) {
-    // If no AUTH_SECRET, allow request to proceed (fallback to API-level auth)
-    return NextResponse.next()
+    console.error("AUTH_SECRET not configured, rejecting admin route access")
+    return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
   const payload = await verifySessionTokenEdge(sessionToken, secret)
@@ -116,5 +116,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/admin/:path*", "/admin"],
 }
