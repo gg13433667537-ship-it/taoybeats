@@ -3,6 +3,7 @@ import type { User } from "@/lib/types"
 import { applySecurityHeaders } from "@/lib/security"
 import { getStripeServerConfig } from "@/lib/stripe-config"
 import { getStripeClient } from "@/lib/stripe-server"
+import { prisma } from "@/lib/db"
 
 // Raw body needed for Stripe signature verification
 export async function POST(request: NextRequest) {
@@ -70,6 +71,20 @@ export async function POST(request: NextRequest) {
               console.log(`User ${userId} upgraded to PRO via Stripe`)
             }
           }
+          // Persist to database
+          try {
+            await prisma.user.update({
+              where: { id: userId },
+              data: {
+                tier: "PRO",
+                stripeCustomerId: session.customer as string,
+                stripeSubscriptionId: session.subscription as string,
+              },
+            })
+            console.log(`User ${userId} tier persisted to database`)
+          } catch (error) {
+            console.error(`Failed to persist user tier for ${userId}:`, error)
+          }
         }
         break
       }
@@ -89,6 +104,19 @@ export async function POST(request: NextRequest) {
               usersMap.set(userId, user)
               console.log(`User ${userId} downgraded to FREE (subscription canceled)`)
             }
+          }
+          // Persist to database
+          try {
+            await prisma.user.update({
+              where: { id: userId },
+              data: {
+                tier: "FREE",
+                stripeSubscriptionId: undefined,
+              },
+            })
+            console.log(`User ${userId} downgrade persisted to database`)
+          } catch (error) {
+            console.error(`Failed to persist user downgrade for ${userId}:`, error)
           }
         }
         break

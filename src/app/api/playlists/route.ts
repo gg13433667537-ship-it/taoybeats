@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Playlist } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { playlistCache } from "@/lib/cache"
+import { prisma } from "@/lib/db"
 import { sanitizeString, validateRequiredString, validateOptionalString, validateBoolean, MAX_LENGTHS, applySecurityHeaders, handleCORS } from "@/lib/security"
 
 
@@ -115,6 +116,23 @@ export async function POST(request: NextRequest) {
   }
 
   global.playlists?.set(playlist.id, playlist)
+
+  // Persist playlist to database
+  try {
+    await prisma.playlist.create({
+      data: {
+        id: playlist.id,
+        name: playlist.name,
+        description: playlist.description || null,
+        userId: playlist.userId,
+        songIds: playlist.songIds,
+        isPublic: playlist.isPublic,
+      },
+    })
+    console.log(`Playlist ${playlist.id} persisted to database`)
+  } catch (error) {
+    console.error(`Failed to persist playlist ${playlist.id}:`, error)
+  }
 
   // Invalidate playlist cache for this user
   playlistCache.delete(`playlists:${user.id}`)

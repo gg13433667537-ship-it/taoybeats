@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { User, Song } from "@/lib/types"
 import { musicProvider } from "@/lib/ai-providers"
 import { verifySessionToken } from "@/lib/auth-utils"
+import { prisma } from "@/lib/db"
 import { } from "@/lib/security"
 import crypto from "crypto"
 
@@ -191,6 +192,33 @@ export async function POST(request: NextRequest) {
       const songsMap = global.songs as Map<string, Song>
       songsMap.set(songId, song)
 
+      // Persist song to database
+      try {
+        await prisma.song.create({
+          data: {
+            id: songId,
+            title: song.title,
+            lyrics: song.lyrics || null,
+            genre: song.genre,
+            mood: song.mood || null,
+            instruments: song.instruments,
+            referenceSinger: song.referenceSinger || null,
+            referenceSong: song.referenceSong || null,
+            userNotes: song.userNotes || null,
+            status: "PENDING",
+            lyricsCompressionApplied: false,
+            shareToken: shareToken,
+            userId: user.id,
+            isInstrumental: song.isInstrumental,
+            voiceId: song.voiceId || null,
+            referenceAudio: song.referenceAudio || null,
+          },
+        })
+        console.log(`Song ${songId} persisted to database`)
+      } catch (error) {
+        console.error(`Failed to persist song ${songId}:`, error)
+      }
+
       // Start background generation
       generateMusic(songId, song, apiKey, apiUrl).catch((err) => {
         console.error(`[BatchGenerate] Song ${songId} failed:`, err)
@@ -265,11 +293,39 @@ async function generateMusic(
 
       if (progress.status === 'COMPLETED') {
         console.log(`[BatchGenerate] Song ${songId} completed`)
+        // Persist final status to database
+        try {
+          await prisma.song.update({
+            where: { id: songId },
+            data: {
+              status: "COMPLETED",
+              audioUrl: progress.audioUrl || null,
+              providerTaskId: taskId,
+            },
+          })
+          console.log(`Song ${songId} final status persisted to database`)
+        } catch (error) {
+          console.error(`Failed to persist song ${songId} status:`, error)
+        }
         break
       }
 
       if (progress.status === 'FAILED') {
         console.error(`[BatchGenerate] Song ${songId} failed:`, progress.error)
+        // Persist final status to database
+        try {
+          await prisma.song.update({
+            where: { id: songId },
+            data: {
+              status: "FAILED",
+              errorMessage: progress.error || "Generation failed",
+              providerTaskId: taskId,
+            },
+          })
+          console.log(`Song ${songId} failure status persisted to database`)
+        } catch (error) {
+          console.error(`Failed to persist song ${songId} failure status:`, error)
+        }
         break
       }
     }
@@ -281,6 +337,19 @@ async function generateMusic(
         status: 'FAILED',
         updatedAt: new Date().toISOString(),
       })
+      // Persist timeout status to database
+      try {
+        await prisma.song.update({
+          where: { id: songId },
+          data: {
+            status: "FAILED",
+            errorMessage: "Generation timed out",
+          },
+        })
+        console.log(`Song ${songId} timeout status persisted to database`)
+      } catch (error) {
+        console.error(`Failed to persist song ${songId} timeout status:`, error)
+      }
     }
   } catch (error) {
     console.error(`[BatchGenerate] Song ${songId} error:`, error)
@@ -289,5 +358,18 @@ async function generateMusic(
       status: 'FAILED',
       updatedAt: new Date().toISOString(),
     })
+    // Persist error status to database
+    try {
+      await prisma.song.update({
+        where: { id: songId },
+        data: {
+          status: "FAILED",
+          errorMessage: error instanceof Error ? error.message : "Unknown error",
+        },
+      })
+      console.log(`Song ${songId} error status persisted to database`)
+    } catch (dbError) {
+      console.error(`Failed to persist song ${songId} error status:`, dbError)
+    }
   }
 }
