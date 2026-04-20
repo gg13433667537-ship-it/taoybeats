@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [apiUrl, setApiUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [modelId, setModelId] = useState('')
+  const [hasStoredApiKey, setHasStoredApiKey] = useState(false) // Track if a key is already stored server-side
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('')
@@ -91,19 +92,49 @@ export default function SettingsPage() {
 
   const allTabs = userRole === 'ADMIN' ? [...TABS, ...ADMIN_TABS] : TABS
 
-  // Load API key from localStorage on mount
+  // Load API config from server on mount
   useEffect(() => {
-    const savedKey = localStorage.getItem('minimax_api_key')
-    const savedUrl = localStorage.getItem('minimax_api_url')
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (savedKey) setApiKey(savedKey)
-    if (savedUrl) setApiUrl(savedUrl)
+    const fetchApiConfig = async () => {
+      try {
+        const res = await fetch('/api/user/api-config')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.apiConfig) {
+            startTransition(() => {
+              setApiProvider(data.apiConfig.provider || 'minimax')
+              setApiUrl(data.apiConfig.apiUrl || '')
+              setModelId(data.apiConfig.modelId || '')
+              setHasStoredApiKey(data.apiConfig.hasApiKey || false)
+              // API key is never returned by GET - user must re-enter if they want to change it
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch API config:', error)
+      }
+    }
+    fetchApiConfig()
   }, [])
 
   const handleSave = async () => {
-    // Save API key and URL to localStorage
-    localStorage.setItem('minimax_api_key', apiKey)
-    localStorage.setItem('minimax_api_url', apiUrl)
+    // Save API config to server (NOT localStorage)
+    if (apiKey || apiUrl) {
+      try {
+        const res = await fetch('/api/user/api-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: apiProvider, apiKey, apiUrl, modelId }),
+        })
+        if (res.ok) {
+          setHasStoredApiKey(true)
+          setApiKey('') // Clear the key from state after saving
+        } else {
+          console.error('Failed to save API config')
+        }
+      } catch (error) {
+        console.error('Error saving API config:', error)
+      }
+    }
 
     // Save profile to API
     try {
@@ -385,9 +416,18 @@ export default function SettingsPage() {
                         type="password"
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="sk-..."
+                        placeholder={hasStoredApiKey ? "•••••••• (stored)" : "sk-..."}
                         className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                       />
+                      {hasStoredApiKey && (
+                        <p className="mt-2 text-sm text-success flex items-center gap-1">
+                          <Check className="w-4 h-4" />
+                          API key is securely stored server-side
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-text-muted">
+                        Leave blank to keep existing key, or enter a new key to replace it
+                      </p>
                     </div>
 
                     {/* Model ID */}
