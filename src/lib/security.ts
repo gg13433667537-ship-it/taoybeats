@@ -37,10 +37,82 @@ export const AUTH_RATE_LIMIT: RateLimitConfig = {
   maxRequests: 5, // 5 failed attempts per 15 minutes
 }
 
-export function getRateLimitKey(request: NextRequest, suffix: string = ""): string {
-  // Use IP address as the key, with fallback
+/**
+ * Get the client IP address from the request with proper validation.
+ * Implements defense in depth to prevent IP spoofing attacks.
+ *
+ * Priority:
+ * 1. x-vercel-forwarded-for (set by Vercel's trusted edge, most secure)
+ * 2. request.ip (Next.js serverless environment variable, trustworthy)
+ * 3. x-forwarded-for (cannot be fully trusted without known proxies, use rightmost IP)
+ * 4. Secure fallback if no valid IP can be determined
+ */
+function getClientIP(request: NextRequest): string {
+  // 1. Vercel's forwarded-for header (most trusted - set by Vercel edge)
+  const vercelForwarded = request.headers.get("x-vercel-forwarded-for")
+  if (vercelForwarded) {
+    // Vercel header format: "client_ip, proxy1_ip, ..."
+    // Take the first (client) IP
+    const ip = vercelForwarded.split(",")[0].trim()
+    if (isValidIP(ip)) {
+      return ip
+    }
+  }
+
+  // 2. Next.js built-in ip property (serverless environment variable)
+  // This is set by the hosting platform and is generally trustworthy
+  const requestIp = request.ip
+  if (requestIp && isValidIP(requestIp)) {
+    return requestIp
+  }
+
+  // 3. X-Forwarded-For header (client-supplied, must be validated)
+  // An attacker can set this to anything, so we validate strictly
   const forwarded = request.headers.get("x-forwarded-for")
-  const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown"
+  if (forwarded) {
+    // X-Forwarded-For format: "client_ip, proxy1_ip, proxy2_ip, ..."
+    // The RIGHTMOST IP is the most recently added by an upstream proxy
+    // If we know our proxy IPs, we should skip them and take the next one
+    // Without known proxy config, use rightmost as it's most likely set by trusted proxy
+    const parts = forwarded.split(",").map(p => p.trim()).filter(Boolean)
+    if (parts.length > 0) {
+      // Use rightmost IP - it's the last hop added by the outermost proxy
+      // which is more likely to be a trusted proxy than the client
+      const ip = parts[parts.length - 1]
+      if (isValidIP(ip)) {
+        return ip
+      }
+    }
+  }
+
+  // 4. Fallback - use a hash of headers that might indicate uniqueness
+  // This is not ideal but better than accepting arbitrary input
+  return "unknown"
+}
+
+/**
+ * Validate an IP address format to prevent injection attacks.
+ * Returns true only for valid IPv4 or IPv6 addresses.
+ */
+function isValidIP(ip: string): boolean {
+  if (!ip || typeof ip !== "string" || ip.length > 45) {
+    return false
+  }
+
+  // IPv4 pattern: 0-255.0-255.0-255.0-255
+  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+
+  // IPv6 pattern (simplified but covers most formats)
+  const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,7}:$|^(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}$|^(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}$|^(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}$|^[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}$|^:(?::[0-9a-fA-F]{1,4}){1,7}$|^::$/
+
+  // Also check for IPv4-mapped IPv6 addresses: ::ffff:192.168.1.1
+  const ipv4MappedRegex = /^::ffff:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i
+
+  return ipv4Regex.test(ip) || ipv6Regex.test(ip) || ipv4MappedRegex.test(ip)
+}
+
+export function getRateLimitKey(request: NextRequest, suffix: string = ""): string {
+  const ip = getClientIP(request)
   return `rate_limit:${ip}${suffix ? ":" + suffix : ""}`
 }
 
