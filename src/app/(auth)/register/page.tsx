@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, Suspense, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Music, Loader2, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
+import { getCSRFToken, refreshCSRFToken } from "@/lib/csrf"
 
 function RegisterPageContent() {
   const { t } = useI18n()
@@ -20,6 +21,21 @@ function RegisterPageContent() {
 
   // Get redirect URL from query params (set by middleware)
   const redirectUrl = searchParams.get("redirect") || "/dashboard"
+
+  // Refresh CSRF token on mount
+  useEffect(() => {
+    refreshCSRFToken()
+  }, [])
+
+  // Get CSRF headers for requests
+  const getAuthHeaders = () => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    const csrfToken = getCSRFToken()
+    if (csrfToken) {
+      headers["x-csrf-token"] = csrfToken
+    }
+    return headers
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,7 +62,7 @@ function RegisterPageContent() {
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ email, password, name }),
       })
 

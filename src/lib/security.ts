@@ -511,7 +511,7 @@ export function getCSRFToken(request: NextRequest): string | null {
 }
 
 /**
- * Validate CSRF token from request
+ * Validate CSRF token from request (requires sessionId)
  */
 export function validateCSRF(request: NextRequest, sessionId: string): boolean {
   const token = getCSRFToken(request)
@@ -519,6 +519,56 @@ export function validateCSRF(request: NextRequest, sessionId: string): boolean {
     return false
   }
   return verifyCSRFToken(token, sessionId)
+}
+
+/**
+ * Validate CSRF token using Double Submit Cookie pattern (stateless - no sessionId required)
+ * The token format is: timestamp:randomBytes:signature
+ * Signature is HMAC-SHA256 of timestamp:randomBytes using CSRF_SECRET
+ */
+export function validateCSRFDoubleSubmit(request: NextRequest): boolean {
+  const SECRET = process.env.CSRF_SECRET || process.env.AUTH_SECRET || "fallback-secret"
+
+  // Get token from header (double-submit)
+  const headerToken = request.headers.get("x-csrf-token")
+  // Get token from cookie
+  const cookieToken = request.cookies.get("csrf-token")?.value
+
+  // Both must exist and match
+  if (!headerToken || !cookieToken || headerToken !== cookieToken) {
+    return false
+  }
+
+  try {
+    const parts = headerToken.split(":")
+    if (parts.length !== 3) {
+      return false
+    }
+
+    const [timestampStr, randomBytes, signature] = parts
+    const timestamp = parseInt(timestampStr, 10)
+
+    // Check token age (max 1 hour)
+    const age = Date.now() - timestamp
+    if (age > 60 * 60 * 1000 || age < 0) {
+      return false
+    }
+
+    // Verify signature
+    const data = `${timestamp}:${randomBytes}`
+    const expectedSignature = crypto
+      .createHmac("sha256", SECRET)
+      .update(data)
+      .digest("hex")
+
+    // Constant-time comparison to prevent timing attacks
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    )
+  } catch {
+    return false
+  }
 }
 
 // ============================================================================

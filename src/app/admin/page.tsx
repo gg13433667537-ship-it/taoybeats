@@ -24,6 +24,7 @@ import {
   Clock,
   UserX,
 } from "lucide-react"
+import { getCSRFToken, refreshCSRFToken } from "@/lib/csrf"
 
 interface User {
   id: string
@@ -106,6 +107,21 @@ export default function AdminPage() {
     addCredits: 0,
   })
 
+  // Refresh CSRF token on mount
+  useEffect(() => {
+    refreshCSRFToken()
+  }, [])
+
+  // Get CSRF headers for requests
+  const getAuthHeaders = () => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    const csrfToken = getCSRFToken()
+    if (csrfToken) {
+      headers["x-csrf-token"] = csrfToken
+    }
+    return headers
+  }
+
   // Fetch users
   const fetchUsers = useCallback(async (page = 1, search = "") => {
     try {
@@ -174,7 +190,7 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/admin/users", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ userId, ...updates }),
       })
       const data = await res.json()
@@ -196,7 +212,10 @@ export default function AdminPage() {
   const handleDeleteUser = async (userId: string) => {
     setActionLoading(true)
     try {
-      const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" })
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      })
       const data = await res.json()
       if (res.ok) {
         await Promise.all([fetchUsers(userPagination.page, searchQuery), fetchStats()])
@@ -215,7 +234,10 @@ export default function AdminPage() {
   const handleDeleteSong = async (songId: string) => {
     setActionLoading(true)
     try {
-      const res = await fetch(`/api/admin/songs/${songId}`, { method: "DELETE" })
+      const res = await fetch(`/api/admin/songs/${songId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      })
       if (res.ok) {
         await Promise.all([fetchSongs(songPagination.page), fetchStats()])
         setShowDeleteConfirm({ show: false })

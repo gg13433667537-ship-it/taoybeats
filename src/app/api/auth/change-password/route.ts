@@ -5,6 +5,7 @@ import {
   rateLimitMiddleware,
   applySecurityHeaders,
   AUTH_RATE_LIMIT,
+  validateCSRFDoubleSubmit,
 } from "@/lib/security"
 import { prisma } from "@/lib/db"
 
@@ -51,6 +52,13 @@ export async function POST(request: NextRequest) {
   const rateLimitResponse = rateLimitMiddleware(request, AUTH_RATE_LIMIT, "change-password")
   if (rateLimitResponse) {
     return applySecurityHeaders(rateLimitResponse)
+  }
+
+  // Validate CSRF token (Double Submit Cookie pattern)
+  if (!validateCSRFDoubleSubmit(request)) {
+    return applySecurityHeaders(
+      NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 })
+    )
   }
 
   try {

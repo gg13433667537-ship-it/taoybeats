@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Music, User, Key, Bell, Shield, Check, Users, CreditCard, Search } from "lucide-react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useI18n } from "@/lib/i18n"
+import { getCSRFToken, refreshCSRFToken } from "@/lib/csrf"
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -55,6 +56,21 @@ export default function SettingsPage() {
   const [selectedUser, setSelectedUser] = useState<string | null>(null)
   const [userActionLoading, setUserActionLoading] = useState(false)
   const [userActionSuccess, setUserActionSuccess] = useState('')
+
+  // Refresh CSRF token on mount
+  useEffect(() => {
+    refreshCSRFToken()
+  }, [])
+
+  // Get CSRF headers for requests
+  const getAuthHeaders = () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const csrfToken = getCSRFToken()
+    if (csrfToken) {
+      headers['x-csrf-token'] = csrfToken
+    }
+    return headers
+  }
 
   // Fetch user profile from API (runs once on mount)
   useEffect(() => {
@@ -122,7 +138,7 @@ export default function SettingsPage() {
       try {
         const res = await fetch('/api/user/api-config', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ provider: apiProvider, apiKey, apiUrl, modelId }),
         })
         if (res.ok) {
@@ -140,7 +156,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/auth/profile', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ name, email }),
       })
       if (!res.ok) {
@@ -181,7 +197,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/auth/change-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ currentPassword, newPassword }),
       })
 
@@ -201,7 +217,10 @@ export default function SettingsPage() {
 
   const handleSignOutAllDevices = async () => {
     try {
-      await fetch('/api/auth/logout-all', { method: 'POST' })
+      await fetch('/api/auth/logout-all', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      })
       router.push('/')
     } catch (error) {
       console.error('Error signing out all devices:', error)
@@ -234,7 +253,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/admin/users', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ userId, ...updates }),
       })
       if (res.ok) {

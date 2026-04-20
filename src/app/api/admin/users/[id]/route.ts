@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware, validateUUID } from "@/lib/security"
+import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware, validateUUID, validateCSRFDoubleSubmit } from "@/lib/security"
 
 
 interface SessionUser {
@@ -136,6 +136,11 @@ export async function DELETE(
 
   if (!user || !isAdmin(user)) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
+  }
+
+  // Validate CSRF token (Double Submit Cookie pattern)
+  if (!validateCSRFDoubleSubmit(request)) {
+    return applySecurityHeaders(NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 }))
   }
 
   // Validate UUID format

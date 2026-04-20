@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { applySecurityHeaders, validateOptionalString, validateEnum, MAX_LENGTHS } from "@/lib/security"
+import { applySecurityHeaders, validateOptionalString, validateEnum, MAX_LENGTHS, validateCSRFDoubleSubmit } from "@/lib/security"
 import { logger } from "@/lib/logger"
 import { prisma } from "@/lib/db"
 import crypto from "crypto"
@@ -81,6 +81,13 @@ export async function PUT(request: NextRequest) {
       const duration = Date.now() - startTime
       logger.api.response("PUT", endpoint, 401, duration, { requestId })
       return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
+    }
+
+    // Validate CSRF token (Double Submit Cookie pattern)
+    if (!validateCSRFDoubleSubmit(request)) {
+      const duration = Date.now() - startTime
+      logger.api.response("PUT", endpoint, 403, duration, { requestId })
+      return applySecurityHeaders(NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 }))
     }
 
     const { provider, apiKey, apiUrl, modelId } = await request.json()
@@ -178,6 +185,13 @@ export async function DELETE(request: NextRequest) {
       const duration = Date.now() - startTime
       logger.api.response("DELETE", endpoint, 401, duration, { requestId })
       return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
+    }
+
+    // Validate CSRF token (Double Submit Cookie pattern)
+    if (!validateCSRFDoubleSubmit(request)) {
+      const duration = Date.now() - startTime
+      logger.api.response("DELETE", endpoint, 403, duration, { requestId })
+      return applySecurityHeaders(NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 }))
     }
 
     await prisma.apiConfig.deleteMany({

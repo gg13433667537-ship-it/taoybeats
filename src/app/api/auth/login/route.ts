@@ -18,6 +18,7 @@ import {
   sanitizeString,
   applySecurityHeaders,
   AUTH_RATE_LIMIT,
+  validateCSRFDoubleSubmit,
 } from "@/lib/security"
 import { prisma } from "@/lib/db"
 import { logger } from "@/lib/logger"
@@ -42,6 +43,18 @@ export async function POST(request: NextRequest) {
     const duration = Date.now() - startTime
     logger.api.response("POST", endpoint, 429, duration, { requestId })
     return applySecurityHeaders(rateLimitResponse)
+  }
+
+  // Validate CSRF token (Double Submit Cookie pattern)
+  if (!validateCSRFDoubleSubmit(request)) {
+    const duration = Date.now() - startTime
+    logger.api.response("POST", endpoint, 403, duration, { requestId })
+    return applySecurityHeaders(
+      NextResponse.json(
+        { error: "Invalid CSRF token" },
+        { status: 403 }
+      )
+    )
   }
 
   try {

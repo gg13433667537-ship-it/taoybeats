@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { prisma } from "@/lib/db"
 import { logger } from "@/lib/logger"
-import { applySecurityHeaders } from "@/lib/security"
+import { applySecurityHeaders, validateCSRFDoubleSubmit } from "@/lib/security"
 import crypto from "crypto"
 
 if (!global.users) global.users = new Map()
@@ -44,6 +44,13 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return applySecurityHeaders(
         NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      )
+    }
+
+    // Validate CSRF token (Double Submit Cookie pattern)
+    if (!validateCSRFDoubleSubmit(request)) {
+      return applySecurityHeaders(
+        NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 })
       )
     }
 

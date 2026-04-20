@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySessionToken } from "@/lib/auth-utils"
-import { sanitizeString, validateOptionalString, applySecurityHeaders, MAX_LENGTHS } from "@/lib/security"
+import { sanitizeString, validateOptionalString, applySecurityHeaders, MAX_LENGTHS, validateCSRFDoubleSubmit } from "@/lib/security"
 import { logger } from "@/lib/logger"
 import { prisma } from "@/lib/db"
 import crypto from "crypto"
@@ -99,6 +99,13 @@ export async function PUT(request: NextRequest) {
       return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
     }
 
+    // Validate CSRF token (Double Submit Cookie pattern)
+    if (!validateCSRFDoubleSubmit(request)) {
+      const duration = Date.now() - startTime
+      logger.api.response("PUT", endpoint, 403, duration, { requestId })
+      return applySecurityHeaders(NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 }))
+    }
+
     const { name } = await request.json()
 
     // Validate and sanitize name if provided
@@ -156,6 +163,13 @@ export async function POST(request: NextRequest) {
     const duration = Date.now() - startTime
     logger.api.response("POST", endpoint, 401, duration, { requestId })
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
+  }
+
+  // Validate CSRF token (Double Submit Cookie pattern)
+  if (!validateCSRFDoubleSubmit(request)) {
+    const duration = Date.now() - startTime
+    logger.api.response("POST", endpoint, 403, duration, { requestId })
+    return applySecurityHeaders(NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 }))
   }
 
   try {

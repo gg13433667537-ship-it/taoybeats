@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, Suspense, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Music, Loader2, Mail, Lock, ArrowLeft, Eye, EyeOff } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
+import { getCSRFToken, refreshCSRFToken } from "@/lib/csrf"
 
 type LoginMethod = "password" | "code"
 type Step = "email" | "login"
@@ -30,6 +31,21 @@ function LoginPageContent() {
   // Get redirect URL from query params (set by middleware)
   const redirectUrl = searchParams.get("redirect") || "/dashboard"
 
+  // Refresh CSRF token on mount
+  useEffect(() => {
+    refreshCSRFToken()
+  }, [])
+
+  // Get CSRF headers for requests
+  const getAuthHeaders = () => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    const csrfToken = getCSRFToken()
+    if (csrfToken) {
+      headers["x-csrf-token"] = csrfToken
+    }
+    return headers
+  }
+
   // Check email when it changes (blur or after some time)
   const checkEmail = async (emailToCheck: string) => {
     if (!emailToCheck || !emailToCheck.includes("@")) return
@@ -37,7 +53,7 @@ function LoginPageContent() {
     try {
       const res = await fetch("/api/auth/check-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ email: emailToCheck }),
       })
       const data = await res.json()
@@ -73,7 +89,7 @@ function LoginPageContent() {
     try {
       const res = await fetch("/api/auth/send-code", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ email }),
       })
 
@@ -118,7 +134,7 @@ function LoginPageContent() {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ email, password }),
       })
 
@@ -146,7 +162,7 @@ function LoginPageContent() {
       // Verify code only (code should already be sent via handleSendCode)
       const verifyRes = await fetch("/api/auth/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ email, code }),
       })
 
