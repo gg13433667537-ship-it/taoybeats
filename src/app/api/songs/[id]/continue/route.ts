@@ -79,7 +79,7 @@ export async function POST(
     // Create a new song record for the continuation
     const songId = crypto.randomUUID()
     const now = new Date().toISOString()
-    const shareToken = crypto.randomUUID().slice(0, 8)
+    const shareToken = crypto.randomBytes(24).toString('base64')
 
     const continuedSong: Song = {
       id: songId,

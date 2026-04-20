@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
 
     const presetId = crypto.randomUUID()
-    const shareToken = shareWith ? crypto.randomUUID().slice(0, 8) : undefined
+    const shareToken = shareWith ? crypto.randomBytes(24).toString('base64') : undefined
     const now = new Date().toISOString()
 
     const preset: Preset = {

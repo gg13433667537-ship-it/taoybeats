@@ -188,7 +188,7 @@ export function usePresets() {
   // Share preset (generate share token)
   const sharePreset = useCallback(async (id: string): Promise<string | null> => {
     // Generate share token locally for now
-    const shareToken = crypto.randomUUID().slice(0, 8)
+    const shareToken = crypto.randomBytes(24).toString('base64')
 
     // Update server
     try {
