@@ -730,12 +730,7 @@ async function initiateMusicGeneration(
         status: 'GENERATING',
         providerTaskId: taskId,
       }, song)
-
-      // Queue background upload for when audio is ready (async generation)
-      const updatedSong = songsMap.get(songId)
-      if (updatedSong?.audioUrl) {
-        queueR2Upload(songId, updatedSong.audioUrl)
-      }
+      // R2 upload will be queued when song completes with audioUrl in persistSongRefresh
     }
 
     return songsMap.get(songId) || song

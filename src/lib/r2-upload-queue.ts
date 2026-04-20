@@ -128,8 +128,8 @@ function isR2Url(url: string): boolean {
 async function waitForUpload(songId: string, maxWaitMs = 60000): Promise<string> {
   const startTime = Date.now()
   while (Date.now() - startTime < maxWaitMs) {
+    // Only proceed if upload is no longer pending
     if (!isPendingUpload(songId)) {
-      // Check if audioUrl was updated
       const songsMap = (global as Record<string, unknown>).songs as Map<string, import('./types').Song> | undefined
       const song = songsMap?.get(songId)
       if (song?.audioUrl && isR2Url(song.audioUrl)) {

@@ -96,6 +96,22 @@ export async function getSongFromDb(id: string): Promise<SongRecord | null> {
   }
 }
 
+// Queue R2 upload when song completes with audioUrl
+async function queueR2UploadIfComplete(
+  song: SongRecord,
+  updates: Partial<SongRecord> & { status: Song["status"] }
+): Promise<void> {
+  // Only queue if status is COMPLETED and audioUrl is set
+  if (updates.status === "COMPLETED" && updates.audioUrl) {
+    try {
+      const { queueR2Upload } = await import("@/lib/r2-upload-queue")
+      queueR2Upload(song.id, updates.audioUrl)
+    } catch (error) {
+      console.error("[Persist] Failed to queue R2 upload:", error)
+    }
+  }
+}
+
 async function persistSongRefresh(
   song: SongRecord,
   updates: Partial<SongRecord> & { status: Song["status"] }
@@ -108,6 +124,9 @@ async function persistSongRefresh(
 
   const songsMap = global.songs as Map<string, SongRecord> | undefined
   songsMap?.set(song.id, refreshedSong)
+
+  // Queue R2 upload if song just completed with audio
+  await queueR2UploadIfComplete(song, updates)
 
   const prismaData: Record<string, unknown> = {
     status: refreshedSong.status,
