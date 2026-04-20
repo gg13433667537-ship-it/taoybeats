@@ -41,13 +41,33 @@ function applyBinarySecurityHeaders(response: NextResponse): NextResponse {
 }
 
 async function fetchAudioFromUrl(url: string): Promise<{ buffer: ArrayBuffer; contentType: string }> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch audio: ${response.status}`)
+  console.log(`[Download] Fetching audio from URL: ${url.substring(0, 100)}...`)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const responseText = await response.text().catch(() => '')
+      // Check for expiration errors (Aliyun OSS returns XML error)
+      if (responseText.includes('Expired') || responseText.includes('AccessDenied') || responseText.includes('Request has expired')) {
+        throw new Error('Audio URL has expired. The song may need to be regenerated.')
+      }
+      throw new Error(`Failed to fetch audio: ${response.status}`)
+    }
+    const buffer = await response.arrayBuffer()
+    const contentType = response.headers.get('content-type') || 'audio/mpeg'
+    console.log(`[Download] Fetched audio: ${buffer.byteLength} bytes, type: ${contentType}`)
+    return { buffer, contentType }
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Fetch timeout after 30s for URL: ${url.substring(0, 100)}...`)
+    }
+    throw error
   }
-  const buffer = await response.arrayBuffer()
-  const contentType = response.headers.get('content-type') || 'audio/mpeg'
-  return { buffer, contentType }
 }
 
 async function streamFromR2(objectKey: string): Promise<{ body: Buffer; contentType: string; contentLength: number }> {
@@ -60,19 +80,26 @@ async function streamFromR2(objectKey: string): Promise<{ body: Buffer; contentT
 }
 
 async function uploadToR2IfNeeded(audioUrl: string, songId: string): Promise<string | null> {
+  console.log(`[Download] uploadToR2IfNeeded called for song ${songId}, URL: ${audioUrl.substring(0, 80)}...`)
+
   // If already R2 URL, no upload needed
-  if (extractObjectKeyFromUrl(audioUrl)) {
+  const objectKey = extractObjectKeyFromUrl(audioUrl)
+  if (objectKey) {
+    console.log(`[Download] Already R2 URL with key: ${objectKey}`)
     return null
   }
 
   // If R2 not configured, skip upload
   if (!isR2Configured()) {
+    console.log(`[Download] R2 not configured, skipping upload`)
     return null
   }
 
   try {
+    console.log(`[Download] Starting R2 upload for song ${songId}...`)
     const { uploadAudioFromUrl } = await import('@/lib/storage')
     const result = await uploadAudioFromUrl(audioUrl, songId)
+    console.log(`[Download] R2 upload succeeded: ${result.r2Url}, size: ${result.size}`)
 
     // Update database with R2 URL
     try {
@@ -80,6 +107,8 @@ async function uploadToR2IfNeeded(audioUrl: string, songId: string): Promise<str
         where: { id: songId },
         data: { audioUrl: result.r2Url },
       })
+      console.log(`[Download] Updated database with R2 URL for song ${songId}`)
+
       // Update memory cache
       const songsMap = global.songs as Map<string, Song> | undefined
       const cachedSong = songsMap?.get(songId)
@@ -92,7 +121,7 @@ async function uploadToR2IfNeeded(audioUrl: string, songId: string): Promise<str
 
     return result.r2Url
   } catch (uploadError) {
-    console.error("[Download] Failed to upload to R2:", uploadError)
+    console.error(`[Download] Failed to upload to R2 for song ${songId}:`, uploadError)
     return null
   }
 }
@@ -101,9 +130,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
+  const shareToken = request.nextUrl.searchParams.get("shareToken")
+
   try {
-    const { id } = await params
-    const shareToken = request.nextUrl.searchParams.get("shareToken")
 
     const user = getSessionUser(request)
     if (!user && !shareToken) {
@@ -223,7 +253,47 @@ export async function GET(
       },
     }))
   } catch (error) {
-    console.error("[Download] Unexpected error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    // Enhanced error logging with details
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+
+    console.error(`[Download] Error for song ${id}:`, {
+      message: errorMessage,
+      stack: errorStack,
+    })
+
+    // Return specific error messages instead of generic 500
+    if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+      return NextResponse.json(
+        { error: "Download timed out. The audio source may be slow or unavailable." },
+        { status: 504 }
+      )
+    }
+
+    if (errorMessage.includes('expired') || errorMessage.includes('Expired')) {
+      return NextResponse.json(
+        { error: "Audio URL has expired. Please regenerate the song to get a fresh download link." },
+        { status: 410 } // 410 Gone - resource no longer available
+      )
+    }
+
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch')) {
+      return NextResponse.json(
+        { error: "Failed to fetch audio from source. The audio URL may be invalid or expired." },
+        { status: 502 }
+      )
+    }
+
+    if (errorMessage.includes('R2') || errorMessage.includes('S3') || errorMessage.includes('Cloudflare')) {
+      return NextResponse.json(
+        { error: "Storage service error. Please try again later." },
+        { status: 503 }
+      )
+    }
+
+    return NextResponse.json(
+      { error: `Download failed: ${errorMessage}` },
+      { status: 500 }
+    )
   }
 }

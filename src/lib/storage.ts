@@ -64,27 +64,53 @@ function getR2Client(): S3Client {
 
 /**
  * Download a file from URL and return as Buffer
+ * Includes timeout to prevent hanging on slow/unresponsive servers
  */
-async function downloadFromUrl(url: string): Promise<Buffer> {
+async function downloadFromUrl(url: string, timeoutMs: number = 30000): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith("https") ? https : http;
-    protocol.get(url, (response) => {
+
+    // Create timeout timer
+    const timeoutTimer = setTimeout(() => {
+      req.destroy();
+      reject(new Error(`Download timeout after ${timeoutMs}ms for URL: ${url}`));
+    }, timeoutMs);
+
+    const req = protocol.get(url, (response) => {
+      clearTimeout(timeoutTimer);
+
       if (response.statusCode === 301 || response.statusCode === 302) {
         const redirectUrl = response.headers.location;
         if (redirectUrl) {
-          downloadFromUrl(redirectUrl).then(resolve).catch(reject);
+          downloadFromUrl(redirectUrl, timeoutMs).then(resolve).catch(reject);
           return;
         }
+        reject(new Error(`Redirect without location header: ${response.statusCode}`));
+        return;
       }
       if (response.statusCode !== 200) {
+        // Check for expiration errors (Aliyun OSS returns 403 with error message)
+        if (response.statusCode === 403) {
+          reject(new Error(`Audio URL has expired: ${response.statusCode}`));
+          return;
+        }
         reject(new Error(`Failed to download from URL: ${response.statusCode}`));
         return;
       }
       const chunks: Buffer[] = [];
       response.on("data", (chunk: Buffer) => chunks.push(chunk));
       response.on("end", () => resolve(Buffer.concat(chunks)));
-      response.on("error", reject);
-    }).on("error", reject);
+      response.on("error", (err) => {
+        clearTimeout(timeoutTimer);
+        reject(err);
+      });
+    }).on("error", (err) => {
+      clearTimeout(timeoutTimer);
+      reject(err);
+    });
+
+    // Ensure timeout is cleared on req error
+    req.on("error", () => clearTimeout(timeoutTimer));
   });
 }
 
