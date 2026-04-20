@@ -362,7 +362,9 @@ export async function GET(request: NextRequest) {
   } catch (prismaError) {
     console.error("Prisma song lookup failed, falling back to memory:", prismaError)
     const songsMap = getSongsMap()
-    userSongs = Array.from(songsMap.values()).filter((s) => s.userId === user.id)
+    const allUserSongs = Array.from(songsMap.values()).filter((s) => s.userId === user.id)
+    totalCount = allUserSongs.length
+    userSongs = allUserSongs.slice(skip, skip + limit)
   }
 
   return NextResponse.json({
