@@ -7,7 +7,23 @@ import type { Song } from "@/lib/types"
 import { verifySessionToken } from "@/lib/auth-utils"
 import { uploadAndWaitForR2 } from "@/lib/r2-upload-queue"
 import { prisma } from "@/lib/db"
-import { applySecurityHeaders } from "@/lib/security"
+import { isR2Configured } from "@/lib/r2-storage"
+
+/**
+ * Apply minimal security headers for binary downloads (audio/video).
+ * Unlike JSON API responses, binary downloads should not have CSP headers
+ * as they can interfere with content handling.
+ */
+function applyBinarySecurityHeaders(response: NextResponse): NextResponse {
+  // Only apply essential security headers for binary responses
+  // Do NOT apply CSP - it can interfere with binary content
+  response.headers.set("X-Content-Type-Options", "nosniff")
+  response.headers.set("X-Frame-Options", "SAMEORIGIN")
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
+  // Remove CSP if present (shouldn't be, but ensure clean slate)
+  response.headers.delete("Content-Security-Policy")
+  return response
+}
 
 function isR2Url(url: string): boolean {
   const r2PublicUrl = process.env.R2_PUBLIC_URL || ''
@@ -87,8 +103,9 @@ export async function GET(
     }
 
     // Ensure audio is on R2 (wait for upload if needed)
+    // Only attempt R2 upload if R2 is properly configured
     let audioUrl = song.audioUrl
-    if (!isR2Url(audioUrl)) {
+    if (!isR2Url(audioUrl) && isR2Configured()) {
       try {
         audioUrl = await uploadAndWaitForR2(id, audioUrl)
       } catch (error) {
@@ -116,7 +133,8 @@ export async function GET(
     const filename = `${song.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_') || 'audio'}.${extension}`
 
     // Return the audio with appropriate headers for download
-    return applySecurityHeaders(new NextResponse(audioBuffer, {
+    // Use minimal security headers for binary responses (no CSP)
+    return applyBinarySecurityHeaders(new NextResponse(audioBuffer, {
       status: 200,
       headers: {
         'Content-Type': contentType,
@@ -124,7 +142,7 @@ export async function GET(
         'Content-Length': audioBuffer.byteLength.toString(),
         'Cache-Control': 'private, no-cache, no-store, must-revalidate',
       },
-    }), 'api')
+    }))
   } catch (error) {
     console.error("Download error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
