@@ -4,9 +4,9 @@ const nextConfig: NextConfig = {
   // Enable response compression (enabled by default in Next.js, but explicitly set)
   compress: true,
 
-  // TypeScript config - temporarily ignore build errors to allow deployment
+  // TypeScript config - enforce type checking during build
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 
   // Turbopack config (required for Next.js 16+)
