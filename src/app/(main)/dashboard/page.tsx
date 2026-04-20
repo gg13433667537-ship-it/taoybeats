@@ -55,6 +55,10 @@ export default function DashboardPage() {
   const [songs, setSongs] = useState<Song[]>([])
   const [usage, setUsage] = useState<Usage | null>(null)
   const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+  const SONG_LIMIT = 20
   const [userRole, setUserRole] = useState<string>('USER')
   const [userName, setUserName] = useState<string>('')
   const [userEmail, setUserEmail] = useState<string>('')
@@ -290,11 +294,15 @@ export default function DashboardPage() {
       console.log("[DEBUG] DELETE response status:", res.status)
       if (res.ok) {
         console.log("[DEBUG] DELETE successful, refreshing songs list")
-        // Refresh songs from server
-        const songsRes = await fetch("/api/songs")
+        // Refresh songs from server with current pagination
+        const songsRes = await fetch(`/api/songs?page=${currentPage}&limit=${SONG_LIMIT}`)
         if (songsRes.ok) {
           const songsData = await songsRes.json()
           setSongs(songsData.songs || [])
+          if (songsData.pagination) {
+            setTotalPages(songsData.pagination.totalPages)
+            setTotalCount(songsData.pagination.totalCount)
+          }
         }
         showToast("success", "Song deleted successfully")
       } else {
@@ -314,11 +322,15 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch songs
-        const songsRes = await fetch("/api/songs")
+        // Fetch songs with pagination
+        const songsRes = await fetch(`/api/songs?page=${currentPage}&limit=${SONG_LIMIT}`)
         if (songsRes.ok) {
           const songsData = await songsRes.json()
           setSongs(songsData.songs || [])
+          if (songsData.pagination) {
+            setTotalPages(songsData.pagination.totalPages)
+            setTotalCount(songsData.pagination.totalCount)
+          }
         }
 
         // Fetch usage
@@ -343,7 +355,7 @@ export default function DashboardPage() {
     }
 
     fetchData()
-  }, [lang, t]) // Only fetch on mount, lang change, or t change
+  }, [lang, t, currentPage])
 
   // Poll for GENERATING songs status updates
   useEffect(() => {
@@ -832,6 +844,29 @@ export default function DashboardPage() {
                     </div>
                   )
                 })}
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1 || loading}
+                  className="px-4 py-2 rounded-lg bg-surface border border-border text-sm font-medium text-foreground hover:bg-background transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="px-4 py-2 text-sm text-text-secondary">
+                  Page {currentPage} of {totalPages} ({totalCount} total)
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages || loading}
+                  className="px-4 py-2 rounded-lg bg-surface border border-border text-sm font-medium text-foreground hover:bg-background transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
               </div>
             )}
           </section>

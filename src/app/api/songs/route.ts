@@ -90,11 +90,11 @@ async function getOrCreateUserFromDB(userId: string, email?: string): Promise<Se
   const usersMap = getUsersMap()
 
   try {
-    let user = await prisma.user.findUnique({ where: { id: userId } })
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
+    const user = await prisma.$transaction(async (tx) => {
+      // Use upsert to atomically create user if not exists
+      let user = await tx.user.upsert({
+        where: { id: userId },
+        create: {
           id: userId,
           email: email || null,
           name: email?.split('@')[0] || 'User',
@@ -104,28 +104,33 @@ async function getOrCreateUserFromDB(userId: string, email?: string): Promise<Se
           dailyResetAt: today,
           monthlyResetAt: thisMonth,
         },
+        update: {},
       })
-    }
 
-    if (user.dailyResetAt !== today) {
-      user = await prisma.user.update({
-        where: { id: userId },
-        data: {
-          dailyUsage: 0,
-          dailyResetAt: today,
-        },
-      })
-    }
+      // Handle daily reset if needed
+      if (user.dailyResetAt !== today) {
+        user = await tx.user.update({
+          where: { id: userId },
+          data: {
+            dailyUsage: 0,
+            dailyResetAt: today,
+          },
+        })
+      }
 
-    if (user.monthlyResetAt !== thisMonth) {
-      user = await prisma.user.update({
-        where: { id: userId },
-        data: {
-          monthlyUsage: 0,
-          monthlyResetAt: thisMonth,
-        },
-      })
-    }
+      // Handle monthly reset if needed
+      if (user.monthlyResetAt !== thisMonth) {
+        user = await tx.user.update({
+          where: { id: userId },
+          data: {
+            monthlyUsage: 0,
+            monthlyResetAt: thisMonth,
+          },
+        })
+      }
+
+      return user
+    })
 
     const memoryUser: User = {
       id: user.id,
@@ -300,13 +305,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  // Parse pagination params
+  const searchParams = request.nextUrl.searchParams
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10))
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)))
+  const skip = (page - 1) * limit
+
   // Try Prisma first, fall back to memory
   let userSongs: Song[] = []
+  let totalCount = 0
 
   try {
+    // Get total count for pagination
+    totalCount = await prisma.song.count({
+      where: { userId: user.id },
+    })
+
     const dbSongs = await prisma.song.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
     })
     userSongs = dbSongs.map((s) => ({
       id: s.id,
@@ -346,7 +365,15 @@ export async function GET(request: NextRequest) {
     userSongs = Array.from(songsMap.values()).filter((s) => s.userId === user.id)
   }
 
-  return NextResponse.json({ songs: userSongs })
+  return NextResponse.json({
+    songs: userSongs,
+    pagination: {
+      page,
+      limit,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+    },
+  })
 }
 
 export async function POST(request: NextRequest) {
