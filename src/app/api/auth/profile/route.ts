@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifySessionToken } from "@/lib/auth-utils"
+import { verifySessionTokenWithDB } from "@/lib/auth-utils"
 import { sanitizeString, validateOptionalString, applySecurityHeaders, MAX_LENGTHS, validateCSRFDoubleSubmit } from "@/lib/security"
 import { logger } from "@/lib/logger"
 import { prisma } from "@/lib/db"
@@ -10,7 +10,7 @@ async function getCurrentUser(request: NextRequest) {
   if (!sessionToken) return null
 
   try {
-    return verifySessionToken(sessionToken)
+    return await verifySessionTokenWithDB(sessionToken)
   } catch {
     return null
   }

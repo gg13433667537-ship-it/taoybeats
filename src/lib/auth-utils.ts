@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import type { User } from "./types"
+import { prisma } from "./db"
 
 export function getSecretKey(): string {
   const secret = process.env.AUTH_SECRET
@@ -75,6 +76,35 @@ export function verifySessionToken(
     return payload
   } catch (error) {
     console.error("Session token verification failed:", error)
+    return null
+  }
+}
+
+export async function verifySessionTokenWithDB(
+  token: string
+): Promise<SessionPayload | null> {
+  const payload = verifySessionToken(token)
+  if (!payload) return null
+
+  try {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: { isActive: true, sessionsRevokedAt: true },
+    })
+
+    if (!dbUser || !dbUser.isActive) return null
+
+    if (dbUser.sessionsRevokedAt) {
+      const revokedAt = dbUser.sessionsRevokedAt.getTime()
+      if (payload.iat < revokedAt) {
+        console.error("Session token revoked by password reset")
+        return null
+      }
+    }
+
+    return payload
+  } catch (error) {
+    console.error("DB session verification failed:", error)
     return null
   }
 }
