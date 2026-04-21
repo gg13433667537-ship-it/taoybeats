@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { UserRole } from "@/lib/types"
-import { verifySessionToken } from "@/lib/auth-utils"
+import { verifySessionTokenWithDB } from "@/lib/auth-utils"
 import { prisma } from "@/lib/db"
 import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware } from "@/lib/security"
 
@@ -10,12 +10,12 @@ interface SessionUser {
   role: UserRole
 }
 
-function getSessionUser(request: NextRequest): SessionUser | null {
+async function getSessionUser(request: NextRequest): Promise<SessionUser | null> {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) return null
 
   try {
-    const payload = verifySessionToken(sessionToken)
+    const payload = await verifySessionTokenWithDB(sessionToken)
     if (!payload) return null
     return {
       id: payload.id,
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     return applySecurityHeaders(rateLimitResponse)
   }
 
-  const user = getSessionUser(request)
+  const user = await getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))

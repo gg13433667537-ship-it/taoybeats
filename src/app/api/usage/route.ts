@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifySessionToken } from "@/lib/auth-utils"
+import { verifySessionTokenWithDB } from "@/lib/auth-utils"
 import { applySecurityHeaders, rateLimitMiddleware, DEFAULT_RATE_LIMIT } from "@/lib/security"
 import { prisma } from "@/lib/db"
 
@@ -188,7 +188,7 @@ export async function GET(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
   }
 
-  const payload = verifySessionToken(sessionToken)
+  const payload = await verifySessionTokenWithDB(sessionToken)
   if (!payload) {
     return applySecurityHeaders(NextResponse.json({ error: 'Invalid session' }, { status: 401 }))
   }
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
     return applySecurityHeaders(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
   }
 
-  const payload = verifySessionToken(sessionToken)
+  const payload = await verifySessionTokenWithDB(sessionToken)
   if (!payload) {
     return applySecurityHeaders(NextResponse.json({ error: 'Invalid session' }, { status: 401 }))
   }

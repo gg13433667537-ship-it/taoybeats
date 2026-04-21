@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
 import type { UserRole } from "@/lib/types"
-import { verifySessionToken } from "@/lib/auth-utils"
+import { verifySessionTokenWithDB } from "@/lib/auth-utils"
 import { applySecurityHeaders, STRICT_RATE_LIMIT, rateLimitMiddleware, validateCSRFDoubleSubmit } from "@/lib/security"
 import { sanitizeString, validateEnum } from "@/lib/security"
 import { prisma } from "@/lib/db"
@@ -12,12 +13,12 @@ interface SessionUser {
   role: UserRole
 }
 
-function getSessionUser(request: NextRequest): SessionUser | null {
+async function getSessionUser(request: NextRequest): Promise<SessionUser | null> {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) return null
 
   try {
-    const payload = verifySessionToken(sessionToken)
+    const payload = await verifySessionTokenWithDB(sessionToken)
     if (!payload) return null
     return {
       id: payload.id,
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
     return applySecurityHeaders(rateLimitResponse)
   }
 
-  const user = getSessionUser(request)
+  const user = await getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
@@ -142,7 +143,7 @@ export async function PATCH(request: NextRequest) {
     return applySecurityHeaders(rateLimitResponse)
   }
 
-  const user = getSessionUser(request)
+  const user = await getSessionUser(request)
 
   if (!user || !isAdmin(user)) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 403 }))
@@ -256,6 +257,7 @@ export async function PATCH(request: NextRequest) {
     // Log admin action
     await prisma.adminLog.create({
       data: {
+        id: crypto.randomUUID(),
         adminId: user.id,
         adminEmail: user.email,
         action: 'UPDATE_USER',

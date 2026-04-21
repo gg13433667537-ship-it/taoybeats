@@ -106,6 +106,12 @@ export default function AdminPage() {
     isActive: true,
     addCredits: 0,
   })
+  // User songs modal
+  const [showUserSongsModal, setShowUserSongsModal] = useState(false)
+  const [userSongs, setUserSongs] = useState<Song[]>([])
+  const [userSongsPagination, setUserSongsPagination] = useState<PaginationInfo>({ page: 1, limit: 20, total: 0, totalPages: 0 })
+  const [selectedUserForSongs, setSelectedUserForSongs] = useState<User | null>(null)
+  const [userSongsLoading, setUserSongsLoading] = useState(false)
 
   // Refresh CSRF token on mount
   useEffect(() => {
@@ -167,6 +173,22 @@ export default function AdminPage() {
     } catch (error) {
       console.error("Error fetching stats:", error)
     }
+  }, [])
+
+  // Fetch user songs
+  const fetchUserSongs = useCallback(async (userId: string, page = 1) => {
+    setUserSongsLoading(true)
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/songs?page=${page}&limit=20`)
+      if (res.ok) {
+        const data = await res.json()
+        setUserSongs(data.songs)
+        setUserSongsPagination(data.pagination)
+      }
+    } catch (error) {
+      console.error("Error fetching user songs:", error)
+    }
+    setUserSongsLoading(false)
   }, [])
 
   useEffect(() => {
@@ -460,6 +482,17 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedUserForSongs(user)
+                              fetchUserSongs(user.id, 1)
+                              setShowUserSongsModal(true)
+                            }}
+                            aria-label="View user songs"
+                            className="p-2 rounded-lg hover:bg-surface-elevated text-text-secondary hover:text-foreground transition-colors"
+                          >
+                            <Eye className="w-4 h-4" aria-hidden="true" />
+                          </button>
                           <button
                             onClick={() => {
                               setSelectedUser(user)
@@ -826,6 +859,93 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Songs Modal */}
+      {showUserSongsModal && selectedUserForSongs && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl rounded-xl bg-surface border border-border p-6 max-h-[80vh] overflow-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-foreground">
+                {selectedUserForSongs.name || selectedUserForSongs.email} - {t('songs')}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowUserSongsModal(false)
+                  setSelectedUserForSongs(null)
+                  setUserSongs([])
+                }}
+                aria-label="Close modal"
+                className="p-2 rounded-lg hover:bg-surface-elevated text-text-secondary hover:text-foreground transition-colors"
+              >
+                <X className="w-5 h-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            {userSongsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-accent animate-spin" />
+              </div>
+            ) : userSongs.length === 0 ? (
+              <p className="text-text-secondary text-center py-8">{t('noSongsYet')}</p>
+            ) : (
+              <div className="space-y-3">
+                {userSongs.map((song) => (
+                  <div key={song.id} className="p-4 rounded-lg bg-background border border-border hover:border-accent/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-foreground">{song.title}</p>
+                        <div className="flex items-center gap-3 mt-1 text-sm text-text-secondary">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(song.status)}`}>
+                            {song.status}
+                          </span>
+                          <span>{formatDate(song.createdAt)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => router.push(`/song/${song.id}`)}
+                          className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm transition-colors"
+                        >
+                          {t('playSong')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {userSongsPagination.totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between">
+                <p className="text-sm text-text-secondary">
+                  {t('showing')} {(userSongsPagination.page - 1) * userSongsPagination.limit + 1} {t('to')}{" "}
+                  {Math.min(userSongsPagination.page * userSongsPagination.limit, userSongsPagination.total)} {t('of')} {userSongsPagination.total} {t('songs')}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => fetchUserSongs(selectedUserForSongs.id, userSongsPagination.page - 1)}
+                    disabled={userSongsPagination.page <= 1 || userSongsLoading}
+                    className="p-2 rounded-lg bg-surface border border-border hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  <span className="text-sm text-text-secondary">
+                    {t('page')} {userSongsPagination.page} {t('of')} {userSongsPagination.totalPages}
+                  </span>
+                  <button
+                    onClick={() => fetchUserSongs(selectedUserForSongs.id, userSongsPagination.page + 1)}
+                    disabled={userSongsPagination.page >= userSongsPagination.totalPages || userSongsLoading}
+                    className="p-2 rounded-lg bg-surface border border-border hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

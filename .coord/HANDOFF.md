@@ -361,6 +361,53 @@ Phase 5 - 迁移报告输出（本次）
 
 ---
 
+## T-046 — 忘记密码重置页面
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-21
+
+已做内容:
+  1. 新建 src/app/(auth)/reset-password/page.tsx:
+     - 3 步流程：输入邮箱 → 输入验证码+新密码 → 重置成功
+     - Step 1: 邮箱输入，调用 POST /api/auth/send-code 发送验证码，60秒倒计时
+     - Step 2: 验证码输入（6位数字，居中大字）+ 新密码 + 确认密码
+     - Step 3: 成功提示 + "去登录"按钮跳转到 /login
+     - 与 login/register 页面一致的暗色主题设计
+     - 使用 bg-background, text-foreground, bg-surface, border-border, bg-accent 等统一 Tailwind 类
+     - 包含 CSRF token 保护（refreshCSRFToken + getCSRFToken + x-csrf-token header）
+     - i18n 支持（useI18n hook，复用现有翻译键）
+     - 密码显示/隐藏切换（Eye/EyeOff 图标）
+     - 表单验证：邮箱格式、验证码6位、密码至少6字符、两次密码一致
+     - 错误提示使用 bg-error/10 + border-error/20 样式
+     - 成功提示使用 bg-success/10 + border-success/20 样式
+     - 顶部 TaoyBeats Logo + 返回登录链接
+     - Suspense 包裹（与 login/register 一致，避免 useSearchParams 导致 SSR 问题）
+
+改动文件:
+  - src/app/(auth)/reset-password/page.tsx（新建）
+  - .coord/CLAIMS.md
+
+验证结果:
+  - npm run lint -- src/app/(auth)/reset-password/page.tsx: ✅ (0 errors, 0 warnings)
+  - npm run type-check: reset-password/page.tsx 无错误 ✅（仓库其他文件有既有错误，非本次引入）
+  - git commit: 8cf0db1
+
+未决问题: 无
+
+下一步:
+  - 与 T-045 登录页联调（登录页已添加 "忘记密码?" 链接指向 /reset-password）
+  - 运行完整测试套件验证登录/注册/重置链路
+  - 可考虑补充 reset-password 的 E2E 测试
+
+风险提示: 无
+```
+
+---
+
 ## HANDOFF 模板
 
 ```markdown

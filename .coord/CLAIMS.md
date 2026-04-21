@@ -36,7 +36,7 @@
 | T-044 | claude-main | src/lib/auth-utils.ts | 2026-04-21 00:00 | 添加 verifySessionTokenWithDB 支持 sessionsRevokedAt 校验 | released |
 | T-044 | claude-main | src/app/api/auth/profile/route.ts | 2026-04-21 00:00 | profile API 使用 verifySessionTokenWithDB 校验 session | released |
 | T-045 | claude-main | src/app/(auth)/login/page.tsx | 2026-04-21 00:00 | 登录页支持密码和验证码双模式 + 忘记密码链接 | released |
-| T-046 | claude-main | src/app/(auth)/reset-password/page.tsx | 2026-04-21 00:00 | 创建忘记密码重置页面，3步流程 | active |
+| T-046 | claude-main | src/app/(auth)/reset-password/page.tsx | 2026-04-21 00:00 | 创建忘记密码重置页面，3步流程 | released |
 
 ---
 
