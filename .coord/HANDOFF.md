@@ -189,6 +189,132 @@ Phase 5 - 迁移报告输出（本次）
 
 ---
 
+## T-044 — Session 校验支持 DB sessionsRevokedAt
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-21
+
+已做内容:
+  1. 修改 src/lib/auth-utils.ts:
+     - 新增 verifySessionTokenWithDB(token) 异步函数
+     - 先调用 verifySessionToken() 校验签名和过期时间
+     - 再查询 prisma.user.findUnique 获取 isActive 和 sessionsRevokedAt
+     - 如果用户不存在、未激活、或 token.iat < sessionsRevokedAt，返回 null
+     - 所有 DB 错误均被捕获并返回 null，避免泄露内部错误
+
+  2. 修改 src/app/api/auth/profile/route.ts:
+     - getCurrentUser() 从 verifySessionToken() 改为 await verifySessionTokenWithDB()
+     - 导入 verifySessionTokenWithDB 替换原有的 verifySessionToken
+
+改动文件:
+  - src/lib/auth-utils.ts
+  - src/app/api/auth/profile/route.ts
+  - .coord/CLAIMS.md
+
+验证结果:
+  - npm run lint -- src/lib/auth-utils.ts src/app/api/auth/profile/route.ts: ✅ (0 errors, 0 warnings)
+  - npm run type-check: 修改文件无错误 ✅（仓库其他文件有既有错误，非本次引入）
+  - git commit: b4f217c
+
+未决问题: 无
+
+下一步:
+  - 其他需要 session 校验的 API route（如 songs, admin 等）可统一迁移到 verifySessionTokenWithDB
+  - 运行完整测试套件验证登录/Session 链路
+
+风险提示: 无
+```
+
+---
+
+## T-043 — 忘记密码重置 API 实现
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-21
+
+已做内容:
+  1. 新建 src/app/api/auth/reset-password/route.ts:
+     - POST 接口接收 email, code, newPassword
+     - 使用 rateLimitMiddleware + AUTH_RATE_LIMIT ("reset-password") 限流
+     - CSRF Double Submit Cookie 校验
+     - sanitizeEmail / sanitizeString 输入消毒
+     - 从 Prisma VerificationToken 表验证验证码（支持过期检查），验证成功后删除 token
+     - 通过 prisma.user.findUnique 按邮箱查找用户
+     - 使用 bcrypt.hash(sanitizedPassword, 10) 加密新密码
+     - 更新 user.password 并设置 sessionsRevokedAt = new Date() 使所有现有会话失效
+     - 完整错误码覆盖：400（参数缺失/密码太短/验证码错误）、404（用户不存在）、500（更新失败）、503（数据库繁忙）
+     - 统一使用 logger.api.request / response / error + requestId 追踪
+     - 所有响应均通过 applySecurityHeaders 附加安全头
+
+改动文件:
+  - src/app/api/auth/reset-password/route.ts（新建）
+  - .coord/CLAIMS.md
+
+验证结果:
+  - npm run lint -- src/app/api/auth/reset-password/route.ts: ✅ (0 errors)
+  - npm run type-check: reset-password/route.ts 无错误 ✅（仓库其他文件有既有错误，非本次引入）
+  - git commit: 780dc20
+
+未决问题: 无
+
+下一步:
+  - 前端对接 /api/auth/reset-password 接口实现忘记密码页面
+  - 运行完整测试套件验证登录/重置链路
+
+风险提示: 无
+```
+
+---
+
+## T-045 — 登录页支持密码和验证码双模式
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-21
+
+已做内容:
+  1. 重写 src/app/(auth)/login/page.tsx:
+     - 移除原有的两步流程（email step → login step），改为单页表单
+     - 新增 loginMethod 状态: 'password' | 'code'，默认 password
+     - 新增 tab 切换按钮（密码登录 / 验证码登录）
+     - 密码模式: 显示邮箱 + 密码输入框，提交到 POST /api/auth/login
+     - 验证码模式: 显示邮箱 + 验证码输入框 + "获取验证码"按钮
+     - sendCode 函数: 调用 POST /api/auth/send-code，60秒倒计时
+     - 验证码模式提交到 POST /api/auth/verify
+     - 添加 "忘记密码?" 链接，跳转到 /reset-password
+     - 保留 CSRF token、i18n、loading/error 状态、showPassword 切换
+
+改动文件:
+  - src/app/(auth)/login/page.tsx
+  - .coord/CLAIMS.md
+
+验证结果:
+  - npx eslint src/app/(auth)/login/page.tsx: ✅ (0 errors)
+  - npx tsc --noEmit | grep login/page: 无错误 ✅
+  - git commit: c163302
+
+未决问题: 无
+
+下一步:
+  - 与 T-046 reset-password 页面联调
+  - 运行完整测试套件验证登录/注册/重置链路
+
+风险提示: 无
+```
+
+---
+
 ## T-042 — 验证码登录 Prisma 持久化改造
 
 **从**: claude-main
