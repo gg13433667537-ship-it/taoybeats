@@ -1,12 +1,13 @@
 /**
  * POST /api/auth/register
  * @version v1
- * @description 注册新用户，自动创建会话并设置7天有效的session cookie
+ * @description 注册新用户，需要验证码，自动创建会话并设置7天有效的session cookie
  * @param {string} email - 用户邮箱（必需，已消毒处理）
  * @param {string} password - 密码（最少6字符，已加密存储）
+ * @param {string} code - 验证码（必需）
  * @param {string} [name] - 用户昵称（可选，默认使用邮箱前缀）
  * @returns {object} { success: true, user: { id, email, name, role } }
- * @errors 400 - 参数缺失或密码太短 | 409 - 邮箱已被注册 | 500 - 服务器错误
+ * @errors 400 - 参数缺失或密码太短或验证码错误 | 409 - 邮箱已被注册 | 500 - 服务器错误
  * @rateLimit 5 requests per minute per IP
  */
 import { NextRequest, NextResponse } from "next/server"
@@ -24,13 +25,6 @@ import {
 } from "@/lib/security"
 import { prisma } from "@/lib/db"
 import { logger } from "@/lib/logger"
-
-
-if (!global.users) global.users = new Map()
-if (!global.songs) global.songs = new Map()
-if (!global.adminLogs) global.adminLogs = new Map()
-
-const users = global.users!
 
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID()
@@ -61,7 +55,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { email, password, name } = body
+    const { email, password, name, code } = body
 
     // Input validation and sanitization
     const sanitizedEmail = sanitizeEmail(email)
@@ -91,18 +85,66 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Require verification code
+    if (!code) {
+      const duration = Date.now() - startTime
+      logger.api.response("POST", endpoint, 400, duration, { requestId })
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "请提供验证码" },
+          { status: 400 }
+        )
+      )
+    }
+
+    // Verify the code from database
+    let codeValid = false
+    try {
+      const tokenRecord = await prisma.verificationToken.findFirst({
+        where: {
+          identifier: sanitizedEmail,
+          token: String(code),
+          expires: { gt: new Date() },
+        },
+      })
+      if (tokenRecord) {
+        codeValid = true
+        await prisma.verificationToken.delete({
+          where: { identifier_token: { identifier: sanitizedEmail, token: String(code) } },
+        })
+      }
+    } catch (dbError) {
+      logger.error(`Failed to verify code from DB: ${dbError}`, { requestId })
+    }
+
+    if (!codeValid) {
+      const duration = Date.now() - startTime
+      logger.api.response("POST", endpoint, 400, duration, { requestId })
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "验证码错误或已过期" },
+          { status: 400 }
+        )
+      )
+    }
+
     // Hash password first
     const hashedPassword = await bcrypt.hash(sanitizedPassword, 10)
 
-    let existingUser = users.get(sanitizedEmail)
-    if (!existingUser) {
-      try {
-        existingUser = await prisma.user.findUnique({
-          where: { email: sanitizedEmail },
-        })
-      } catch (prismaError) {
-        logger.warn(`Prisma user lookup failed during registration, falling back to memory: ${prismaError}`, { requestId })
-      }
+    // Check if user already exists (Prisma ONLY)
+    let existingUser = null
+    try {
+      existingUser = await prisma.user.findUnique({
+        where: { email: sanitizedEmail },
+      })
+    } catch (prismaError) {
+      logger.error(`Prisma user lookup failed: ${prismaError}`, { requestId })
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "服务器繁忙，请稍后重试" },
+          { status: 503 }
+        )
+      )
     }
 
     if (existingUser) {
@@ -116,12 +158,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let isFirstUser = users.size === 0
+    // Check if this is the first user (Prisma ONLY)
+    let isFirstUser = false
     try {
       const userCount = await prisma.user.count()
       isFirstUser = userCount === 0
     } catch (prismaError) {
-      logger.warn(`Prisma user count failed during registration, falling back to memory: ${prismaError}`, { requestId })
+      logger.error(`Prisma user count failed: ${prismaError}`, { requestId })
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "服务器繁忙，请稍后重试" },
+          { status: 503 }
+        )
+      )
     }
 
     // Create user object
@@ -140,6 +189,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     }
 
+    // Create user in Prisma (NO memory fallback)
     try {
       logger.debug(`Creating user in Prisma: ${JSON.stringify({
         id: user.id,
@@ -163,16 +213,20 @@ export async function POST(request: NextRequest) {
           monthlyUsage: user.monthlyUsage,
           dailyResetAt: user.dailyResetAt,
           monthlyResetAt: user.monthlyResetAt,
+          updatedAt: new Date(),
         },
       })
 
-      logger.info(`User created in Prisma successfully: ${createdUser.id}`, { requestId })
+      logger.info(`User created in Prisma: ${createdUser.id}`, { requestId })
     } catch (prismaError) {
-      logger.warn(`Prisma user.create failed, continuing with memory fallback: ${prismaError}`, { requestId })
+      logger.error(`Prisma user.create failed: ${prismaError}`, { requestId })
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "注册失败，请稍后重试" },
+          { status: 500 }
+        )
+      )
     }
-
-    users.set(sanitizedEmail, user)
-    users.set(user.id, user)
 
     // Create session token
     const sessionToken = createSessionToken(user)
