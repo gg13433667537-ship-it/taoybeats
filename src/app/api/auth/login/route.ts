@@ -24,12 +24,6 @@ import { prisma } from "@/lib/db"
 import { logger } from "@/lib/logger"
 
 
-if (!global.users) global.users = new Map()
-if (!global.songs) global.songs = new Map()
-if (!global.adminLogs) global.adminLogs = new Map()
-
-const users = global.users!
-
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID()
   const startTime = Date.now()
@@ -76,76 +70,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user by email - first check memory, then fall back to Prisma
+    // Find user by email using Prisma only
     logger.debug(`Login attempt for email: ${sanitizedEmail}`, { requestId })
-    logger.debug(`Users in memory: ${users.size}`, { requestId })
 
-    // Debug: log all emails in memory
-    if (users.size > 0) {
-      const memoryEmails = Array.from(users.keys()).filter(k => k.includes('@'))
-      logger.debug(`Memory emails: ${JSON.stringify(memoryEmails)}`, { requestId })
-    }
-
-    let user = users.get(sanitizedEmail)
-    logger.debug(`User from memory lookup: ${user ? 'found' : 'not found'}`, { requestId })
-
-    // If not in memory, try Prisma (for serverless cold starts)
-    if (!user) {
-      logger.debug(`Querying Prisma for email: ${sanitizedEmail}`, { requestId })
-
-      // First try exact match with lowercase email (most common case)
-      // This is more reliable than mode: 'insensitive' which depends on DB collation
-      const dbUser = await prisma.user.findFirst({
-        where: {
-          email: sanitizedEmail.toLowerCase(),
-        },
+    let dbUser = null
+    try {
+      dbUser = await prisma.user.findFirst({
+        where: { email: sanitizedEmail.toLowerCase() },
       })
 
-      // If not found, try case-insensitive match as fallback
-      let foundDbUser = dbUser
-      if (!foundDbUser) {
-        const dbUserCaseInsensitive = await prisma.user.findFirst({
+      if (!dbUser) {
+        dbUser = await prisma.user.findFirst({
           where: {
-            email: {
-              equals: sanitizedEmail,
-              mode: 'insensitive',
-            },
+            email: { equals: sanitizedEmail, mode: 'insensitive' },
           },
         })
-        if (dbUserCaseInsensitive) {
-          // Update the email to lowercase for future lookups
-          foundDbUser = await prisma.user.update({
-            where: { id: dbUserCaseInsensitive.id },
-            data: { email: sanitizedEmail.toLowerCase() },
-          })
-        }
       }
-      logger.debug(`Prisma result: ${foundDbUser ? `found user ${foundDbUser.id}` : 'not found'}`, { requestId })
-
-      if (foundDbUser) {
-        // Rehydrate user into memory
-        user = {
-          id: foundDbUser.id,
-          email: foundDbUser.email || sanitizedEmail,
-          name: foundDbUser.name || undefined,
-          password: foundDbUser.password || undefined,
-          role: foundDbUser.role as "USER" | "PRO" | "ADMIN",
-          isActive: foundDbUser.isActive,
-          tier: foundDbUser.tier as "FREE" | "PRO",
-          dailyUsage: foundDbUser.dailyUsage,
-          monthlyUsage: foundDbUser.monthlyUsage,
-          dailyResetAt: foundDbUser.dailyResetAt || getDateKey(),
-          monthlyResetAt: foundDbUser.monthlyResetAt || getMonthKey(),
-          createdAt: foundDbUser.createdAt.toISOString(),
-        }
-        logger.debug(`Rehydrating user into memory with keys: ${sanitizedEmail}, ${user.id}`, { requestId })
-        users.set(sanitizedEmail, user)
-        users.set(user.id, user)
-        logger.debug(`Memory after rehydrate: ${users.size} entries`, { requestId })
-      }
+    } catch (prismaError) {
+      logger.error(`Prisma login lookup failed: ${prismaError}`, { requestId })
+      const duration = Date.now() - startTime
+      logger.api.response("POST", endpoint, 503, duration, { requestId })
+      return applySecurityHeaders(
+        NextResponse.json({ error: "服务器繁忙，请稍后重试" }, { status: 503 })
+      )
     }
 
-    if (!user) {
+    logger.debug(`Prisma result: ${dbUser ? `found user ${dbUser.id}` : 'not found'}`, { requestId })
+
+    if (!dbUser) {
       const duration = Date.now() - startTime
       logger.warn(`User not found for email: ${sanitizedEmail}`, { requestId })
 
@@ -160,10 +112,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has a password
-    if (!user.password) {
+    if (!dbUser.password) {
       const duration = Date.now() - startTime
-      logger.api.response("POST", endpoint, 401, duration, { requestId, userId: user.id })
-      logger.auth.login(user.id, false, { requestId })
+      logger.api.response("POST", endpoint, 401, duration, { requestId, userId: dbUser.id })
+      logger.auth.login(dbUser.id, false, { requestId })
       return applySecurityHeaders(
         NextResponse.json(
           { error: "该账号尚未设置密码，请使用验证码登录" },
@@ -173,11 +125,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    const isValid = await bcrypt.compare(sanitizedPassword, user.password)
+    const isValid = await bcrypt.compare(sanitizedPassword, dbUser.password)
     if (!isValid) {
       const duration = Date.now() - startTime
-      logger.api.response("POST", endpoint, 401, duration, { requestId, userId: user.id })
-      logger.auth.login(user.id, false, { requestId })
+      logger.api.response("POST", endpoint, 401, duration, { requestId, userId: dbUser.id })
+      logger.auth.login(dbUser.id, false, { requestId })
       return applySecurityHeaders(
         NextResponse.json(
           { error: "密码错误，请重试" },
@@ -187,10 +139,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is active
-    if (!user.isActive) {
+    if (!dbUser.isActive) {
       const duration = Date.now() - startTime
-      logger.api.response("POST", endpoint, 403, duration, { requestId, userId: user.id })
-      logger.auth.login(user.id, false, { requestId })
+      logger.api.response("POST", endpoint, 403, duration, { requestId, userId: dbUser.id })
+      logger.auth.login(dbUser.id, false, { requestId })
       return applySecurityHeaders(
         NextResponse.json(
           { error: "账号已被禁用，请联系管理员" },
@@ -200,15 +152,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session token
-    const sessionToken = createSessionToken(user)
+    const userForSession = {
+      id: dbUser.id,
+      email: dbUser.email || sanitizedEmail,
+      name: dbUser.name || undefined,
+      role: dbUser.role as "USER" | "PRO" | "ADMIN",
+      isActive: dbUser.isActive,
+      tier: dbUser.tier as "FREE" | "PRO",
+      dailyUsage: dbUser.dailyUsage,
+      monthlyUsage: dbUser.monthlyUsage,
+      dailyResetAt: dbUser.dailyResetAt || getDateKey(),
+      monthlyResetAt: dbUser.monthlyResetAt || getMonthKey(),
+      createdAt: dbUser.createdAt.toISOString(),
+    }
+    const sessionToken = createSessionToken(userForSession)
 
     const response = NextResponse.json({
       success: true,
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
+        id: dbUser.id,
+        email: dbUser.email,
+        name: dbUser.name,
+        role: dbUser.role,
       },
     })
 
@@ -221,8 +186,8 @@ export async function POST(request: NextRequest) {
     })
 
     const duration = Date.now() - startTime
-    logger.api.response("POST", endpoint, 200, duration, { requestId, userId: user.id })
-    logger.auth.login(user.id, true, { requestId })
+    logger.api.response("POST", endpoint, 200, duration, { requestId, userId: dbUser.id })
+    logger.auth.login(dbUser.id, true, { requestId })
 
     return applySecurityHeaders(response)
   } catch (error) {
