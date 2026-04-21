@@ -1,3 +1,6 @@
+// Prisma Schema for TaoyBeats
+// Generated manually due to prisma init network issues
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,122 +10,76 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  password      String?
+  role          Role      @default(USER)
+  isActive      Boolean   @default(true)
+  tier          String    @default("FREE")
+  dailyUsage    Int       @default(0)
+  monthlyUsage  Int       @default(0)
+  dailyResetAt  String?
+  monthlyResetAt String?
+  sessionsRevokedAt DateTime? // Timestamp when all sessions were revoked (for logout-all)
+  stripeCustomerId String?
+  stripeSubscriptionId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+  songs    Song[]
+  apiConfig ApiConfig?
+  subscription Subscription?
+  playlists Playlist[]
+}
+
+enum Role {
+  USER
+  PRO
+  ADMIN
+}
+
+model AdminLog {
+  id          String   @id @default(uuid())
+  adminId     String
+  adminEmail  String
+  action      String
+  targetId    String?
+  targetType  String?
+  details     Json?
+  createdAt   DateTime @default(now())
+}
+
 model Account {
-  id                String  @id
+  id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?
-  access_token      String?
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?
+  id_token          String? @db.Text
   session_state     String?
-  User              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
 
-model AdminLog {
-  id         String   @id
-  adminId    String
-  adminEmail String
-  action     String
-  targetId   String?
-  targetType String?
-  details    Json?
-  createdAt  DateTime @default(now())
-}
-
-model ApiConfig {
-  id        String   @id
-  userId    String   @unique
-  provider  String
-  apiKey    String
-  apiUrl    String
-  modelId   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime
-  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
 model Session {
-  id           String   @id
+  id           String   @id @default(cuid())
   sessionToken String   @unique
   userId       String
   expires      DateTime
-  User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Song {
-  id                       String           @id
-  title                    String
-  lyrics                   String?
-  genre                    String[]
-  mood                     String?
-  instruments              String[]
-  referenceSinger          String?
-  referenceSong            String?
-  userNotes                String?
-  status                   GenerationStatus @default(PENDING)
-  audioUrl                 String?
-  coverUrl                 String?
-  shareToken               String?          @unique
-  userId                   String
-  createdAt                DateTime         @default(now())
-  updatedAt                DateTime
-  forkedFrom               String?
-  originalOwnerId          String?
-  providerTaskId           String?
-  errorMessage             String?
-  originalLyrics           String?
-  lyricsCompressionApplied Boolean          @default(false)
-  lyricsCompressionReason  String?
-  lyricsCompressionModel   String?
-  lyricsCompressionLimit   Int?
-  isInstrumental           Boolean          @default(false)
-  voiceId                  String?
-  referenceAudio           String?
-  partGroupId              String?
-  part                     Int              @default(1)
-  User                     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Subscription {
-  id        String           @id
-  userId    String           @unique
-  tier      SubscriptionTier @default(FREE)
-  credits   Int              @default(0)
-  expiresAt DateTime?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime
-  User      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model User {
-  id                String        @id
-  email             String?       @unique
-  emailVerified     DateTime?
-  name              String?
-  image             String?
-  password          String?
-  role              Role          @default(USER)
-  isActive          Boolean       @default(true)
-  tier              String        @default("FREE")
-  dailyUsage        Int           @default(0)
-  monthlyUsage      Int           @default(0)
-  dailyResetAt      String?
-  monthlyResetAt    String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  sessionsRevokedAt DateTime?
-  Account           Account[]
-  ApiConfig         ApiConfig?
-  Session           Session[]
-  Song              Song[]
-  Subscription      Subscription?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
@@ -133,17 +90,84 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model Song {
+  id              String   @id @default(cuid())
+  title           String
+  lyrics          String?  @db.Text
+  originalLyrics  String?  @db.Text
+  genre           String[]
+  mood            String?
+  instruments     String[]
+  referenceSinger String?
+  referenceSong   String?
+  userNotes       String?  @db.Text
+  status          GenerationStatus @default(PENDING)
+  lyricsCompressionApplied Boolean @default(false)
+  lyricsCompressionReason String?
+  lyricsCompressionModel  String?
+  lyricsCompressionLimit  Int?
+  providerTaskId  String?
+  errorMessage    String?  @db.Text
+  audioUrl        String?
+  coverUrl        String?
+  shareToken      String?  @unique
+  isInstrumental  Boolean  @default(false)
+  voiceId         String?
+  referenceAudio  String?
+  userId          String
+  forkedFrom      String?  // Reference to original song ID if this was forked
+  originalOwnerId String?  // Reference to original song owner's ID for attribution
+  partGroupId     String?  // Groups multi-part songs together (UUID of the group)
+  part            Int      @default(1)  // Part number for multi-part songs (1 = first part)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ApiConfig {
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  provider  String  // "minimax" / "suno" / "udio" / "custom"
+  apiKey    String
+  apiUrl    String
+  modelId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  tier      SubscriptionTier @default(FREE)
+  credits   Int      @default(0)
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Playlist {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  songIds     String[]
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 enum GenerationStatus {
   PENDING
   GENERATING
   COMPLETED
   FAILED
-}
-
-enum Role {
-  USER
-  PRO
-  ADMIN
 }
 
 enum SubscriptionTier {
