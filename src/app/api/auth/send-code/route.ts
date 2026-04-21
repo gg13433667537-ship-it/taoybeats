@@ -10,6 +10,8 @@ import {
   verifyCSRFToken,
   generateCSRFToken,
 } from "@/lib/security"
+import { prisma } from "@/lib/db"
+import { logger } from "@/lib/logger"
 
 function createVerifyToken(email: string, code: string): string {
   // Use CSRF secret for signing verification tokens
@@ -100,6 +102,8 @@ async function sendVerificationEmail(email: string, code: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = crypto.randomUUID()
+
   // Apply rate limiting for send-code endpoint
   const rateLimitResponse = rateLimitMiddleware(request, AUTH_RATE_LIMIT, "send-code")
   if (rateLimitResponse) {
@@ -133,6 +137,26 @@ export async function POST(request: NextRequest) {
 
     const code = generateCode()
     const token = createVerifyToken(sanitizedEmail, code)
+
+    // Store verification code in database
+    try {
+      await prisma.verificationToken.create({
+        data: {
+          identifier: sanitizedEmail,
+          token: code, // Store the raw code for easy lookup
+          expires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+        },
+      })
+      logger.debug(`Verification code stored in DB for ${sanitizedEmail}`, { requestId })
+    } catch (dbError) {
+      logger.error(`Failed to store verification code in DB: ${dbError}`, { requestId })
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "服务器繁忙，请稍后重试" },
+          { status: 503 }
+        )
+      )
+    }
 
     // Send verification email in background to prevent timing attacks
     // Always perform a small delay to normalize response time
