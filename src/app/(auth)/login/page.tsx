@@ -8,25 +8,20 @@ import { useI18n } from "@/lib/i18n"
 import { getCSRFToken, refreshCSRFToken } from "@/lib/csrf"
 
 type LoginMethod = "password" | "code"
-type Step = "email" | "login"
 
 function LoginPageContent() {
   const { t } = useI18n()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [step, setStep] = useState<Step>("email")
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("password")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [code, setCode] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [devCode, setDevCode] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [userExists, setUserExists] = useState(false)
-  const [hasPassword, setHasPassword] = useState(false)
-  const [codeSent, setCodeSent] = useState(false)
-  const [sendCountdown, setSendCountdown] = useState(0)
+  const [isSendingCode, setIsSendingCode] = useState(false)
+  const [countdown, setCountdown] = useState(0)
 
   // Get redirect URL from query params (set by middleware)
   const redirectUrl = searchParams.get("redirect") || "/dashboard"
@@ -46,96 +41,73 @@ function LoginPageContent() {
     return headers
   }
 
-  // Check email when it changes (blur or after some time)
-  const checkEmail = async (emailToCheck: string) => {
-    if (!emailToCheck || !emailToCheck.includes("@")) return
-
-    try {
-      const res = await fetch("/api/auth/check-email", {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ email: emailToCheck }),
-      })
-      const data = await res.json()
-
-      if (data.exists) {
-        setUserExists(true)
-        setHasPassword(data.hasPassword)
-        if (data.hasPassword) {
-          setLoginMethod("password")
-          setStep("login")
-        } else {
-          setLoginMethod("code")
-          setStep("login")
-          // For code login, reset codeSent state so user can click "Send Code"
-          setCodeSent(false)
-        }
-      } else {
-        // User doesn't exist - show error instead of auto redirecting
-        setError("该邮箱尚未注册，请先注册")
-        setStep("email") // Stay on email step
-      }
-    } catch (err) {
-      console.error("Check email error:", err)
+  const sendCode = async () => {
+    if (!email) {
+      setError("请先输入邮箱")
+      return
     }
-  }
-
-  // Send verification code
-  const handleSendCode = async () => {
-    if (!email || !email.includes("@")) return
-    setLoading(true)
-    setError("")
-
+    setIsSendingCode(true)
     try {
       const res = await fetch("/api/auth/send-code", {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ email }),
       })
-
       const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || "发送验证码失败")
+      if (data.success) {
+        setCountdown(60)
+        const timer = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(timer)
+              setIsSendingCode(false)
+              return 0
+            }
+            return prev - 1
+          })
+        }, 1000)
+      } else {
+        setError(data.error || "发送验证码失败")
+        setIsSendingCode(false)
       }
-
-      if (data.devCode) {
-        setDevCode(data.devCode)
-      }
-
-      setCodeSent(true)
-      // Start countdown for resend
-      setSendCountdown(60)
-      const timer = setInterval(() => {
-        setSendCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(timer)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "发送验证码失败")
-    } finally {
-      setLoading(false)
+    } catch {
+      setError("发送验证码失败")
+      setIsSendingCode(false)
     }
   }
 
-  const handleEmailBlur = () => {
-    if (email) checkEmail(email)
-  }
-
-  const handlePasswordLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError("")
 
+    // Validate
+    if (!email || !email.includes("@")) {
+      setError("请输入有效的邮箱地址")
+      return
+    }
+
+    if (loginMethod === "password" && !password) {
+      setError("请输入密码")
+      return
+    }
+
+    if (loginMethod === "code" && !code) {
+      setError("请输入验证码")
+      return
+    }
+
+    setLoading(true)
+
     try {
-      const res = await fetch("/api/auth/login", {
+      const endpoint = loginMethod === "password" ? "/api/auth/login" : "/api/auth/verify"
+      const body = loginMethod === "password"
+        ? JSON.stringify({ email, password })
+        : JSON.stringify({ email, code })
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ email, password }),
+        body,
       })
 
       const data = await res.json()
@@ -151,46 +123,6 @@ function LoginPageContent() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleCodeLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError("")
-
-    try {
-      // Verify code only (code should already be sent via handleSendCode)
-      const verifyRes = await fetch("/api/auth/verify", {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ email, code }),
-      })
-
-      const verifyData = await verifyRes.json()
-
-      if (!verifyRes.ok) {
-        throw new Error(verifyData.error || "验证码错误")
-      }
-
-      // Success - redirect to original page or dashboard
-      router.push(redirectUrl)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "登录失败")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const switchToPassword = () => {
-    setLoginMethod("password")
-    setCode("")
-    setError("")
-  }
-
-  const switchToCode = () => {
-    setLoginMethod("code")
-    setPassword("")
-    setError("")
   }
 
   return (
@@ -224,9 +156,7 @@ function LoginPageContent() {
               {t("welcomeBack")}
             </h1>
             <p className="text-text-secondary">
-              {step === "email" && t("enterYourEmailToSignIn")}
-              {step === "login" && loginMethod === "password" && t("enterYourPassword")}
-              {step === "login" && loginMethod === "code" && t("enterVerificationCode")}
+              {t("enterYourEmailToSignIn")}
             </p>
           </div>
 
@@ -236,184 +166,123 @@ function LoginPageContent() {
             </div>
           )}
 
-          {/* Email Step */}
-          {step === "email" && (
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-2">
-                  {t("email")}
-                </label>
+          {/* Login method switcher */}
+          <div className="flex gap-2 mb-6">
+            <button
+              type="button"
+              onClick={() => setLoginMethod("password")}
+              className={`flex-1 py-2 text-center rounded-lg font-medium transition-colors ${
+                loginMethod === "password"
+                  ? "bg-purple-600 text-white"
+                  : "bg-white/5 text-gray-400 hover:bg-white/10"
+              }`}
+            >
+              密码登录
+            </button>
+            <button
+              type="button"
+              onClick={() => setLoginMethod("code")}
+              className={`flex-1 py-2 text-center rounded-lg font-medium transition-colors ${
+                loginMethod === "code"
+                  ? "bg-purple-600 text-white"
+                  : "bg-white/5 text-gray-400 hover:bg-white/10"
+              }`}
+            >
+              验证码登录
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Email */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-2">
+                {t("email")}
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
                 <input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  onBlur={handleEmailBlur}
                   required
-                  className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
                   placeholder="you@example.com"
                 />
               </div>
-
-              <button
-                onClick={() => checkEmail(email)}
-                disabled={!email || !email.includes("@")}
-                aria-label={t("continueWithEmail")}
-                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <Mail className="w-4 h-4" aria-hidden="true" />
-                {t("continueWithEmail")}
-              </button>
             </div>
-          )}
 
-          {/* Login Step - Password */}
-          {step === "login" && loginMethod === "password" && (
-            <form onSubmit={handlePasswordLogin} className="space-y-4">
-              <div className="p-4 rounded-xl bg-surface border border-border mb-4">
-                <p className="text-sm text-text-secondary">
-                  {email}
-                </p>
-              </div>
-
+            {/* Password or Code field */}
+            {loginMethod === "password" ? (
               <div className="relative">
                 <label htmlFor="password" className="block text-sm font-medium text-text-secondary mb-2">
                   {t("password")}
                 </label>
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors pr-12"
-                  placeholder={t("enterPassword")}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-3 top-9 text-text-muted hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading || !password}
-                aria-label={loading ? t("signingIn") : t("signIn")}
-                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Lock className="w-4 h-4" aria-hidden="true" />}
-                {loading ? t("signingIn") : t("signIn")}
-              </button>
-
-              {hasPassword && (
-                <p className="text-center text-sm text-text-muted mt-4">
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="w-full pl-12 pr-12 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                    placeholder={t("enterPassword")}
+                  />
                   <button
                     type="button"
-                    onClick={switchToCode}
-                    className="text-accent hover:underline"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-foreground"
                   >
-                    {t("signInWithCode")}
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
-                </p>
-              )}
-            </form>
-          )}
-
-          {/* Login Step - Code */}
-          {step === "login" && loginMethod === "code" && (
-            <form onSubmit={handleCodeLogin} className="space-y-4">
-              <div className="p-4 rounded-xl bg-surface border border-border mb-4">
-                <p className="text-sm text-text-secondary">
-                  {email}
-                </p>
-              </div>
-
-              {/* Dev code display */}
-              {devCode && (
-                <div className="mb-4 p-4 rounded-xl bg-accent/10 border border-accent/20 text-accent text-sm">
-                  <p className="font-medium mb-1">{t("demoModeYourCode")}</p>
-                  <p className="text-2xl font-bold tracking-widest">{devCode}</p>
                 </div>
-              )}
-
-              {/* Send Code button - shown when code hasn't been sent */}
-              {!codeSent && (
-                <button
-                  type="button"
-                  onClick={handleSendCode}
-                  disabled={loading}
-                  aria-label={t("sendVerificationCode")}
-                  className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Mail className="w-4 h-4" aria-hidden="true" />}
-                  {loading ? t("sending") : t("sendVerificationCode")}
-                </button>
-              )}
-
-              {/* Code input - shown after code is sent */}
-              {codeSent && (
-                <>
-                  <div>
-                    <label htmlFor="code" className="block text-sm font-medium text-text-secondary mb-2">
-                      {t("verificationCode")}
-                    </label>
-                    <input
-                      id="code"
-                      type="text"
-                      value={code}
-                      onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      required
-                      className="w-full px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors text-center text-2xl tracking-widest font-mono"
-                      placeholder="000000"
-                      maxLength={6}
-                      autoFocus
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading || code.length !== 6}
-                    aria-label={loading ? t("verifying") : t("verifySignIn")}
-                    className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Lock className="w-4 h-4" aria-hidden="true" />}
-                    {loading ? t("verifying") : t("verifySignIn")}
-                  </button>
-
-                  {/* Resend button with countdown */}
-                  <p className="text-center text-sm text-text-muted mt-4">
-                    {sendCountdown > 0 ? (
-                      <span className="text-text-muted">{t("resendIn")} {sendCountdown}s</span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleSendCode}
-                        className="text-accent hover:underline"
-                      >
-                        {t("resendCode")}
-                      </button>
-                    )}
-                  </p>
-                </>
-              )}
-
-              {userExists && hasPassword && (
-                <p className="text-center text-sm text-text-muted mt-4">
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="code" className="block text-sm font-medium text-text-secondary mb-2">
+                  验证码
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="code"
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="flex-1 px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                    placeholder="请输入验证码"
+                    required
+                  />
                   <button
                     type="button"
-                    onClick={switchToPassword}
-                    className="text-accent hover:underline"
+                    onClick={sendCode}
+                    disabled={isSendingCode || countdown > 0}
+                    className="px-4 py-3 bg-accent hover:bg-accent-hover disabled:bg-gray-600 text-white rounded-xl font-medium transition-colors whitespace-nowrap"
                   >
-                    {t("signInWithPassword")}
+                    {countdown > 0 ? `${countdown}秒` : "获取验证码"}
                   </button>
-                </p>
-              )}
-            </form>
-          )}
+                </div>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              aria-label={loading ? t("signingIn") : t("signIn")}
+              className="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Lock className="w-4 h-4" aria-hidden="true" />}
+              {loading ? t("signingIn") : t("signIn")}
+            </button>
+          </form>
+
+          {/* Forgot password link */}
+          <div className="text-center mt-4">
+            <Link href="/reset-password" className="text-purple-400 hover:text-purple-300 text-sm">
+              忘记密码?
+            </Link>
+          </div>
 
           <p className="mt-8 text-center text-sm text-text-muted">
             {t("noAccount")}{" "}

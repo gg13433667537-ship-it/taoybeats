@@ -32,7 +32,11 @@
 | T-040 | claude-main | src/app/song/[id]/page.tsx | 2026-04-19 01:02 | 歌曲详情页改为使用同源音频代理播放和下载 | active |
 | T-040 | claude-main | .gitignore | 2026-04-19 07:03 | 忽略根目录 Playwright 测试产物避免污染部署提交 | active |
 | T-042 | claude-main | src/app/api/auth/verify/route.ts | 2026-04-21 00:00 | 验证码登录改为 Prisma 持久化，自动创建用户 | released |
-| T-043 | claude-main | src/app/api/auth/reset-password/route.ts | 2026-04-21 00:00 | 忘记密码重置接口实现并通过 lint/type-check | active |
+| T-043 | claude-main | src/app/api/auth/reset-password/route.ts | 2026-04-21 00:00 | 忘记密码重置接口实现并通过 lint/type-check | released |
+| T-044 | claude-main | src/lib/auth-utils.ts | 2026-04-21 00:00 | 添加 verifySessionTokenWithDB 支持 sessionsRevokedAt 校验 | released |
+| T-044 | claude-main | src/app/api/auth/profile/route.ts | 2026-04-21 00:00 | profile API 使用 verifySessionTokenWithDB 校验 session | released |
+| T-045 | claude-main | src/app/(auth)/login/page.tsx | 2026-04-21 00:00 | 登录页支持密码和验证码双模式 + 忘记密码链接 | active |
+| T-046 | claude-main | src/app/(auth)/reset-password/page.tsx | 2026-04-21 00:00 | 创建忘记密码重置页面，3步流程 | active |
 
 ---
 
