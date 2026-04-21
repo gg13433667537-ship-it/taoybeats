@@ -189,6 +189,52 @@ Phase 5 - 迁移报告输出（本次）
 
 ---
 
+## T-042 — 验证码登录 Prisma 持久化改造
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-21
+
+已做内容:
+  1. 重写 src/app/api/auth/verify/route.ts:
+     - 删除所有内存存储引用 (global.users, global.songs, global.adminLogs, users 变量)
+     - 新增 prisma 和 logger 导入
+     - 验证码改为从 Prisma VerificationToken 表查询（支持过期检查）
+     - 验证成功后删除已使用的 token
+     - 用户不存在时自动通过 prisma.user.create() 创建
+     - 第一个自动创建的用户设为 ADMIN，其余为 USER
+     - 移除 verify-token 和 dev-code cookie 清除逻辑（不再使用）
+     - 保留 session-token cookie 设置
+     - Prisma 失败时返回 503/500 错误
+
+  2. 修复 Prisma schema:
+     - User.updatedAt 添加 @updatedAt 属性，使 user.create() 无需手动传入 updatedAt
+
+改动文件:
+  - src/app/api/auth/verify/route.ts
+  - prisma/schema.prisma
+  - .coord/CLAIMS.md
+
+验证结果:
+  - npm run lint -- src/app/api/auth/verify/route.ts: ✅ (0 errors)
+  - npm run type-check: verify/route.ts 无错误 ✅（仓库其他文件有既有错误，非本次引入）
+  - npx prisma generate: ✅
+  - git commit: 70d74d2
+
+未决问题: 无
+
+下一步:
+  - 继续清理其他 auth API 中的内存回退逻辑（如 profile route 等）
+  - 运行完整测试套件验证登录链路
+
+风险提示: 无
+```
+
+---
+
 ## HANDOFF 模板
 
 ```markdown
