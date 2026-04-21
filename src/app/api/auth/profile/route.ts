@@ -5,9 +5,6 @@ import { logger } from "@/lib/logger"
 import { prisma } from "@/lib/db"
 import crypto from "crypto"
 
-
-if (!global.users) global.users = new Map()
-
 async function getCurrentUser(request: NextRequest) {
   const sessionToken = request.cookies.get("session-token")?.value
   if (!sessionToken) return null
@@ -39,31 +36,20 @@ export async function GET(request: NextRequest) {
     try {
       existingUser = await prisma.user.findUnique({
         where: { id: user.id },
-        select: { id: true, email: true, name: true, role: true, tier: true }
+        select: { id: true, email: true, name: true, role: true, tier: true, dailyUsage: true, monthlyUsage: true, dailyResetAt: true, monthlyResetAt: true, createdAt: true }
       })
       console.log("[Profile API] DB lookup for user.id:", user.id, "result:", existingUser)
     } catch (dbError) {
-      console.error("[Profile API] Prisma lookup failed, falling back to memory:", dbError)
-    }
-
-    if (!existingUser) {
-      const usersMap = global.users!
-      const memoryUser = usersMap.get(user.id) || usersMap.get(user.email)
-      if (memoryUser) {
-        existingUser = {
-          id: memoryUser.id,
-          email: memoryUser.email,
-          name: memoryUser.name || null,
-          role: memoryUser.role,
-          tier: memoryUser.tier,
-        }
-      }
+      logger.error(`[Profile API] Prisma lookup failed: ${dbError}`)
+      const duration = Date.now() - startTime
+      logger.api.response("GET", endpoint, 503, duration, { requestId })
+      return applySecurityHeaders(NextResponse.json({ error: "服务器繁忙，请稍后重试" }, { status: 503 }))
     }
 
     if (!existingUser) {
       const duration = Date.now() - startTime
       logger.api.response("GET", endpoint, 404, duration, { requestId })
-      return applySecurityHeaders(NextResponse.json({ error: "User not found" }, { status: 404 }))
+      return applySecurityHeaders(NextResponse.json({ error: "用户不存在" }, { status: 404 }))
     }
 
     const duration = Date.now() - startTime
@@ -118,27 +104,26 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Update user in global store
-    const usersMap = global.users!
-    const existingUser = usersMap.get(user.id)
-    const sanitizedName = name ? sanitizeString(name) : existingUser?.name
-    if (existingUser) {
-      existingUser.name = sanitizedName
-      usersMap.set(user.id, existingUser)
+    try {
+      const updatedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: { name: name ? sanitizeString(name) : undefined },
+        select: { id: true, email: true, name: true, role: true, tier: true }
+      })
+
+      const duration = Date.now() - startTime
+      logger.api.response("PUT", endpoint, 200, duration, { requestId, userId: user.id })
+
+      return applySecurityHeaders(NextResponse.json({
+        success: true,
+        user: updatedUser,
+      }))
+    } catch (dbError) {
+      logger.error(`[Profile API] Prisma update failed: ${dbError}`)
+      const duration = Date.now() - startTime
+      logger.api.response("PUT", endpoint, 500, duration, { requestId })
+      return applySecurityHeaders(NextResponse.json({ error: "更新失败，请稍后重试" }, { status: 500 }))
     }
-
-    const duration = Date.now() - startTime
-    logger.api.response("PUT", endpoint, 200, duration, { requestId, userId: user.id })
-
-    return applySecurityHeaders(NextResponse.json({
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: sanitizedName,
-        role: user.role,
-      },
-    }))
   } catch (error) {
     logger.api.error("PUT", endpoint, error, { requestId })
     return applySecurityHeaders(
@@ -196,18 +181,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // In production, update user in database
-    // For demo, just return success
-    const duration = Date.now() - startTime
-    logger.api.response("POST", endpoint, 200, duration, { requestId, userId: user.id })
+    try {
+      const updatedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          ...(email !== undefined ? { email: typeof email === "string" ? sanitizeString(email) : email } : {}),
+          ...(name !== undefined ? { name: sanitizeString(name) } : {}),
+        },
+        select: { id: true, email: true, name: true, role: true, tier: true }
+      })
 
-    return applySecurityHeaders(NextResponse.json({
-      success: true,
-      user: {
-        email: typeof email === "string" ? sanitizeString(email) : email,
-        name: name ? sanitizeString(name) : name,
-      },
-    }))
+      const duration = Date.now() - startTime
+      logger.api.response("POST", endpoint, 200, duration, { requestId, userId: user.id })
+
+      return applySecurityHeaders(NextResponse.json({
+        success: true,
+        user: updatedUser,
+      }))
+    } catch (dbError) {
+      logger.error(`[Profile API] Prisma update failed: ${dbError}`)
+      const duration = Date.now() - startTime
+      logger.api.response("POST", endpoint, 500, duration, { requestId })
+      return applySecurityHeaders(NextResponse.json({ error: "更新失败，请稍后重试" }, { status: 500 }))
+    }
   } catch (error) {
     logger.api.error("POST", endpoint, error, { requestId })
     return applySecurityHeaders(
