@@ -1,47 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
+import { prisma } from "@/lib/db"
+import { logger } from "@/lib/logger"
 import { createSessionToken } from "@/lib/auth-utils"
 import {
   rateLimitMiddleware,
   applySecurityHeaders,
   AUTH_RATE_LIMIT,
 } from "@/lib/security"
-
-function verifyTokenSignature(token: string): { email: string; code: string; exp: number } | null {
-  const csrfSecret = process.env.CSRF_SECRET || process.env.AUTH_SECRET
-  if (!csrfSecret) {
-    console.error("CSRF_SECRET or AUTH_SECRET environment variable is required")
-    return null
-  }
-
-  const parts = token.split(".")
-  if (parts.length !== 2) {
-    return null
-  }
-
-  const [payloadBase64, signature] = parts
-
-  // Verify signature
-  const expectedSignature = crypto.createHmac("sha256", csrfSecret).update(payloadBase64).digest("hex")
-  if (signature !== expectedSignature) {
-    return null
-  }
-
-  try {
-    const payload = JSON.parse(Buffer.from(payloadBase64, "base64").toString())
-    return payload
-  } catch {
-    return null
-  }
-}
-
-// Shared global storage
-
-if (!global.users) global.users = new Map()
-if (!global.songs) global.songs = new Map()
-if (!global.adminLogs) global.adminLogs = new Map()
-
-const users = global.users!
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting for auth endpoints
@@ -54,117 +20,114 @@ export async function POST(request: NextRequest) {
     const { email, code } = await request.json()
 
     if (!email || !code) {
-      return NextResponse.json(
-        { error: "请提供邮箱和验证码" },
-        { status: 400 }
+      return applySecurityHeaders(
+        NextResponse.json(
+          { error: "请提供邮箱和验证码" },
+          { status: 400 }
+        )
       )
     }
 
-    // Get verify token from cookie
-    const token = request.cookies.get("verify-token")?.value
-    const devCode = request.cookies.get("dev-code")?.value
-
-    if (!token) {
-      return NextResponse.json(
-        { error: "请先获取验证码" },
-        { status: 400 }
-      )
-    }
-
-    // Decode and verify token signature
-    const payload = verifyTokenSignature(token)
-    if (!payload) {
-      return NextResponse.json(
-        { error: "验证码无效" },
-        { status: 400 }
-      )
-    }
-
-    // Check expiry
-    if (Date.now() > payload.exp) {
-      return NextResponse.json(
-        { error: "验证码已过期，请重新获取" },
-        { status: 400 }
-      )
-    }
-
-    // Check email match
-    if (payload.email !== email) {
-      return NextResponse.json(
-        { error: "邮箱不匹配，请重新获取验证码" },
-        { status: 400 }
-      )
-    }
-
-    // Check code - use devCode if in dev mode, otherwise use payload.code
-    const validCode = devCode || payload.code
-    if (code !== validCode) {
-      return NextResponse.json(
-        { error: "验证码错误，请检查后重新输入" },
-        { status: 400 }
-      )
-    }
-
-    // Code valid - clear verify cookie
-    // Get or create user
-    let user = users.get(email)
-    if (!user) {
-      // Check if this is the first user (make them ADMIN)
-      const isFirstUser = users.size === 0
-      user = {
-        id: crypto.randomUUID(),
-        email,
-        name: email.split('@')[0],
-        role: isFirstUser ? 'ADMIN' : 'USER',
-        isActive: true,
-        tier: 'FREE',
-        dailyUsage: 0,
-        monthlyUsage: 0,
-        dailyResetAt: getDateKey(),
-        monthlyResetAt: getMonthKey(),
-        createdAt: new Date().toISOString(),
+    // Verify code from database
+    let codeValid = false
+    try {
+      const tokenRecord = await prisma.verificationToken.findFirst({
+        where: {
+          identifier: email,
+          token: String(code),
+          expires: { gt: new Date() },
+        },
+      })
+      if (tokenRecord) {
+        codeValid = true
+        await prisma.verificationToken.delete({
+          where: { identifier_token: { identifier: email, token: String(code) } },
+        })
       }
-      // Store by both email and id for easy lookup
-      users.set(email, user)
-      users.set(user.id, user)
-    } else {
-      // If this is the only user, make them ADMIN
-      if (users.size === 1 && user.role !== 'ADMIN') {
-        user.role = 'ADMIN'
-        users.set(email, user)
-        if (user.id) users.set(user.id, user)
+    } catch (dbError) {
+      logger.error(`Failed to verify code from DB: ${dbError}`)
+      return applySecurityHeaders(
+        NextResponse.json({ error: "服务器繁忙，请稍后重试" }, { status: 503 })
+      )
+    }
+
+    if (!codeValid) {
+      return applySecurityHeaders(
+        NextResponse.json({ error: "验证码错误或已过期" }, { status: 400 })
+      )
+    }
+
+    // Find or create user in database
+    let dbUser = null
+    try {
+      dbUser = await prisma.user.findUnique({
+        where: { email },
+      })
+    } catch (dbError) {
+      logger.error(`Failed to find user: ${dbError}`)
+      return applySecurityHeaders(
+        NextResponse.json({ error: "服务器繁忙，请稍后重试" }, { status: 503 })
+      )
+    }
+
+    if (!dbUser) {
+      // Auto-create user for code login
+      try {
+        const userCount = await prisma.user.count()
+        const isFirstUser = userCount === 0
+
+        dbUser = await prisma.user.create({
+          data: {
+            id: crypto.randomUUID(),
+            email,
+            name: email.split('@')[0],
+            role: isFirstUser ? 'ADMIN' : 'USER',
+            isActive: true,
+            tier: 'FREE',
+            dailyUsage: 0,
+            monthlyUsage: 0,
+            dailyResetAt: getDateKey(),
+            monthlyResetAt: getMonthKey(),
+          },
+        })
+        logger.info(`Auto-created user via code login: ${dbUser.id}`)
+      } catch (createError) {
+        logger.error(`Failed to create user: ${createError}`)
+        return applySecurityHeaders(
+          NextResponse.json({ error: "登录失败，请稍后重试" }, { status: 500 })
+        )
       }
     }
 
-    // Create session token
-    const sessionToken = createSessionToken(user)
+    const sessionUser = {
+      id: dbUser.id,
+      email: dbUser.email || email,
+      name: dbUser.name || undefined,
+      role: dbUser.role as "USER" | "PRO" | "ADMIN",
+      isActive: dbUser.isActive,
+      tier: dbUser.tier as "FREE" | "PRO",
+      dailyUsage: dbUser.dailyUsage,
+      monthlyUsage: dbUser.monthlyUsage,
+      dailyResetAt: dbUser.dailyResetAt || getDateKey(),
+      monthlyResetAt: dbUser.monthlyResetAt || getMonthKey(),
+      createdAt: dbUser.createdAt.toISOString(),
+    }
 
-    console.log(`[Verify] User ${email} login - role: ${user.role}, users.size: ${users.size}`)
+    const sessionToken = createSessionToken(sessionUser)
+
+    console.log(`[Verify] User ${email} login - role: ${sessionUser.role}, userId: ${sessionUser.id}`)
 
     const response = NextResponse.json({
       success: true,
       message: "验证成功",
       user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
+        id: sessionUser.id,
+        email: sessionUser.email,
+        name: sessionUser.name,
+        role: sessionUser.role,
       },
     })
 
-    response.cookies.set("verify-token", "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 0,
-      path: "/",
-    })
-    response.cookies.set("dev-code", "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 0,
-      path: "/",
-    })
     response.cookies.set("session-token", sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

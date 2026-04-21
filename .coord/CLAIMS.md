@@ -16,7 +16,8 @@
 | T-040 | claude-main | docs/superpowers/plans/2026-04-19-music-generation-stabilization.md | 2026-04-19 00:34 | 生成链路修复计划已落盘 | active |
 | T-040 | claude-main | src/lib/ai-providers.ts | 2026-04-19 00:34 | MiniMax provider 解析与请求格式修复并通过相关测试 | active |
 | T-040 | claude-main | tests/lib/ai-providers.test.ts | 2026-04-19 00:34 | provider 回归测试覆盖已补齐并通过 | active |
-| T-040 | claude-main | src/app/api/auth/register/route.ts | 2026-04-19 00:42 | 注册在 Prisma 不可用时仍可回退到内存存储 | active |
+| T-040 | claude-main | src/app/api/auth/register/route.ts | 2026-04-19 00:42 | 注册在 Prisma 不可用时仍可回退到内存存储 | released |
+| T-041 | claude-main | src/app/api/auth/register/route.ts | 2026-04-21 00:00 | 注册需要验证码，移除内存回退 | released |
 | T-040 | claude-main | src/app/api/auth/profile/route.ts | 2026-04-19 00:42 | 资料查询在 Prisma 不可用时仍可回退到内存存储 | active |
 | T-040 | claude-main | src/app/api/songs/route.ts | 2026-04-19 00:42 | 歌曲创建在 Prisma 不可用时仍可继续生成 | active |
 | T-040 | claude-main | src/app/api/songs/[id]/download/route.ts | 2026-04-19 00:42 | 下载接口在 Prisma 不可用时可从内存读取歌曲 | active |
@@ -30,6 +31,7 @@
 | T-040 | claude-main | src/components/AudioPlayer.tsx | 2026-04-19 01:02 | 播放器改为优先使用同源音频代理和下载代理 | active |
 | T-040 | claude-main | src/app/song/[id]/page.tsx | 2026-04-19 01:02 | 歌曲详情页改为使用同源音频代理播放和下载 | active |
 | T-040 | claude-main | .gitignore | 2026-04-19 07:03 | 忽略根目录 Playwright 测试产物避免污染部署提交 | active |
+| T-042 | claude-main | src/app/api/auth/verify/route.ts | 2026-04-21 00:00 | 验证码登录改为 Prisma 持久化，自动创建用户 | active |
 
 ---
 
