@@ -15,9 +15,12 @@ function RegisterPageContent() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [name, setName] = useState("")
+  const [code, setCode] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [isSendingCode, setIsSendingCode] = useState(false)
+  const [countdown, setCountdown] = useState(0)
 
   // Get redirect URL from query params (set by middleware)
   const redirectUrl = searchParams.get("redirect") || "/dashboard"
@@ -35,6 +38,41 @@ function RegisterPageContent() {
       headers["x-csrf-token"] = csrfToken
     }
     return headers
+  }
+
+  const sendCode = async () => {
+    if (!email) {
+      setError("请先输入邮箱")
+      return
+    }
+    setIsSendingCode(true)
+    try {
+      const res = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ email }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setCountdown(60)
+        const timer = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(timer)
+              setIsSendingCode(false)
+              return 0
+            }
+            return prev - 1
+          })
+        }, 1000)
+      } else {
+        setError(data.error || "发送验证码失败")
+        setIsSendingCode(false)
+      }
+    } catch {
+      setError("发送验证码失败")
+      setIsSendingCode(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,13 +95,18 @@ function RegisterPageContent() {
       return
     }
 
+    if (!code) {
+      setError("请输入验证码")
+      return
+    }
+
     setLoading(true)
 
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password, name, code }),
       })
 
       const data = await res.json()
@@ -203,6 +246,32 @@ function RegisterPageContent() {
                   className="w-full pl-12 pr-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
                   placeholder={t("confirmPassword")}
                 />
+              </div>
+            </div>
+
+            {/* Verification Code */}
+            <div>
+              <label htmlFor="code" className="block text-sm font-medium text-text-secondary mb-2">
+                验证码
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="code"
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="flex-1 px-4 py-3 rounded-xl bg-surface border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+                  placeholder="请输入验证码"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={sendCode}
+                  disabled={isSendingCode || countdown > 0}
+                  className="px-4 py-3 bg-accent hover:bg-accent-hover disabled:bg-gray-600 text-white rounded-xl font-medium transition-colors whitespace-nowrap"
+                >
+                  {countdown > 0 ? `${countdown}秒` : "获取验证码"}
+                </button>
               </div>
             </div>
 
