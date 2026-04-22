@@ -1,4 +1,4 @@
-name = "taoybeats-proxy"
+name = "tb"
 main = "reverse-proxy.js"
 compatibility_date = "2026-04-21"
 

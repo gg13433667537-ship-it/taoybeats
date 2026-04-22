@@ -17,14 +17,14 @@
 1. 登录 https://dash.cloudflare.com
 2. 左侧菜单 → **Workers & Pages** → **Create**
 3. 选择 **Create Worker**
-4. 给 Worker 起个名字，比如 `taoybeats-proxy`
+4. 给 Worker 起个名字，比如 `tb`
 5. 点击 **Deploy**（先部署默认代码）
 6. 部署完成后，点击 **Edit Code**
 7. 把 `reverse-proxy.js` 的内容全部复制进去，替换原有代码
 8. 点击 **Save and Deploy**
 9. 你的代理地址就是：
    ```
-   https://taoybeats-proxy.xxx.workers.dev
+   https://tb.xxx.workers.dev
    ```
    （`xxx` 是你账号的子域）
 
@@ -49,7 +49,7 @@ wrangler deploy
 部署完成后，在浏览器访问：
 
 ```
-https://taoybeats-proxy.xxx.workers.dev
+https://tb.xxx.workers.dev
 ```
 
 应该能看到和访问 `https://taoybeats-clone.vercel.app` 一样的页面。
