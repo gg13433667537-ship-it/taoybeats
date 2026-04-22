@@ -72,6 +72,7 @@ describe("Song detail page polling", () => {
 
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1))
     vi.stubGlobal("cancelAnimationFrame", vi.fn())
+    HTMLElement.prototype.scrollTo = vi.fn()
 
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       configurable: true,
@@ -83,7 +84,18 @@ describe("Song detail page polling", () => {
         fillStyle: "",
       })),
     })
+
   })
+
+  function fireAudioCanplay() {
+    const audio = document.querySelector("audio")
+    if (audio) {
+      Object.defineProperty(audio, "duration", { value: 120, configurable: true })
+      act(() => {
+        audio.dispatchEvent(new Event("canplay"))
+      })
+    }
+  }
 
   afterEach(() => {
     cleanup()
@@ -110,7 +122,8 @@ describe("Song detail page polling", () => {
     })
 
     expect(screen.getByRole("heading", { name: "Polling Song" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Play" })).toBeDisabled()
+    // Player is not rendered while generating (no audioUrl)
+    expect(screen.queryByRole("button", { name: "Play" })).not.toBeInTheDocument()
 
     const initialFetchCount = fetchMock.mock.calls.length
 
@@ -127,7 +140,11 @@ describe("Song detail page polling", () => {
       await vi.advanceTimersByTimeAsync(3000)
     })
 
+    // Let the audio canplay event fire so the player becomes interactive
+    fireAudioCanplay()
+
     expect(fetchMock.mock.calls.length).toBeGreaterThan(initialFetchCount)
+    // Player is rendered after generation completes
     expect(screen.getByRole("button", { name: "Play" })).toBeEnabled()
   })
 })

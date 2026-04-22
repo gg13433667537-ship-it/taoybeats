@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { Music, Play, Pause, Download, Share2, Check, Loader2, Volume2, VolumeX, RefreshCw, AlertCircle, X, Layers, Plus } from "lucide-react"
+import { Music, Play, Pause, Download, Share2, Check, Loader2, RefreshCw, AlertCircle, X, Layers, Plus, ChevronDown, ChevronUp } from "lucide-react"
 import { useI18n } from "@/lib/i18n"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/useKeyboardShortcuts"
 import AdvancedAudioEditor from "@/components/AdvancedAudioEditor"
+import LyricsPlayer from "@/components/LyricsPlayer"
 import { downloadSongFile } from "@/lib/song-download"
 
 const SONG_REFRESH_INTERVAL_MS = 3000
@@ -42,13 +43,7 @@ export default function SongSharePage() {
   }>>([])
   const [currentPartIndex, setCurrentPartIndex] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [isPlaying, setIsPlaying] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [volume, setVolume] = useState(1)
-  const [isMuted, setIsMuted] = useState(false)
-  const [waveformData, setWaveformData] = useState<number[]>([])
   const [isRemixing, setIsRemixing] = useState(false)
   const [isSplitting, setIsSplitting] = useState(false)
   const [isExtending, setIsExtending] = useState(false)
@@ -59,9 +54,7 @@ export default function SongSharePage() {
   const [showShareMenu, setShowShareMenu] = useState(false)
   const [songError, setSongError] = useState<string | null>(null)
   const [playingStem, setPlayingStem] = useState<string | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const animationRef = useRef<number | null>(null)
+  const [showOriginalLyrics, setShowOriginalLyrics] = useState(false)
   const stemAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({})
   const shareAccessToken = isShareToken
     ? songId
@@ -113,12 +106,6 @@ export default function SongSharePage() {
         setCurrentPartIndex(0)
       }
 
-      if (data.status === 'COMPLETED' && data.audioUrl) {
-        const bars = Array.from({ length: 64 }, () => Math.random() * 0.7 + 0.3)
-        setWaveformData(bars)
-      } else if (!silent) {
-        setWaveformData([])
-      }
     } catch (error) {
       console.error("Error fetching song:", error)
       if (!silent) {
@@ -176,122 +163,6 @@ export default function SongSharePage() {
   }, [song])
 
   // Keyboard shortcuts
-
-  // Audio controls
-  const togglePlay = useCallback(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    if (isPlaying) {
-      audio.pause()
-      setIsPlaying(false)
-    } else {
-      audio.play().then(() => {
-        setIsPlaying(true)
-      }).catch((error) => {
-        console.error('Playback failed:', error)
-        setIsPlaying(false)
-      })
-    }
-  }, [isPlaying])
-
-  const toggleMute = useCallback(() => {
-    if (!audioRef.current) return
-    audioRef.current.muted = !isMuted
-    setIsMuted(!isMuted)
-  }, [isMuted])
-
-  const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseFloat(e.target.value)
-    if (audioRef.current) {
-      audioRef.current.volume = newVolume
-    }
-    setVolume(newVolume)
-    setIsMuted(newVolume === 0)
-  }, [])
-
-  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value)
-    if (audioRef.current) {
-      audioRef.current.currentTime = time
-    }
-    setCurrentTime(time)
-  }, [])
-
-  const formatTime = (time: number): string => {
-    const mins = Math.floor(time / 60)
-    const secs = Math.floor(time % 60)
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
-
-  // Audio event handlers
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime)
-    const onDurationChange = () => setDuration(audio.duration || 0)
-    const onEnded = () => {
-      setIsPlaying(false)
-      setCurrentTime(0)
-    }
-
-    audio.addEventListener('timeupdate', onTimeUpdate)
-    audio.addEventListener('durationchange', onDurationChange)
-    audio.addEventListener('ended', onEnded)
-
-    return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate)
-      audio.removeEventListener('durationchange', onDurationChange)
-      audio.removeEventListener('ended', onEnded)
-    }
-  }, [])
-
-  // Canvas waveform animation
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || waveformData.length === 0) return
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const draw = () => {
-      const width = canvas.width
-      const height = canvas.height
-      const barWidth = width / waveformData.length
-      const progress = duration > 0 ? currentTime / duration : 0
-
-      ctx.clearRect(0, 0, width, height)
-
-      waveformData.forEach((value, i) => {
-        const barHeight = value * height * 0.8
-        const x = i * barWidth
-        const y = (height - barHeight) / 2
-
-        // Color based on playback position
-        const isPlayed = (i / waveformData.length) < progress
-        ctx.fillStyle = isPlayed ? '#a855f7' : '#4a4a4a'
-
-        // Rounded bars
-        const radius = Math.min(barWidth * 0.4, 3)
-        ctx.beginPath()
-        ctx.roundRect(x + 1, y, barWidth - 2, barHeight, radius)
-        ctx.fill()
-      })
-
-      if (isPlaying) {
-        animationRef.current = requestAnimationFrame(draw)
-      }
-    }
-
-    draw()
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
-    }
-  }, [waveformData, isPlaying, currentTime, duration])
 
   const handleShare = async () => {
     // Use shareToken for public URL, fall back to current URL
@@ -518,15 +389,6 @@ export default function SongSharePage() {
     setCurrentPartIndex(partIndex)
     const newSong = partGroupSongs[partIndex]
     setSong(prev => prev ? { ...prev, ...newSong } : null)
-    setIsPlaying(false)
-    setCurrentTime(0)
-    // Update waveform data for new song
-    if (newSong.status === 'COMPLETED' && newSong.audioUrl) {
-      const bars = Array.from({ length: 64 }, () => Math.random() * 0.7 + 0.3)
-      setWaveformData(bars)
-    } else {
-      setWaveformData([])
-    }
   }
 
   const handleStemDownload = async (stemType: string, audioUrl: string) => {
@@ -551,11 +413,8 @@ export default function SongSharePage() {
 
   // Keyboard shortcuts
   useKeyboardShortcuts([
-    /* eslint-disable react-hooks/refs */
-    SHORTCUTS.PLAY_PAUSE(togglePlay),
     SHORTCUTS.SHARE(() => setShowShareMenu(true)),
     SHORTCUTS.DOWNLOAD(handleDownload),
-    SHORTCUTS.MUTE(() => setIsMuted(!isMuted)),
     SHORTCUTS.CLOSE_MODAL(() => {
       setShowShareMenu(false)
       setShowStemsModal(false)
@@ -593,15 +452,6 @@ export default function SongSharePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hidden audio element */}
-      {song.audioUrl && (
-        <audio
-          ref={audioRef}
-          src={song.id ? `/api/songs/${song.id}/audio` : song.audioUrl}
-          preload="metadata"
-        />
-      )}
-
       {/* Error Banner */}
       {songError && (
         <div className="mx-auto mt-4 max-w-5xl px-4 pt-4">
@@ -725,105 +575,61 @@ export default function SongSharePage() {
               </div>
             )}
 
-            {/* Waveform Canvas */}
-            <div className="h-32 rounded-xl bg-background mb-6 flex items-center justify-center overflow-hidden">
-              {isGenerating ? (
+            {/* Lyrics Player */}
+            {!isGenerating && song.audioUrl && (
+              <div className="mb-6">
+                <LyricsPlayer
+                  key={song.id}
+                  src={`/api/songs/${song.id}/audio`}
+                  title={song.title}
+                  genre={song.genre as string[] | undefined}
+                  mood={song.mood as string | undefined}
+                  lyrics={song.lyrics as string | undefined}
+                  songId={song.id}
+                  shareToken={shareAccessToken}
+                  onDownload={handleDownload}
+                  onShare={handleShare}
+                />
+              </div>
+            )}
+
+            {isGenerating && (
+              <div className="h-32 rounded-xl bg-background mb-6 flex items-center justify-center">
                 <div className="flex items-center gap-2 text-text-muted">
                   <Loader2 className="w-6 h-6 animate-spin" />
                   <span>{t('generatingEllipsis')}</span>
                 </div>
-              ) : song.audioUrl ? (
-                <canvas
-                  ref={canvasRef}
-                  width={600}
-                  height={100}
-                  className="w-full h-full px-4"
-                />
-              ) : (
-                <div className="flex items-center gap-2 text-text-muted">
-                  <span>{t('audioNotAvailable')}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Controls */}
-            <div className="flex items-center gap-4 mb-6">
-              <button
-                onClick={togglePlay}
-                disabled={!song.audioUrl || isGenerating}
-                aria-label={isPlaying ? t('pause') : t('play')}
-                className="w-14 h-14 rounded-full bg-accent hover:bg-accent-hover text-white flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isPlaying ? (
-                  <Pause className="w-6 h-6" aria-hidden="true" />
-                ) : (
-                  <Play className="w-6 h-6 ml-1" aria-hidden="true" />
-                )}
-              </button>
-
-              <div className="flex-1">
-                {/* Progress bar */}
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={handleSeek}
-                  disabled={!song.audioUrl || isGenerating}
-                  aria-label={`Progress: ${formatTime(currentTime)} of ${formatTime(duration)}`}
-                  className="w-full h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent disabled:opacity-50"
-                  style={{
-                    background: `linear-gradient(to right, #a855f7 ${duration ? (currentTime / duration) * 100 : 0}%, #2a2a2a ${duration ? (currentTime / duration) * 100 : 0}%)`,
-                  }}
-                />
-                <div className="flex justify-between mt-1">
-                  <p className="text-sm text-text-muted">{formatTime(currentTime)}</p>
-                  <p className="text-sm text-text-muted">{formatTime(duration)}</p>
-                </div>
-              </div>
-
-              {/* Volume */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={toggleMute}
-                  aria-label={isMuted ? t('unmute') : t('mute')}
-                  className="text-text-secondary hover:text-foreground transition-colors"
-                >
-                  {isMuted || volume === 0 ? (
-                    <VolumeX className="w-5 h-5" aria-hidden="true" />
-                  ) : (
-                    <Volume2 className="w-5 h-5" aria-hidden="true" />
-                  )}
-                </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.1}
-                  value={isMuted ? 0 : volume}
-                  onChange={handleVolumeChange}
-                  aria-label={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
-                  className="w-20 h-1 bg-border rounded-full appearance-none cursor-pointer accent-accent"
-                />
-              </div>
-            </div>
-
-            {/* Lyrics */}
-            {song.lyrics && (
-              <div className="mb-6 p-4 rounded-xl bg-background border border-border">
-                <h3 className="text-sm font-medium text-text-secondary mb-2">{t('lyrics')}</h3>
-                <p className="text-foreground whitespace-pre-wrap text-sm leading-relaxed">
-                  {song.lyrics}
-                </p>
               </div>
             )}
 
+            {/* Original Lyrics - Collapsible */}
             {song.originalLyrics && song.originalLyrics !== song.lyrics && (
-              <div className="mb-6 p-4 rounded-xl bg-background border border-border">
-                <h3 className="text-sm font-medium text-text-secondary mb-2">{t('originalLyrics')}</h3>
-                <p className="text-foreground whitespace-pre-wrap text-sm leading-relaxed">
-                  {song.originalLyrics}
-                </p>
+              <div className="mb-6 rounded-xl bg-background border border-border overflow-hidden">
+                <button
+                  onClick={() => setShowOriginalLyrics(!showOriginalLyrics)}
+                  className="w-full flex items-center justify-between p-4 text-left hover:bg-surface-elevated/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-text-secondary">{t('originalLyrics') || 'Original Lyrics'}</span>
+                    {song.lyricsCompressionApplied && (
+                      <span className="px-2 py-0.5 rounded-full bg-accent/10 text-accent text-xs">
+                        Optimized
+                      </span>
+                    )}
+                  </div>
+                  {showOriginalLyrics ? (
+                    <ChevronUp className="w-4 h-4 text-text-muted" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-text-muted" />
+                  )}
+                </button>
+                {showOriginalLyrics && (
+                  <div className="px-4 pb-4">
+                    <p className="text-foreground whitespace-pre-wrap text-sm leading-relaxed text-text-secondary/80">
+                      {song.originalLyrics}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

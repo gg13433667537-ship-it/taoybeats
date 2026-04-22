@@ -59,6 +59,7 @@ describe("Song detail lyrics rendering", () => {
     vi.useFakeTimers()
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1))
     vi.stubGlobal("cancelAnimationFrame", vi.fn())
+    HTMLElement.prototype.scrollTo = vi.fn()
 
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       configurable: true,
@@ -71,6 +72,16 @@ describe("Song detail lyrics rendering", () => {
       })),
     })
   })
+
+  function fireAudioCanplay() {
+    const audio = document.querySelector("audio")
+    if (audio) {
+      Object.defineProperty(audio, "duration", { value: 120, configurable: true })
+      act(() => {
+        audio.dispatchEvent(new Event("canplay"))
+      })
+    }
+  }
 
   afterEach(() => {
     cleanup()
@@ -100,9 +111,21 @@ describe("Song detail lyrics rendering", () => {
       await vi.advanceTimersByTimeAsync(0)
     })
 
-    expect(screen.getByText("Lyrics")).toBeInTheDocument()
+    // Let the audio canplay event fire so the player becomes interactive
+    fireAudioCanplay()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
     expect(screen.getByText("Original Lyrics")).toBeInTheDocument()
     expect(screen.getByText("This is the lyrics actually sent to MiniMax.", { exact: false })).toBeInTheDocument()
+
+    // Expand original lyrics panel
+    await act(async () => {
+      screen.getByText("Original Lyrics").click()
+    })
+
     expect(screen.getByText("This is the original long lyrics before compression.", { exact: false })).toBeInTheDocument()
   })
 })
