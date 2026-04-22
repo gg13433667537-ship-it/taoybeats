@@ -223,6 +223,7 @@ async function startGeneration() {
 
   fireEvent.click(screen.getByTestId("mood-selector-trigger"))
   fireEvent.click(screen.getByTestId("selector-option-Happy"))
+  fireEvent.click(screen.getByTestId("selector-confirm"))
 
   fireEvent.click(screen.getByTestId("generate-song-button"))
 

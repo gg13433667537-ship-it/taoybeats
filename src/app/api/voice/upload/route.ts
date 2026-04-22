@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifySessionToken } from "@/lib/auth-utils"
+import { verifySessionTokenWithDB } from "@/lib/auth-utils"
 import { applySecurityHeaders, sanitizeString, validateEnum } from "@/lib/security"
 
 // ============================================================================
@@ -31,17 +31,16 @@ const AUDIO_MAGIC_BYTES: Record<string, string[]> = {
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
 if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
-if (!global.users) global.users = new Map()
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
+async function getSessionUser(request: NextRequest): Promise<{ id: string; email: string; role: string } | null> {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) return null
   try {
-    const payload = verifySessionToken(sessionToken)
+    const payload = await verifySessionTokenWithDB(sessionToken)
     if (!payload) return null
     return {
       id: payload.id,
@@ -148,7 +147,7 @@ function validatePurpose(purpose: unknown): ValidationResult {
 
 export async function POST(request: NextRequest) {
   // Auth check
-  const user = getSessionUser(request)
+  const user = await getSessionUser(request)
   if (!user) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }

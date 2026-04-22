@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifySessionToken } from "@/lib/auth-utils"
+import { verifySessionTokenWithDB } from "@/lib/auth-utils"
 import { applySecurityHeaders } from "@/lib/security"
-
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
 if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
-if (!global.users) global.users = new Map()
 
-function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
+async function getSessionUser(request: NextRequest): Promise<{ id: string; email: string; role: string } | null> {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) return null
   try {
-    const payload = verifySessionToken(sessionToken)
+    const payload = await verifySessionTokenWithDB(sessionToken)
     if (!payload) return null
     return {
       id: payload.id,
@@ -27,7 +25,7 @@ const VALID_VOICE_TYPES = ['all', 'system_voice', 'voice_cloning', 'voice_genera
 
 export async function GET(request: NextRequest) {
   // Auth check
-  const user = getSessionUser(request)
+  const user = await getSessionUser(request)
   if (!user) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
@@ -57,6 +55,18 @@ export async function GET(request: NextRequest) {
         'Authorization': `Bearer ${apiKey}`,
       },
     })
+
+    // Handle 404 gracefully - MiniMax may not support this endpoint
+    // Return empty arrays so the client can fall back to default system voices
+    if (response.status === 404) {
+      console.log("[voice/list] MiniMax voice list endpoint returned 404, returning empty arrays")
+      return applySecurityHeaders(NextResponse.json({
+        system_voice: [],
+        voice_cloning: [],
+        voice_generation: [],
+        base_resp: { status_msg: "Voice list not available, using defaults", status_code: 404 },
+      }))
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ base_resp: { status_msg: response.statusText } }))

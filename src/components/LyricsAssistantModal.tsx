@@ -11,14 +11,39 @@ interface LyricsAssistantModalProps {
   initialMood?: string
 }
 
-const STYLE_OPTIONS = [
-  "Pop", "Hip-Hop", "Rock", "Electronic", "R&B", "Jazz",
-  "Classical", "Country", "Reggae", "Folk", "Metal", "Indie", "Mandopop", "K-Pop", "Latin"
+const STYLE_OPTIONS: { value: string; label: string }[] = [
+  { value: "Pop", label: "流行" },
+  { value: "Hip-Hop", label: "嘻哈" },
+  { value: "Rock", label: "摇滚" },
+  { value: "Electronic", label: "电子" },
+  { value: "R&B", label: "R&B" },
+  { value: "Jazz", label: "爵士" },
+  { value: "Classical", label: "古典" },
+  { value: "Country", label: "乡村" },
+  { value: "Reggae", label: "雷鬼" },
+  { value: "Folk", label: "民谣" },
+  { value: "Metal", label: "金属" },
+  { value: "Indie", label: "独立" },
+  { value: "Mandopop", label: "华语流行" },
+  { value: "K-Pop", label: "K-Pop" },
+  { value: "Latin", label: "拉丁" },
 ]
 
-const MOOD_OPTIONS = [
-  "Happy", "Sad", "Energetic", "Calm", "Romantic", "Epic", "Dark", "Dreamy",
-  "Festive", "Celebration", "Chill", "Uplifting", "Melancholic", "Intense"
+const MOOD_OPTIONS: { value: string; label: string }[] = [
+  { value: "Happy", label: "快乐" },
+  { value: "Sad", label: "悲伤" },
+  { value: "Energetic", label: "活力" },
+  { value: "Calm", label: "平静" },
+  { value: "Romantic", label: "浪漫" },
+  { value: "Epic", label: "史诗" },
+  { value: "Dark", label: "暗黑" },
+  { value: "Dreamy", label: "梦幻" },
+  { value: "Festive", label: "节日" },
+  { value: "Celebration", label: "庆祝" },
+  { value: "Chill", label: "慵懒" },
+  { value: "Uplifting", label: "振奋" },
+  { value: "Melancholic", label: "忧郁" },
+  { value: "Intense", label: "激烈" },
 ]
 
 const STORAGE_KEY = 'taoybeats_lyrics_draft'
@@ -27,7 +52,7 @@ interface LyricsDraft {
   title: string
   framework: string
   style: string[]
-  mood: string
+  mood: string[]
   generatedLyrics: string | null
   lastSavedAt: number
 }
@@ -36,7 +61,7 @@ interface ModalState {
   title: string
   framework: string
   selectedStyles: string[]
-  mood: string
+  mood: string[]
   generatedLyrics: string | null
   editedLyrics: string | null
   generatedStyleTags: string[] | null
@@ -50,7 +75,7 @@ const getInitialState = (initialTitle: string, initialMood: string): ModalState 
   title: initialTitle,
   framework: '',
   selectedStyles: [],
-  mood: initialMood,
+  mood: initialMood ? [initialMood] : [],
   generatedLyrics: null,
   editedLyrics: null,
   generatedStyleTags: null,
@@ -143,6 +168,16 @@ export default function LyricsAssistantModal({
     }))
   }
 
+  // Toggle mood selection (multi-select)
+  const toggleMood = (moodValue: string) => {
+    setState(s => ({
+      ...s,
+      mood: s.mood.includes(moodValue)
+        ? s.mood.filter(m => m !== moodValue)
+        : [...s.mood, moodValue]
+    }))
+  }
+
   // Generate lyrics
   const handleGenerate = async () => {
     if (!title.trim()) {
@@ -155,7 +190,7 @@ export default function LyricsAssistantModal({
     try {
       const prompt = [
         selectedStyles.length > 0 ? selectedStyles.join(', ') : '',
-        mood,
+        mood.length > 0 ? mood.join(', ') : '',
       ].filter(Boolean).join(', ')
 
       // API key is now handled server-side
@@ -294,16 +329,16 @@ export default function LyricsAssistantModal({
             <div className="flex flex-wrap gap-2">
               {STYLE_OPTIONS.map(style => (
                 <button
-                  key={style}
-                  onClick={() => toggleStyle(style)}
-                  aria-pressed={selectedStyles.includes(style)}
+                  key={style.value}
+                  onClick={() => toggleStyle(style.value)}
+                  aria-pressed={selectedStyles.includes(style.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    selectedStyles.includes(style)
+                    selectedStyles.includes(style.value)
                       ? 'bg-accent text-white'
                       : 'bg-background border border-border text-text-secondary hover:border-accent'
                   }`}
                 >
-                  {style}
+                  {style.label}
                 </button>
               ))}
             </div>
@@ -311,21 +346,21 @@ export default function LyricsAssistantModal({
 
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-2">
-              情绪（单选）
+              情绪（可多选）
             </label>
             <div className="flex flex-wrap gap-2">
               {MOOD_OPTIONS.map(m => (
                 <button
-                  key={m}
-                  onClick={() => setState(s => ({ ...s, mood: m }))}
-                  aria-pressed={mood === m}
+                  key={m.value}
+                  onClick={() => toggleMood(m.value)}
+                  aria-pressed={mood.includes(m.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    mood === m
+                    mood.includes(m.value)
                       ? 'bg-accent text-white'
                       : 'bg-background border border-border text-text-secondary hover:border-accent'
                   }`}
                 >
-                  {m}
+                  {m.label}
                 </button>
               ))}
             </div>

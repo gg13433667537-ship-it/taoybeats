@@ -32,6 +32,34 @@ const MOODS = [
   "Festive", "Celebration", "Chill", "Uplifting", "Melancholic", "Intense"
 ]
 
+// Popular artists for reference singer dropdown
+const POPULAR_ARTISTS = [
+  'Taylor Swift', 'Ed Sheeran', 'Ariana Grande', 'The Weeknd', 'Dua Lipa',
+  '周杰伦 (Jay Chou)', '林俊杰 (JJ Lin)', '邓紫棋 (G.E.M.)', '陈奕迅 (Eason Chan)', '薛之谦 (Joker Xue)',
+  'BTS', 'BLACKPINK', 'IU', 'NewJeans',
+  'Queen', 'Coldplay', 'Linkin Park', 'Imagine Dragons',
+  'Eminem', 'Drake', 'Kendrick Lamar', 'Travis Scott',
+  'Daft Punk', 'Calvin Harris', 'Marshmello', 'Alan Walker',
+  'Beyoncé', 'Rihanna', 'Bruno Mars',
+  'Miles Davis', 'Norah Jones',
+  'Metallica', 'Iron Maiden',
+  'Bob Dylan', '赵雷',
+]
+
+// Popular songs for reference song dropdown
+const POPULAR_SONGS = [
+  'Shape of You', 'Blinding Lights', 'Bad Guy', 'Someone Like You',
+  '晴天 (Sunny Day)', '稻香 (Dao Xiang)', '光年之外 (Light Years Away)', '十年 (Ten Years)',
+  'Dynamite', 'How You Like That', 'Love Poem',
+  'Bohemian Rhapsody', 'Fix You', 'Numb',
+  'Lose Yourself', 'God\'s Plan',
+  'Get Lucky', 'Summer',
+  'Umbrella', 'Uptown Funk',
+  'What a Wonderful World', 'Don\'t Know Why',
+  'Enter Sandman',
+  '成都 (Chengdu)',
+]
+
 // Grouped instruments (English values for API)
 const INSTRUMENT_GROUPS: Record<string, string[]> = {
   'Strings': ['Guitar', 'Violin', 'Cello', 'Harp', 'Banjo', 'Ukulele', 'Mandolin'],
@@ -257,7 +285,7 @@ export default function GeneratePage() {
   const [title, setTitle] = useState("")
   const [lyrics, setLyrics] = useState("")
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
-  const [mood, setMood] = useState("")
+  const [selectedMoods, setSelectedMoods] = useState<string[]>([])
   const [selectedInstruments, setSelectedInstruments] = useState<string[]>([])
   const [referenceSinger, setReferenceSinger] = useState("")
   const [referenceSong, setReferenceSong] = useState("")
@@ -317,7 +345,7 @@ export default function GeneratePage() {
 
   // Helper to display translated selected values
   const displayGenres = selectedGenres.map(g => getGenreLabel(g, t)).join(', ')
-  const displayMood = mood ? getMoodLabel(mood, t) : ''
+  const displayMoods = selectedMoods.map(m => getMoodLabel(m, t)).join(', ')
   const displayInstruments = selectedInstruments.map(i => getInstrumentLabel(i, t)).join(', ')
 
   // Cloud sync presets
@@ -380,7 +408,7 @@ export default function GeneratePage() {
             setLyrics(song.lyrics || '')
             setLyricsCompressionSummary(null)
             setSelectedGenres(song.genre || [])
-            setMood(song.mood || '')
+            setSelectedMoods(song.mood ? song.mood.split(',').map((m: string) => m.trim()).filter(Boolean) : [])
             setSelectedInstruments(song.instruments || [])
             setReferenceSinger(song.referenceSinger || '')
             setReferenceSong(song.referenceSong || '')
@@ -415,8 +443,8 @@ export default function GeneratePage() {
     if (selectedGenres.length === 0) {
       errors.genres = "Please select at least one genre"
     }
-    if (!mood) {
-      errors.mood = "Please select a mood"
+    if (selectedMoods.length === 0) {
+      errors.mood = "Please select at least one mood"
     }
 
     if (Object.keys(errors).length > 0) {
@@ -447,7 +475,7 @@ export default function GeneratePage() {
           title,
           lyrics: isInstrumental ? '' : lyrics,
           genre: selectedGenres,
-          mood,
+          mood: selectedMoods.join(', '),
           instruments: selectedInstruments,
           referenceSinger,
           referenceSong,
@@ -745,7 +773,7 @@ export default function GeneratePage() {
     setLyrics("")
     setLyricsCompressionSummary(null)
     setSelectedGenres([])
-    setMood("")
+    setSelectedMoods([])
     setSelectedInstruments([])
     setReferenceSinger("")
     setReferenceSong("")
@@ -899,7 +927,7 @@ export default function GeneratePage() {
                           const result = await savePresetToCloud({
                             name,
                             genre: selectedGenres,
-                            mood,
+                            mood: selectedMoods.join(', '),
                             instruments: selectedInstruments,
                             isInstrumental,
                           })
@@ -921,7 +949,7 @@ export default function GeneratePage() {
                         key={preset.id}
                         onClick={() => {
                           setSelectedGenres(preset.genre)
-                          setMood(preset.mood)
+                          setSelectedMoods(preset.mood ? preset.mood.split(',').map((m: string) => m.trim()).filter(Boolean) : [])
                           setSelectedInstruments(preset.instruments)
                           setIsInstrumental(preset.isInstrumental)
                         }}
@@ -1125,10 +1153,10 @@ export default function GeneratePage() {
                       onClick={() => setIsMoodDrawerOpen(true)}
                       className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground text-left hover:border-accent transition-colors flex items-center justify-between"
                     >
-                      <span className={mood ? "text-foreground" : "text-text-muted"}>
-                        {displayMood || t('selectMood')}
+                      <span className={selectedMoods.length > 0 ? "text-foreground" : "text-text-muted"}>
+                        {selectedMoods.length > 0 ? displayMoods : t('selectMood')}
                       </span>
-                      {mood && <span className="text-sm text-accent">{displayMood}</span>}
+                      {selectedMoods.length > 0 && <span className="text-sm text-accent">{selectedMoods.length} selected</span>}
                     </button>
                   </div>
 
@@ -1159,8 +1187,14 @@ export default function GeneratePage() {
                         value={referenceSinger}
                         onChange={(e) => setReferenceSinger(e.target.value)}
                         placeholder="e.g., Taylor Swift"
+                        list="popular-artists"
                         className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                       />
+                      <datalist id="popular-artists">
+                        {POPULAR_ARTISTS.map(artist => (
+                          <option key={artist} value={artist} />
+                        ))}
+                      </datalist>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-text-secondary mb-2">
@@ -1171,8 +1205,14 @@ export default function GeneratePage() {
                         value={referenceSong}
                         onChange={(e) => setReferenceSong(e.target.value)}
                         placeholder="e.g., Shape of You"
+                        list="popular-songs"
                         className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-text-muted focus:outline-none focus:border-accent"
                       />
+                      <datalist id="popular-songs">
+                        {POPULAR_SONGS.map(song => (
+                          <option key={song} value={song} />
+                        ))}
+                      </datalist>
                     </div>
                   </div>
 
@@ -1373,7 +1413,7 @@ export default function GeneratePage() {
         onClose={() => setIsLyricsModalOpen(false)}
         onConfirm={handleLyricsConfirmed}
         initialTitle={title}
-        initialMood={mood}
+        initialMood={selectedMoods[0] || ''}
       />
 
       {/* Login Guide Modal for unauthenticated users */}
@@ -1400,9 +1440,9 @@ export default function GeneratePage() {
         onClose={() => setIsMoodDrawerOpen(false)}
         title={t('selectMood')}
         options={moodOptions}
-        selectedValues={mood ? [mood] : []}
-        onConfirm={(values) => setMood(values[0] || '')}
-        multiSelect={false}
+        selectedValues={selectedMoods}
+        onConfirm={(values) => setSelectedMoods(values)}
+        multiSelect={true}
         searchPlaceholder={t('searchPlaceholderShort')}
       />
 

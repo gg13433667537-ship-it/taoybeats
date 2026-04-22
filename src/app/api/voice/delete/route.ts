@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifySessionToken } from "@/lib/auth-utils"
+import { verifySessionTokenWithDB } from "@/lib/auth-utils"
 import { applySecurityHeaders } from "@/lib/security"
-
 
 if (!global.systemApiKey) global.systemApiKey = process.env.MINIMAX_API_KEY
 if (!global.systemApiUrl) global.systemApiUrl = process.env.MINIMAX_API_URL || 'https://api.minimaxi.com'
-if (!global.users) global.users = new Map()
 
-function getSessionUser(request: NextRequest): { id: string; email: string; role: string } | null {
+async function getSessionUser(request: NextRequest): Promise<{ id: string; email: string; role: string } | null> {
   const sessionToken = request.cookies.get('session-token')?.value
   if (!sessionToken) return null
   try {
-    const payload = verifySessionToken(sessionToken)
+    const payload = await verifySessionTokenWithDB(sessionToken)
     if (!payload) return null
     return {
       id: payload.id,
@@ -32,7 +30,7 @@ function isValidVoiceIdFormat(voiceId: string): boolean {
 
 export async function POST(request: NextRequest) {
   // Auth check
-  const user = getSessionUser(request)
+  const user = await getSessionUser(request)
   if (!user) {
     return applySecurityHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }))
   }
@@ -90,6 +88,16 @@ export async function POST(request: NextRequest) {
         voice_id,
       }),
     })
+
+    // Handle 404 gracefully - voice may not exist or endpoint not available
+    if (response.status === 404) {
+      console.log(`[voice/delete] MiniMax delete endpoint returned 404 for voice ${voice_id}, treating as not found`)
+      return applySecurityHeaders(NextResponse.json({
+        voice_id,
+        created_time: new Date().toISOString(),
+        base_resp: { status_msg: "Voice not found or delete not supported", status_code: 404 },
+      }))
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ base_resp: { status_msg: response.statusText } }))

@@ -383,20 +383,21 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
     } catch (error: unknown) {
       const err = error as Error & { name?: string; message?: string }
       let errorMessage = '无法访问麦克风，请检查权限设置'
-      let retryButton = false
+      let showRetry = false
 
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        errorMessage = '麦克风权限被拒绝，请点击下方按钮重新请求权限'
-        retryButton = true
+        errorMessage = '麦克风权限被拒绝。请检查浏览器地址栏的锁形图标，在网站设置中允许麦克风访问，然后重试。'
+        showRetry = true
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         errorMessage = '未找到麦克风设备，请确保已连接麦克风'
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
         errorMessage = '麦克风正在被其他应用使用，请关闭其他使用麦克风的程序后重试'
+        showRetry = true
       } else if (err.name === 'SecurityError') {
         errorMessage = '麦克风访问被安全策略阻止，请确保使用 HTTPS 或 localhost'
       }
 
-      setState(s => ({ ...s, error: errorMessage, retryButton }))
+      setState(s => ({ ...s, error: errorMessage, retryButton: showRetry }))
     }
   }
 
@@ -430,7 +431,7 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
         body: JSON.stringify({
           file_data: base64,
           filename,
-          purpose: 'prompt_audio',
+          purpose: 'voice_cloning',
         }),
       })
 
@@ -560,48 +561,23 @@ export default function CloneVoiceModal({ isOpen, onClose, onSuccess }: CloneVoi
     }
   }
 
-  // Save designed voice - the voice_id from design API is now persisted
-  // so we just need to verify it appears in the voice list
+  // Save designed voice - the voice_id from design API is already persisted by MiniMax
+  // No need to verify via voice list, just call onSuccess directly
   const handleSaveDesignedVoice = async () => {
     if (!state.designedVoiceId) return
 
     setState(s => ({ ...s, isDesigning: true, error: null, success: null }))
 
     try {
-      // First verify the voice appears in the list
-      const listResponse = await fetch('/api/voice/list?voice_type=all', {
-        method: 'GET',
-      })
-
-      if (!listResponse.ok) {
-        throw new Error('验证音色失败')
+      // Wait for onSuccess to complete (which triggers loadVoices) before closing
+      setState(s => ({ ...s, isDesigning: false, success: '音色保存成功！' }))
+      try {
+        await onSuccess(state.designedVoiceId!)
+      } catch {
+        setState(s => ({ ...s, error: '刷新音色列表失败，请重试' }))
+        return
       }
-
-      const listData = await listResponse.json()
-      const voiceExists = (listData.voice_generation || []).some(
-        (v: { voice_id: string }) => v.voice_id === state.designedVoiceId
-      )
-
-      if (voiceExists) {
-        // Voice is in the list - save was successful
-        // Wait for onSuccess to complete (which triggers loadVoices) before closing
-        setState(s => ({ ...s, isDesigning: false, success: '音色保存成功！' }))
-        try {
-          await onSuccess(state.designedVoiceId!)
-        } catch {
-          setState(s => ({ ...s, error: '刷新音色列表失败，请重试' }))
-          return
-        }
-        onClose()
-      } else {
-        // Voice not in list - this shouldn't happen now that we pass voice_id
-        // But handle it gracefully
-        setState(s => ({
-          ...s,
-          isDesigning: false,
-          error: '音色保存失败，请重试',
-        }))
-      }
+      onClose()
     } catch (err) {
       setState(s => ({
         ...s,
