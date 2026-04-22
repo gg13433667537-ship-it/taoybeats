@@ -37,6 +37,11 @@
 | T-044 | claude-main | src/app/api/auth/profile/route.ts | 2026-04-21 00:00 | profile API 使用 verifySessionTokenWithDB 校验 session | released |
 | T-045 | claude-main | src/app/(auth)/login/page.tsx | 2026-04-21 00:00 | 登录页支持密码和验证码双模式 + 忘记密码链接 | released |
 | T-046 | claude-main | src/app/(auth)/reset-password/page.tsx | 2026-04-21 00:00 | 创建忘记密码重置页面，3步流程 | released |
+| T-047 | claude-main | src/lib/db.ts | 2026-04-21 21:00 | 添加 Prisma 查询重试机制，解决 503 错误 | released |
+| T-047 | claude-main | src/app/api/auth/login/route.ts | 2026-04-21 21:00 | 登录查询使用带重试的 Prisma wrapper | released |
+| T-047 | claude-main | tests/lib/db-retry.test.ts | 2026-04-21 21:00 | Prisma 重试逻辑单元测试 | released |
+| T-048 | claude-main | workers/reverse-proxy.js | 2026-04-21 21:00 | Cloudflare Workers 反向代理脚本 | released |
+| T-048 | claude-main | workers/wrangler.toml | 2026-04-21 21:00 | Cloudflare Workers 部署配置 | released |
 
 ---
 

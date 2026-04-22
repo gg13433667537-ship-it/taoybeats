@@ -820,3 +820,116 @@ Superpowers 检查:
   - [建议 2]
 ```
 ```
+
+---
+
+## T-047 — Prisma 查询重试机制修复 503 登录错误
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-21
+
+已做内容:
+  1. 修改 src/lib/db.ts:
+     - 使用 Prisma Client Extensions ($extends) 包装所有模型操作
+     - 自动重试策略：最多 3 次重试，指数退避（150ms, 300ms, 600ms）
+     - 覆盖可重试错误：P1001, P1002, P1008, P1017 及 connection/timeout/pool 关键字
+     - 导出 withPrismaRetry 和 isRetryableError（来自 db-retry.ts）
+
+  2. 新建 src/lib/db-retry.ts:
+     - 纯工具函数，独立于 PrismaClient，避免测试 mock 冲突
+     - isRetryableError(): 判断错误是否属于瞬态连接问题
+     - withPrismaRetry(): 通用重试包装器，支持自定义 maxRetries/baseDelayMs
+
+  3. 新建 tests/lib/db-retry.test.ts:
+     - 8 个测试全部通过
+     - 覆盖：首次成功、重试后成功、最大重试超限、非可重试错误不触发重试
+     - 指数退避延迟验证、Prisma 错误码匹配、连接消息匹配
+
+  4. 修复 workers/reverse-proxy.js 匿名导出 lint 警告
+
+改动文件:
+  - src/lib/db.ts
+  - src/lib/db-retry.ts（新建）
+  - tests/lib/db-retry.test.ts（新建）
+  - workers/reverse-proxy.js
+
+验证结果:
+  - npm run lint: ✅ (0 errors, 3 pre-existing warnings)
+  - npm run type-check: ✅
+  - npx vitest run tests/lib/db-retry.test.ts: ✅ (8/8 passed)
+
+未决问题:
+  - 登录 503 问题在本地无法 100% 复现（依赖 Supabase Pooler 网络波动）
+  - 需要线上环境验证：在 Vercel 部署后测试登录流程
+
+下一步:
+  - 部署到 Vercel 后测试登录
+  - 如仍有问题，考虑增加 maxRetries 或添加连接池预热
+
+风险提示:
+  - 之前的"修复"（URL 编码密码、dev-login bypass）并未真正解决连接问题
+  - 本次修复通过 $extends 透明注入重试逻辑，所有使用 prisma 的 API 自动受益
+```
+
+---
+
+## T-048 — Cloudflare Workers 反向代理（中国用户免翻墙访问）
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-21
+
+已做内容:
+  1. 新建 workers/reverse-proxy.js:
+     - Cloudflare Worker 脚本，代理所有请求到 taoybeats-clone.vercel.app
+     - 保留路径和查询参数
+     - 透传 Cookie（登录态正常）
+     - 删除 CF/Vercel 特定头避免混淆
+     - 错误处理：源站不可用时返回 502
+
+  2. 新建 workers/wrangler.toml:
+     - Worker 名称: taoybeats-proxy
+     - 兼容日期: 2026-04-21
+     - 启用 observability
+
+  3. 新建 workers/DEPLOY.md:
+     - 两种部署方式：Dashboard UI（推荐）和 Wrangler CLI
+     - 验证步骤
+     - 注意事项（免费额度、自定义域名、Cookie、WebSocket、中国大陆可用性）
+     - 备选方案
+
+  4. 修改 package.json:
+     - 添加 proxy:deploy 和 proxy:dev 脚本
+
+改动文件:
+  - workers/reverse-proxy.js（新建）
+  - workers/wrangler.toml（新建）
+  - workers/DEPLOY.md（新建）
+  - package.json
+
+验证结果:
+  - npm run lint: ✅ (0 errors)
+  - npm run type-check: ✅
+  - reverse-proxy.js 语法检查通过
+
+未决问题:
+  - 需要用户自行部署 Cloudflare Worker（需要 Cloudflare 账号）
+  - workers.dev 目前中国大陆大部分可用，但不保证 100% 稳定
+
+下一步:
+  1. 用户按 DEPLOY.md 部署 Worker
+  2. 获取 workers.dev 子域名（如 taoybeats-proxy.xxx.workers.dev）
+  3. 测试中国用户免翻墙访问
+  4. （可选）绑定自定义域名
+
+风险提示:
+  - 免费版每天 100,000 次请求限制
+  - 如果 workers.dev 未来被干扰，需要切换到备选方案
+```

@@ -1,0 +1,10 @@
+name = "taoybeats-proxy"
+main = "reverse-proxy.js"
+compatibility_date = "2026-04-21"
+
+# Free plan limits: 100,000 requests/day
+# Upgrade to Paid ($5/mo) for 10M requests/month
+
+[observability]
+enabled = true
+head_sampling_rate = 1
