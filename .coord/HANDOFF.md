@@ -933,3 +933,56 @@ Superpowers 检查:
   - 免费版每天 100,000 次请求限制
   - 如果 workers.dev 未来被干扰，需要切换到备选方案
 ```
+
+---
+
+## T-049 — Cloudflare Pages 反向代理（中国大陆免翻墙）
+
+**从**: claude-main
+**到**: claude-main
+**状态**: completed
+
+```
+时间: 2026-04-21
+
+已做内容:
+  1. 发现问题：
+     - workers.dev 域名已被中国大陆防火墙封锁
+     - tb.gg13433667537.workers.dev 在中国大陆无法访问
+     - 需要更换为未被封锁的域名
+
+  2. 解决方案：Cloudflare Pages + Functions 反向代理
+     - 创建 Cloudflare Pages 项目 "taoybeats"
+     - 编写 catch-all Function (functions/[[path]].js)
+     - 代理所有请求到 taoybeats-clone.vercel.app
+     - 透传 Cookie、Session、请求头
+
+  3. 部署验证：
+     - 部署 URL: https://00974596.taoybeats.pages.dev
+     - curl 测试返回 HTTP 200 + 完整 TaoyBeats HTML
+     - x-proxied-by: cf-pages-function 头确认代理生效
+     - 主域名: https://taoybeats.pages.dev（同步中）
+
+改动文件:
+  - pages-proxy/functions/[[path]].js（新建）
+  - pages-proxy/dist/index.html（临时，已清理）
+
+验证结果:
+  - curl -I https://00974596.taoybeats.pages.dev: ✅ HTTP/2 200
+  - 响应包含完整 TaoyBeats 首页 HTML: ✅
+  - X-Proxied-By 头确认代理生效: ✅
+
+未决问题:
+  - taoybeats.pages.dev 主域名可能需要几分钟同步到最新部署
+  - pages.dev 在中国大陆的可访问性需要用户实际测试
+
+下一步:
+  1. 用户不开 VPN 测试 https://taoybeats.pages.dev
+  2. 如 pages.dev 也被墙，需考虑购买自定义域名 + Cloudflare CDN
+  3. 定期监控可用性
+
+风险提示:
+  - pages.dev 虽比 workers.dev 可用性好，但仍可能被干扰
+  - 免费版 Cloudflare Pages 有请求限制
+  - 长期稳定方案仍需自定义域名
+```

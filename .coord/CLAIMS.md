@@ -42,6 +42,7 @@
 | T-047 | claude-main | tests/lib/db-retry.test.ts | 2026-04-21 21:00 | Prisma 重试逻辑单元测试 | released |
 | T-048 | claude-main | workers/reverse-proxy.js | 2026-04-21 21:00 | Cloudflare Workers 反向代理脚本 | released |
 | T-048 | claude-main | workers/wrangler.toml | 2026-04-21 21:00 | Cloudflare Workers 部署配置 | released |
+| T-049 | claude-main | pages-proxy/functions/[[path]].js | 2026-04-21 22:00 | Cloudflare Pages 反向代理（中国大陆可用） | released |
 
 ---
 
