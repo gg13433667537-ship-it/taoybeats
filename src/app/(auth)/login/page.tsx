@@ -290,41 +290,6 @@ function LoginPageContent() {
               {t("signUp")}
             </Link>
           </p>
-
-          {/* Dev bypass - only shown in development */}
-          {process.env.NODE_ENV !== "production" && (
-            <div className="mt-6 pt-6 border-t border-border">
-              <p className="text-center text-xs text-text-muted mb-3">
-                数据库连接问题？使用开发者快速登录
-              </p>
-              <button
-                type="button"
-                onClick={async () => {
-                  setLoading(true)
-                  try {
-                    const res = await fetch("/api/auth/dev-login", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ email: "dev@local.test", role: "ADMIN" }),
-                    })
-                    const data = await res.json()
-                    if (data.success) {
-                      router.push(redirectUrl)
-                    } else {
-                      setError(data.error || "开发者登录失败")
-                    }
-                  } catch {
-                    setError("开发者登录请求失败")
-                  } finally {
-                    setLoading(false)
-                  }
-                }}
-                className="w-full py-2 rounded-xl border border-yellow-500/30 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 text-sm font-medium transition-colors"
-              >
-                [Dev] 快速登录 (ADMIN)
-              </button>
-            </div>
-          )}
         </div>
       </main>
     </div>
